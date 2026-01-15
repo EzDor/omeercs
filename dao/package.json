@@ -1,0 +1,46 @@
+{
+  "name": "@agentic-template/dao",
+  "version": "1.0.0",
+  "description": "TypeORM Data Access Layer for Agentic System Template",
+  "main": "dist/datasource.js",
+  "types": "dist/datasource.d.ts",
+  "exports": {
+    "./src/*": {
+      "import": "./dist/*.js",
+      "require": "./dist/*.js",
+      "types": "./dist/*.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "jest",
+    "migration:run": "ts-node src/run-migrations.ts"
+  },
+  "dependencies": {
+    "@agentic-template/dto": "workspace:*",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.18.8",
+    "@types/pg": "^8.10.9",
+    "eslint": "^9.18.0",
+    "globals": "^16.0.0",
+    "jest": "^30.0.0",
+    "prettier": "^3.4.2",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typeorm": "^0.3.27",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

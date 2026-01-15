@@ -1,0 +1,206 @@
+services:
+  center-db:
+    image: pgvector/pgvector:pg17
+    container_name: center-db
+    ports:
+      - "${CENTER_DB_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=${CENTER_DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${CENTER_DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${CENTER_DB_NAME:-agentic_template}
+      - APP_DB_USER=${APP_DB_USER:-app_user}
+      - APP_DB_PASS=${APP_DB_PASS:-app_pass}
+      - APP_SCHEMA=${APP_SCHEMA:-app}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./dao/docker/initdb:/docker-entrypoint-initdb.d:ro
+    networks:
+      - agentic-template-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CENTER_DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api-center:
+    build:
+      context: .
+      dockerfile: ./api-center/Dockerfile
+      args:
+        ENVIRONMENT: ${ENVIRONMENT:-local-development}
+    container_name: api-center
+    ports:
+      - "${API_CENTER_PORT:-3001}:3001"
+      - "${API_CENTER_DEBUG_PORT:-9229}:9229"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - ENVIRONMENT=${ENVIRONMENT:-local-development}
+      - PORT=${API_CENTER_PORT:-3001}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_SSL_REJECT_UNAUTHORIZED=${DB_SSL_REJECT_UNAUTHORIZED}
+      - APP_SCHEMA=${APP_SCHEMA}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CORS_DOMAIN=${CORS_DOMAIN:-localhost}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - REDIS_HOST=${REDIS_HOST:-valkey}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-devpassword}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_TLS_ENABLED=${REDIS_TLS_ENABLED:-false}
+      - CHAT_LLM_MODEL=${CHAT_LLM_MODEL:-gemini-2.0-flash-lite}
+      - CHAT_MAX_MESSAGE_LENGTH=${CHAT_MAX_MESSAGE_LENGTH:-10000}
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://litellm-proxy:4000}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - WEBAPP_URL=${WEBAPP_URL:-http://localhost:5173}
+    volumes:
+      - ./api-center:/app/api-center
+      - ./dao:/app/dao
+      - ./dto:/app/dto
+      - ./common:/app/common
+    networks:
+      - agentic-template-network
+    depends_on:
+      center-db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  agent-platform:
+    build:
+      context: .
+      dockerfile: ./agent-platform/Dockerfile
+      args:
+        ENVIRONMENT: ${ENVIRONMENT:-local-development}
+    container_name: agent-platform
+    ports:
+      - "${AGENT_PLATFORM_PORT:-3000}:3000"
+      - "${AGENT_PLATFORM_DEBUG_PORT:-9230}:9229"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - ENVIRONMENT=${ENVIRONMENT:-local-development}
+      - PORT=${AGENT_PLATFORM_PORT:-3002}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_SSL_REJECT_UNAUTHORIZED=${DB_SSL_REJECT_UNAUTHORIZED}
+      - APP_SCHEMA=${APP_SCHEMA}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CORS_DOMAIN=${CORS_DOMAIN:-localhost}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - REDIS_HOST=${REDIS_HOST:-valkey}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-devpassword}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_TLS_ENABLED=${REDIS_TLS_ENABLED:-false}
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://litellm-proxy:4000}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - LITELLM_MODEL=${LITELLM_MODEL}
+      - WORKFLOW_RECURSION_LIMIT=${WORKFLOW_RECURSION_LIMIT:-50}
+      - WORKFLOW_MAX_STEPS=${WORKFLOW_MAX_STEPS:-100}
+      - WORKFLOW_TIMEOUT_MS=${WORKFLOW_TIMEOUT_MS:-300000}
+      - WORKFLOW_MAX_MEMORY_MB=${WORKFLOW_MAX_MEMORY_MB:-512}
+      - WORKFLOW_STACK_SIZE_MB=${WORKFLOW_STACK_SIZE_MB:-4}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-agentic-template-dev}
+      - LANGCHAIN_CALLBACKS_BACKGROUND=${LANGCHAIN_CALLBACKS_BACKGROUND:-true}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}
+      - CLAUDE_MAX_TOKENS=${CLAUDE_MAX_TOKENS:-8192}
+    volumes:
+      - ./agent-platform:/app/agent-platform
+      - ./dao:/app/dao
+      - ./dto:/app/dto
+      - ./common:/app/common
+    networks:
+      - agentic-template-network
+    depends_on:
+      center-db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  webapp:
+    build:
+      context: .
+      dockerfile: ./webapp/Dockerfile
+    container_name: webapp
+    ports:
+      - "${WEBAPP_PORT:-5173}:5173"
+    environment:
+      - VITE_API_CENTER_BASE_URL=${VITE_API_CENTER_BASE_URL:-http://localhost:3001/api}
+      - VITE_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+    volumes:
+      - ./webapp:/app/webapp
+      - ./dto:/app/dto
+      - ./common:/app/common
+      - /app/webapp/node_modules
+    networks:
+      - agentic-template-network
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:8.1
+    container_name: valkey
+    command: valkey-server --requirepass ${REDIS_PASSWORD:-devpassword} --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    environment:
+      - VALKEY_PASSWORD=${REDIS_PASSWORD:-devpassword}
+    volumes:
+      - valkey-data:/data
+    networks:
+      - agentic-template-network
+    healthcheck:
+      test: ["CMD", "valkey-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  litellm-proxy:
+    image: ghcr.io/berriai/litellm:v1.80.5-stable
+    container_name: litellm-proxy
+    command: --config /app/config.yaml --detailed_debug
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATABASE_URL=${LITELLM_DATABASE_URL}
+      - NO_DOCS=${NO_DOCS:-False}
+      - NO_REDOC=${NO_REDOC:-False}
+      - UI_USERNAME=${LITELLM_UI_USERNAME}
+      - UI_PASSWORD=${LITELLM_UI_PASSWORD}
+    volumes:
+      - ./litellm/litellm_config.yaml:/app/config.yaml
+    networks:
+      - agentic-template-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  agentic-template-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  valkey-data:

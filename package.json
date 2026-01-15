@@ -1,0 +1,57 @@
+{
+  "name": "@agentic-template/root",
+  "version": "1.0.0",
+  "description": "Agentic System Template - Microservices with AI Infrastructure",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "agent-platform",
+    "api-center",
+    "dto",
+    "dao"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r --filter \"./agent-platform\" --filter \"./api-center\" --filter \"./webapp\" --filter \"./dao\" --filter \"./dto\" lint",
+    "format": "pnpm -r --filter \"./agent-platform\" --filter \"./api-center\" --filter \"./webapp\" format",
+    "test": "pnpm -r test",
+    "test:rls": "pnpm --filter dao test:rls",
+    "test:rls:clean": "pnpm --filter dao test:rls:clean",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "install:all": "pnpm install",
+    "prepare": "husky",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d dao/src/datasource.ts",
+    "migration:create": "typeorm-ts-node-commonjs migration:create",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d dao/src/datasource.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d dao/src/datasource.ts",
+    "migration:show": "typeorm-ts-node-commonjs migration:show -d dao/src/datasource.ts",
+    "sync-prompt": "npx tsx common/scripts/sync-prompts-from-langsmith.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.7",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.2",
+    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typeorm": "^0.3.27",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "pnpm": {
+    "overrides": {
+      "glob@>=10.2.0 <10.5.0": ">=10.5.0",
+      "glob@>=11.0.0 <11.1.0": ">=11.1.0"
+    }
+  }
+}

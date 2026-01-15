@@ -1,0 +1,12 @@
+# Ignore specs and .specify folders
+specs/
+.specify/
+
+# Build outputs
+dist/
+build/
+node_modules/
+
+# Other
+coverage/
+.next/

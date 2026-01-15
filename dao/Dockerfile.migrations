@@ -1,0 +1,25 @@
+FROM node:20-alpine
+
+# Install PostgreSQL client for initialization
+RUN apk add --no-cache postgresql-client
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY dto/package.json ./dto/
+COPY dao/package.json ./dao/
+
+# Install pnpm and dependencies
+RUN npm install -g pnpm@8.15.0
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY dto/ ./dto/
+COPY dao/ ./dao/
+
+# Build packages
+RUN pnpm --filter @agentic-template/dto build
+RUN pnpm --filter @agentic-template/dao build
+
+WORKDIR /app/dao

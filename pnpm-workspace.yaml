@@ -1,0 +1,8 @@
+packages:
+  - 'agent-platform'
+  - 'api-center'
+  - 'dto'
+  - 'dao'
+  - 'common'
+  - 'webapp'
+
