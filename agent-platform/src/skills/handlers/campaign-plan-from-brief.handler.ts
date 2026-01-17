@@ -2,13 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
 import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
-import {
-  CampaignPlanFromBriefInput,
-  CampaignPlanOutput,
-  SkillResult,
-  skillSuccess,
-  skillFailure,
-} from '@agentic-template/dto/src/skills';
+import { CampaignPlanFromBriefInput, CampaignPlanOutput, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 
 const CAMPAIGN_PLAN_SYSTEM_PROMPT = `You are a campaign planning expert. Your task is to create comprehensive campaign plans for interactive marketing campaigns that include gamified experiences.
@@ -215,11 +209,9 @@ export class CampaignPlanFromBriefHandler implements SkillHandler<CampaignPlanFr
       const totalTime = Date.now() - startTime;
       this.logger.error(`Failed to generate campaign plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(
-        error instanceof Error ? error.message : 'Unknown error during campaign plan generation',
-        'EXECUTION_ERROR',
-        { timings_ms: { total: totalTime, ...timings } },
-      );
+      return skillFailure(error instanceof Error ? error.message : 'Unknown error during campaign plan generation', 'EXECUTION_ERROR', {
+        timings_ms: { total: totalTime, ...timings },
+      });
     }
   }
 

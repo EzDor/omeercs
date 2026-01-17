@@ -191,7 +191,9 @@ export class GameConfigFromTemplateHandler implements SkillHandler<GameConfigFro
       const totalTime = Date.now() - startTime;
       this.logger.error(`Failed to generate game config: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(error instanceof Error ? error.message : 'Unknown error during game config generation', 'EXECUTION_ERROR', { timings_ms: { total: totalTime, ...timings } });
+      return skillFailure(error instanceof Error ? error.message : 'Unknown error during game config generation', 'EXECUTION_ERROR', {
+        timings_ms: { total: totalTime, ...timings },
+      });
     }
   }
 
