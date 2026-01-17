@@ -1,6 +1,10 @@
 export interface ChatCompletionContentPart {
-  type: string;
+  type: 'text' | 'image_url' | 'file';
   text?: string;
+  image_url?: {
+    url: string;
+    detail?: 'auto' | 'low' | 'high';
+  };
   file?: {
     file_id: string;
     filename: string;

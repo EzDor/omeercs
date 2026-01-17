@@ -24,19 +24,86 @@ skills:
     tags: [qa, ai, review]
     status: active
 
-  # Future skills (not yet implemented)
-  # - skill_id: game_config_from_template
-  # - skill_id: review_asset_quality
-  # - skill_id: generate_intro_image
-  # - skill_id: segment_start_button
-  # - skill_id: generate_intro_video_loop
-  # - skill_id: generate_outcome_video_win
-  # - skill_id: generate_outcome_video_lose
-  # - skill_id: generate_bgm_track
-  # - skill_id: generate_sfx_pack
-  # - skill_id: mix_audio_for_game
-  # - skill_id: generate_3d_asset
-  # - skill_id: optimize_3d_asset
-  # - skill_id: bundle_game_template
-  # - skill_id: validate_game_bundle
-  # - skill_id: assemble_campaign_manifest
+  # B) Intro video pipeline
+  - skill_id: generate_intro_image
+    version: "1.0.0"
+    title: Generate Intro Image
+    tags: [image, generation, ai, intro]
+    status: active
+
+  - skill_id: segment_start_button
+    version: "1.0.0"
+    title: Segment Start Button
+    tags: [vision, segmentation, detection, ui]
+    status: active
+
+  - skill_id: generate_intro_video_loop
+    version: "1.0.0"
+    title: Generate Intro Video Loop
+    tags: [video, generation, ai, intro, loop]
+    status: active
+
+  # C) Outcome video pipeline
+  - skill_id: generate_outcome_video_win
+    version: "1.0.0"
+    title: Generate Win Outcome Video
+    tags: [video, generation, ai, outcome, win]
+    status: active
+
+  - skill_id: generate_outcome_video_lose
+    version: "1.0.0"
+    title: Generate Lose Outcome Video
+    tags: [video, generation, ai, outcome, lose]
+    status: active
+
+  # D) Audio pipeline
+  - skill_id: generate_bgm_track
+    version: "1.0.0"
+    title: Generate BGM Track
+    tags: [audio, generation, ai, bgm, music, game]
+    status: active
+
+  - skill_id: generate_sfx_pack
+    version: "1.0.0"
+    title: Generate SFX Pack
+    tags: [audio, generation, ai, sfx, sound-effects, game]
+    status: active
+
+  - skill_id: mix_audio_for_game
+    version: "1.0.0"
+    title: Mix Audio for Game
+    tags: [audio, mixing, normalization, loudness, game]
+    status: active
+
+  # E) 3D asset pipeline
+  - skill_id: generate_3d_asset
+    version: "1.0.0"
+    title: Generate 3D Asset
+    tags: [3d, generation, ai, model, asset, game]
+    status: active
+
+  - skill_id: optimize_3d_asset
+    version: "1.0.0"
+    title: Optimize 3D Asset
+    tags: [3d, optimization, compression, model, asset, game, web]
+    status: active
+
+  # F) Game bundling & packaging
+  - skill_id: bundle_game_template
+    version: "1.0.0"
+    title: Bundle Game Template
+    tags: [game, bundling, packaging, web, deployment, assets]
+    status: active
+
+  - skill_id: validate_game_bundle
+    version: "1.0.0"
+    title: Validate Game Bundle
+    tags: [game, validation, qa, bundling, testing, quality]
+    status: active
+
+  # G) Publishable campaign manifest
+  - skill_id: assemble_campaign_manifest
+    version: "1.0.0"
+    title: Assemble Campaign Manifest
+    tags: [campaign, manifest, deployment, packaging, final, orchestration]
+    status: active

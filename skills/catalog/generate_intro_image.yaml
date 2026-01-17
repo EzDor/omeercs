@@ -1,0 +1,172 @@
+# Skill Descriptor: generate_intro_image
+# Generates base frame images for intro video sequences
+
+skill_id: generate_intro_image
+version: "1.0.0"
+title: Generate Intro Image
+description: |
+  Generates a base frame image for campaign intro videos using AI image generation.
+  Incorporates brand assets and style references to create on-brand visuals.
+  Output is suitable for animation into intro video loops.
+
+tags:
+  - image
+  - generation
+  - ai
+  - intro
+  - video
+
+input_schema:
+  type: object
+  required:
+    - prompt
+  properties:
+    prompt:
+      type: string
+      description: Text prompt describing the desired image
+      minLength: 10
+    brand_assets:
+      type: array
+      description: Brand assets to incorporate
+      items:
+        type: object
+        required:
+          - uri
+          - type
+        properties:
+          uri:
+            type: string
+            description: URI to the brand asset
+          type:
+            type: string
+            enum: [logo, color_palette, font, style_guide, reference_image]
+          description:
+            type: string
+            description: How to use this asset
+          weight:
+            type: number
+            minimum: 0
+            maximum: 1
+            description: Influence weight (0-1)
+    style_refs:
+      type: object
+      description: Style references for the image
+      properties:
+        reference_image_uri:
+          type: string
+          description: Reference image for style transfer
+        style:
+          type: string
+          enum: [photorealistic, illustrated, cartoon, 3d_render, flat_design, minimalist]
+        mood:
+          type: string
+          description: Desired mood (e.g., energetic, calm, playful)
+        color_tone:
+          type: string
+          description: Color tone guidance (e.g., warm, cool, vibrant)
+    specs:
+      type: object
+      description: Image specifications
+      properties:
+        width:
+          type: number
+          minimum: 256
+          maximum: 4096
+          default: 1920
+        height:
+          type: number
+          minimum: 256
+          maximum: 4096
+          default: 1080
+        aspect_ratio:
+          type: string
+          enum: ["1:1", "16:9", "9:16", "4:3", "3:4"]
+        format:
+          type: string
+          enum: [png, jpg, webp]
+          default: png
+        quality:
+          type: number
+          minimum: 1
+          maximum: 100
+          default: 90
+    negative_prompt:
+      type: string
+      description: Elements to avoid in the generated image
+    seed:
+      type: number
+      description: Seed for reproducible generation
+      minimum: 1
+      maximum: 2147483647
+    provider:
+      type: string
+      description: Image generation provider to use
+
+output_schema:
+  type: object
+  required:
+    - image_uri
+    - width
+    - height
+    - format
+    - file_size_bytes
+    - generation_params
+  properties:
+    image_uri:
+      type: string
+      description: URI to the generated image
+    width:
+      type: number
+      description: Actual image width in pixels
+    height:
+      type: number
+      description: Actual image height in pixels
+    format:
+      type: string
+      description: Image format (png, jpg, webp)
+    file_size_bytes:
+      type: number
+      description: File size in bytes
+    generation_params:
+      type: object
+      required:
+        - prompt
+        - model
+      properties:
+        prompt:
+          type: string
+        negative_prompt:
+          type: string
+        seed:
+          type: number
+        model:
+          type: string
+          description: Model used for generation
+
+implementation:
+  type: ts_function
+  handler: "@skills/generate-intro-image/handler"
+
+produces_artifacts:
+  - artifact_type: image/intro-frame
+    description: Generated base frame image for intro video
+
+policy:
+  max_runtime_sec: 180
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+    - "api.openai.com"
+    - "api.stability.ai"
+    - "api.replicate.com"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+      - "/tmp/assets/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

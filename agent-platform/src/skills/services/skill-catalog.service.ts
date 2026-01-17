@@ -8,6 +8,19 @@ import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler
 import { CampaignPlanFromBriefHandler } from '../handlers/campaign-plan-from-brief.handler';
 import { GameConfigFromTemplateHandler } from '../handlers/game-config-from-template.handler';
 import { ReviewAssetQualityHandler } from '../handlers/review-asset-quality.handler';
+import { GenerateIntroImageHandler } from '../handlers/generate-intro-image.handler';
+import { SegmentStartButtonHandler } from '../handlers/segment-start-button.handler';
+import { GenerateIntroVideoLoopHandler } from '../handlers/generate-intro-video-loop.handler';
+import { GenerateOutcomeVideoWinHandler } from '../handlers/generate-outcome-video-win.handler';
+import { GenerateOutcomeVideoLoseHandler } from '../handlers/generate-outcome-video-lose.handler';
+import { GenerateBgmTrackHandler } from '../handlers/generate-bgm-track.handler';
+import { GenerateSfxPackHandler } from '../handlers/generate-sfx-pack.handler';
+import { MixAudioForGameHandler } from '../handlers/mix-audio-for-game.handler';
+import { Generate3DAssetHandler } from '../handlers/generate-3d-asset.handler';
+import { Optimize3DAssetHandler } from '../handlers/optimize-3d-asset.handler';
+import { BundleGameTemplateHandler } from '../handlers/bundle-game-template.handler';
+import { ValidateGameBundleHandler } from '../handlers/validate-game-bundle.handler';
+import { AssembleCampaignManifestHandler } from '../handlers/assemble-campaign-manifest.handler';
 
 interface CatalogIndex {
   version: string;
@@ -113,6 +126,58 @@ export class SkillCatalogService implements OnModuleInit {
     // Register review_asset_quality handler
     const reviewAssetHandler = new ReviewAssetQualityHandler(this.configService);
     this.handlers.set('review_asset_quality', reviewAssetHandler);
+
+    // Register generate_intro_image handler
+    const generateIntroImageHandler = new GenerateIntroImageHandler(this.configService);
+    this.handlers.set('generate_intro_image', generateIntroImageHandler);
+
+    // Register segment_start_button handler
+    const segmentButtonHandler = new SegmentStartButtonHandler(this.configService);
+    this.handlers.set('segment_start_button', segmentButtonHandler);
+
+    // Register generate_intro_video_loop handler
+    const introVideoLoopHandler = new GenerateIntroVideoLoopHandler(this.configService);
+    this.handlers.set('generate_intro_video_loop', introVideoLoopHandler);
+
+    // Register generate_outcome_video_win handler
+    const outcomeVideoWinHandler = new GenerateOutcomeVideoWinHandler(this.configService);
+    this.handlers.set('generate_outcome_video_win', outcomeVideoWinHandler);
+
+    // Register generate_outcome_video_lose handler
+    const outcomeVideoLoseHandler = new GenerateOutcomeVideoLoseHandler(this.configService);
+    this.handlers.set('generate_outcome_video_lose', outcomeVideoLoseHandler);
+
+    // Register generate_bgm_track handler
+    const bgmTrackHandler = new GenerateBgmTrackHandler(this.configService);
+    this.handlers.set('generate_bgm_track', bgmTrackHandler);
+
+    // Register generate_sfx_pack handler
+    const sfxPackHandler = new GenerateSfxPackHandler(this.configService);
+    this.handlers.set('generate_sfx_pack', sfxPackHandler);
+
+    // Register mix_audio_for_game handler
+    const mixAudioHandler = new MixAudioForGameHandler(this.configService);
+    this.handlers.set('mix_audio_for_game', mixAudioHandler);
+
+    // Register generate_3d_asset handler
+    const generate3DAssetHandler = new Generate3DAssetHandler(this.configService);
+    this.handlers.set('generate_3d_asset', generate3DAssetHandler);
+
+    // Register optimize_3d_asset handler
+    const optimize3DAssetHandler = new Optimize3DAssetHandler(this.configService);
+    this.handlers.set('optimize_3d_asset', optimize3DAssetHandler);
+
+    // Register bundle_game_template handler
+    const bundleGameTemplateHandler = new BundleGameTemplateHandler(this.configService);
+    this.handlers.set('bundle_game_template', bundleGameTemplateHandler);
+
+    // Register validate_game_bundle handler
+    const validateGameBundleHandler = new ValidateGameBundleHandler(this.configService);
+    this.handlers.set('validate_game_bundle', validateGameBundleHandler);
+
+    // Register assemble_campaign_manifest handler
+    const assembleCampaignManifestHandler = new AssembleCampaignManifestHandler(this.configService);
+    this.handlers.set('assemble_campaign_manifest', assembleCampaignManifestHandler);
 
     this.logger.log(`Registered ${this.handlers.size} skill handlers`);
   }

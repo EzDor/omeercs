@@ -1,0 +1,183 @@
+# Skill Descriptor: generate_sfx_pack
+# Generates a pack of sound effects for games
+
+skill_id: generate_sfx_pack
+version: "1.0.0"
+title: Generate SFX Pack
+description: |
+  Generates a collection of sound effects for games using AI audio generation.
+  Supports common game SFX intents like jump, coin, click, win, lose, etc.
+  Creates a manifest file and organized pack of audio files.
+
+tags:
+  - audio
+  - generation
+  - ai
+  - sfx
+  - sound-effects
+  - game
+
+input_schema:
+  type: object
+  required:
+    - sfx_list
+  properties:
+    sfx_list:
+      type: array
+      minItems: 1
+      description: List of sound effects to generate
+      items:
+        type: object
+        required:
+          - name
+          - intent
+        properties:
+          name:
+            type: string
+            description: Name identifier for the SFX
+          intent:
+            type: string
+            enum: [jump, coin, click, win, lose, collect, powerup, explosion, hit, miss, countdown, start, game_over, level_up, bonus, notification, error, success, whoosh, pop, ding, buzz, custom]
+            description: Type/intent of the sound effect
+          custom_description:
+            type: string
+            description: Custom description for the SFX (required for 'custom' intent)
+          duration_sec:
+            type: number
+            minimum: 0.1
+            maximum: 10.0
+            default: 1.0
+            description: Duration of the SFX in seconds
+          variations:
+            type: number
+            minimum: 1
+            default: 1
+            description: Number of variations to generate
+    style:
+      type: object
+      description: Style configuration for the SFX pack
+      properties:
+        theme:
+          type: string
+          enum: [retro, modern, cartoon, realistic, sci_fi, fantasy, arcade, minimal]
+          description: Visual/audio style theme
+        consistency:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: How consistent should SFX be with each other
+    specs:
+      type: object
+      description: Audio output specifications
+      properties:
+        format:
+          type: string
+          enum: [mp3, wav, ogg, aac]
+          default: wav
+        sample_rate:
+          type: number
+          minimum: 22050
+          maximum: 48000
+          default: 44100
+    seed:
+      type: number
+      description: Seed for reproducible generation
+    provider:
+      type: string
+      description: Audio generation provider to use
+
+output_schema:
+  type: object
+  required:
+    - manifest_uri
+    - pack_uri
+    - sfx_files
+    - total_count
+    - total_size_bytes
+    - format
+    - generation_params
+  properties:
+    manifest_uri:
+      type: string
+      description: URI to the SFX manifest JSON file
+    pack_uri:
+      type: string
+      description: URI to the SFX pack directory
+    sfx_files:
+      type: array
+      description: List of generated SFX files
+      items:
+        type: object
+        required:
+          - name
+          - intent
+          - uri
+          - duration_sec
+          - file_size_bytes
+        properties:
+          name:
+            type: string
+          intent:
+            type: string
+          uri:
+            type: string
+          duration_sec:
+            type: number
+          file_size_bytes:
+            type: number
+          variation_index:
+            type: number
+    total_count:
+      type: number
+      description: Total number of SFX files generated
+    total_size_bytes:
+      type: number
+      description: Total size of all SFX files in bytes
+    format:
+      type: string
+      description: Audio format used
+    generation_params:
+      type: object
+      required:
+        - requested_sfx
+        - model
+      properties:
+        style_theme:
+          type: string
+        requested_sfx:
+          type: array
+          items:
+            type: string
+        seed:
+          type: number
+        model:
+          type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/generate-sfx-pack/handler"
+
+produces_artifacts:
+  - artifact_type: audio/sfx-pack
+    description: Directory containing SFX audio files
+  - artifact_type: json/sfx-manifest
+    description: Manifest file listing all SFX in the pack
+
+policy:
+  max_runtime_sec: 900
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+    - "api.suno.ai"
+    - "api.stability.ai"
+    - "api.replicate.com"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

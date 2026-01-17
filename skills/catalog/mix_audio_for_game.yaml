@@ -1,0 +1,236 @@
+# Skill Descriptor: mix_audio_for_game
+# Mixes and normalizes audio assets for game integration
+
+skill_id: mix_audio_for_game
+version: "1.0.0"
+title: Mix Audio for Game
+description: |
+  Normalizes and mixes audio assets (BGM and SFX) for consistent game integration.
+  Applies loudness normalization using industry standards (LUFS).
+  Creates a manifest for easy game integration with normalized audio files.
+
+tags:
+  - audio
+  - mixing
+  - normalization
+  - loudness
+  - game
+  - post-processing
+
+input_schema:
+  type: object
+  required:
+    - bgm_uri
+    - loudness_targets
+  properties:
+    bgm_uri:
+      type: string
+      description: URI to the background music file
+    sfx_manifest:
+      type: object
+      description: Reference to SFX pack manifest
+      properties:
+        manifest_uri:
+          type: string
+          description: URI to the SFX manifest JSON
+        pack_uri:
+          type: string
+          description: URI to the SFX pack directory
+    sfx_files:
+      type: array
+      description: Direct SFX file references (alternative to manifest)
+      items:
+        type: object
+        required:
+          - name
+          - uri
+        properties:
+          name:
+            type: string
+            description: Name identifier for the SFX
+          uri:
+            type: string
+            description: URI to the SFX file
+          volume_adjust_db:
+            type: number
+            minimum: -20
+            maximum: 20
+            description: Volume adjustment in dB relative to target
+    loudness_targets:
+      type: object
+      description: Loudness normalization targets
+      properties:
+        standard:
+          type: string
+          enum: [lufs_16, lufs_14, lufs_12, web_standard, broadcast, game_mobile, game_desktop]
+          description: Preset loudness standard to use
+        bgm_lufs:
+          type: number
+          minimum: -30
+          maximum: 0
+          description: Target loudness for BGM in LUFS
+        sfx_lufs:
+          type: number
+          minimum: -30
+          maximum: 0
+          description: Target loudness for SFX in LUFS
+        true_peak_dbfs:
+          type: number
+          minimum: -6
+          maximum: 0
+          default: -1
+          description: Maximum true peak level in dBFS
+        bgm_to_sfx_ratio:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Relative volume ratio between BGM and SFX
+    output_specs:
+      type: object
+      description: Output audio specifications
+      properties:
+        format:
+          type: string
+          enum: [mp3, wav, ogg, aac]
+          default: mp3
+    provider:
+      type: string
+      description: Audio processing provider (optional)
+
+output_schema:
+  type: object
+  required:
+    - manifest_uri
+    - output_dir
+    - bgm
+    - sfx_files
+    - total_files
+    - total_size_bytes
+    - loudness_info
+    - processing_params
+  properties:
+    manifest_uri:
+      type: string
+      description: URI to the audio manifest JSON
+    output_dir:
+      type: string
+      description: URI to the output directory
+    bgm:
+      type: object
+      description: Normalized BGM file info
+      required:
+        - name
+        - original_uri
+        - normalized_uri
+        - type
+        - duration_sec
+        - file_size_bytes
+      properties:
+        name:
+          type: string
+        original_uri:
+          type: string
+        normalized_uri:
+          type: string
+        type:
+          type: string
+          enum: [bgm]
+        original_lufs:
+          type: number
+        normalized_lufs:
+          type: number
+        peak_dbfs:
+          type: number
+        duration_sec:
+          type: number
+        file_size_bytes:
+          type: number
+    sfx_files:
+      type: array
+      description: List of normalized SFX files
+      items:
+        type: object
+        required:
+          - name
+          - original_uri
+          - normalized_uri
+          - type
+          - duration_sec
+          - file_size_bytes
+        properties:
+          name:
+            type: string
+          original_uri:
+            type: string
+          normalized_uri:
+            type: string
+          type:
+            type: string
+            enum: [sfx]
+          original_lufs:
+            type: number
+          normalized_lufs:
+            type: number
+          peak_dbfs:
+            type: number
+          duration_sec:
+            type: number
+          file_size_bytes:
+            type: number
+    total_files:
+      type: number
+      description: Total number of processed files
+    total_size_bytes:
+      type: number
+      description: Total size of all output files
+    loudness_info:
+      type: object
+      required:
+        - standard_used
+        - bgm_target_lufs
+        - sfx_target_lufs
+        - true_peak_dbfs
+      properties:
+        standard_used:
+          type: string
+        bgm_target_lufs:
+          type: number
+        sfx_target_lufs:
+          type: number
+        true_peak_dbfs:
+          type: number
+    processing_params:
+      type: object
+      required:
+        - source_bgm_uri
+        - source_sfx_count
+      properties:
+        source_bgm_uri:
+          type: string
+        source_sfx_count:
+          type: number
+        provider:
+          type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/mix-audio-for-game/handler"
+
+produces_artifacts:
+  - artifact_type: audio/mixed-pack
+    description: Directory containing normalized audio files
+  - artifact_type: json/audio-manifest
+    description: Manifest file for game integration
+
+policy:
+  max_runtime_sec: 600
+  network: none
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

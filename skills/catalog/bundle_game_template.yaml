@@ -1,0 +1,237 @@
+# Skill Descriptor: bundle_game_template
+# Bundles game template with assets into a deployable package
+
+skill_id: bundle_game_template
+version: "1.0.0"
+title: Bundle Game Template
+description: |
+  Bundles a game template with configuration and assets into a deployable web package.
+  Creates a self-contained bundle with all necessary files, generates a manifest,
+  and optionally applies optimizations like minification and compression.
+  Outputs a ready-to-deploy web bundle with bundle_manifest.json.
+
+tags:
+  - game
+  - bundling
+  - packaging
+  - web
+  - deployment
+  - assets
+
+input_schema:
+  type: object
+  required:
+    - template_id
+    - game_config
+    - assets
+  properties:
+    template_id:
+      type: string
+      enum: [spin_wheel, scratch_card, slot_machine, memory_match, catch_game, quiz]
+      description: ID of the game template to bundle
+    game_config:
+      type: object
+      description: Complete game configuration JSON
+    assets:
+      type: array
+      description: List of assets to include in the bundle
+      items:
+        type: object
+        required:
+          - uri
+          - type
+          - slot
+        properties:
+          uri:
+            type: string
+            description: URI to the asset file (local path or URL)
+          type:
+            type: string
+            enum: [image, audio, video, model, json, other]
+            description: Type of asset
+          slot:
+            type: string
+            description: Slot/filename for the asset in the bundle
+          content_type:
+            type: string
+            description: MIME content type of the asset
+    optimization:
+      type: object
+      description: Optimization options for the bundle
+      properties:
+        minify_js:
+          type: boolean
+          default: true
+          description: Minify JavaScript files
+        minify_css:
+          type: boolean
+          default: true
+          description: Minify CSS files
+        compress_images:
+          type: boolean
+          default: false
+          description: Compress image assets
+        generate_sourcemaps:
+          type: boolean
+          default: false
+          description: Generate source maps for debugging
+        tree_shake:
+          type: boolean
+          default: false
+          description: Remove unused code
+    output:
+      type: object
+      description: Output configuration
+      properties:
+        format:
+          type: string
+          enum: [directory, zip, tar]
+          default: directory
+          description: Output format for the bundle
+        base_path:
+          type: string
+          description: Base path prefix for all files
+        include_manifest:
+          type: boolean
+          default: true
+          description: Include bundle_manifest.json
+        include_checksums:
+          type: boolean
+          default: true
+          description: Include checksums for all files
+    version:
+      type: string
+      default: "1.0.0"
+      description: Version string for the bundle
+
+output_schema:
+  type: object
+  required:
+    - bundle_uri
+    - manifest_uri
+    - manifest
+    - total_size_bytes
+    - file_count
+    - entry_point
+    - optimizations_applied
+  properties:
+    bundle_uri:
+      type: string
+      description: URI to the generated bundle directory/archive
+    manifest_uri:
+      type: string
+      description: URI to the bundle_manifest.json file
+    manifest:
+      type: object
+      description: Full bundle manifest object
+      required:
+        - bundle_id
+        - template_id
+        - version
+        - created_at
+        - files
+        - entry_point
+        - assets
+        - checksum
+        - metadata
+      properties:
+        bundle_id:
+          type: string
+        template_id:
+          type: string
+        version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              size_bytes:
+                type: number
+              content_type:
+                type: string
+              checksum:
+                type: string
+        entry_point:
+          type: string
+        assets:
+          type: object
+          properties:
+            images:
+              type: array
+              items:
+                type: string
+            audio:
+              type: array
+              items:
+                type: string
+            video:
+              type: array
+              items:
+                type: string
+            models:
+              type: array
+              items:
+                type: string
+            configs:
+              type: array
+              items:
+                type: string
+        checksum:
+          type: string
+        metadata:
+          type: object
+          properties:
+            total_size_bytes:
+              type: number
+            file_count:
+              type: number
+            optimizations_applied:
+              type: array
+              items:
+                type: string
+    total_size_bytes:
+      type: number
+      description: Total size of the bundle in bytes
+    file_count:
+      type: number
+      description: Number of files in the bundle
+    entry_point:
+      type: string
+      description: Entry point file (typically index.html)
+    optimizations_applied:
+      type: array
+      items:
+        type: string
+      description: List of optimizations that were applied
+
+implementation:
+  type: ts_function
+  handler: "@skills/bundle-game-template/handler"
+
+produces_artifacts:
+  - artifact_type: bundle/game
+    description: Complete game bundle ready for deployment
+  - artifact_type: json/bundle-manifest
+    description: Bundle manifest with file list and checksums
+
+policy:
+  max_runtime_sec: 300
+  network: allowlist
+  allowed_hosts:
+    - "*"  # Allow fetching assets from any host
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+      - "/templates/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

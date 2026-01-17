@@ -1,0 +1,214 @@
+# Skill Descriptor: generate_outcome_video_lose
+# Generates encouraging lose outcome videos
+
+skill_id: generate_outcome_video_lose
+version: "1.0.0"
+title: Generate Lose Outcome Video
+description: |
+  Generates an encouraging lose outcome video for campaign game results.
+  Creates positive, motivating "try again" animations with customizable themes,
+  text overlays, and visual effects. Maintains a supportive tone.
+
+tags:
+  - video
+  - generation
+  - ai
+  - outcome
+  - lose
+  - encouragement
+
+input_schema:
+  type: object
+  properties:
+    theme:
+      type: object
+      description: Visual theme configuration
+      properties:
+        primary_color:
+          type: string
+          description: Primary brand color (hex or named)
+        secondary_color:
+          type: string
+          description: Secondary color
+        accent_color:
+          type: string
+          description: Accent color for highlights
+        mood:
+          type: string
+          enum: [energetic, calm, exciting, celebratory, sympathetic, encouraging]
+          default: encouraging
+        style:
+          type: string
+          enum: [modern, classic, playful, corporate, casual]
+          default: playful
+    assets:
+      type: array
+      description: Visual assets to incorporate
+      items:
+        type: object
+        required:
+          - uri
+          - type
+        properties:
+          uri:
+            type: string
+            description: URI to the asset
+          type:
+            type: string
+            enum: [background, overlay, logo, mascot, confetti, particle_effect]
+          description:
+            type: string
+          opacity:
+            type: number
+            minimum: 0
+            maximum: 1
+    specs:
+      type: object
+      description: Output video specifications
+      properties:
+        duration_sec:
+          type: number
+          minimum: 1
+          maximum: 30
+          default: 5
+        fps:
+          type: number
+          minimum: 15
+          maximum: 60
+          default: 30
+        width:
+          type: number
+          minimum: 480
+          maximum: 4096
+          default: 1920
+        height:
+          type: number
+          minimum: 480
+          maximum: 4096
+          default: 1080
+        format:
+          type: string
+          enum: [mp4, webm]
+          default: mp4
+        codec:
+          type: string
+          enum: [h264, h265, vp9]
+          default: h264
+        bitrate_kbps:
+          type: number
+          minimum: 500
+          maximum: 50000
+    text_overlay:
+      type: object
+      description: Text overlay configuration
+      properties:
+        text:
+          type: string
+          description: Lose message text (encouraging)
+        font_family:
+          type: string
+        font_size:
+          type: number
+          minimum: 12
+          maximum: 200
+        color:
+          type: string
+        position:
+          type: string
+          enum: [top, center, bottom]
+          default: center
+        animation:
+          type: string
+          enum: [fade_in, slide_in, scale_in, bounce]
+          default: fade_in
+    lose_text:
+      type: string
+      description: Generic lose text (default "Better luck next time!")
+    prompt:
+      type: string
+      description: Custom generation prompt
+    seed:
+      type: number
+      description: Seed for reproducible generation
+    provider:
+      type: string
+      description: Video generation provider to use
+
+output_schema:
+  type: object
+  required:
+    - video_uri
+    - outcome_type
+    - duration_sec
+    - width
+    - height
+    - fps
+    - format
+    - codec
+    - file_size_bytes
+    - generation_params
+  properties:
+    video_uri:
+      type: string
+      description: URI to the generated video
+    outcome_type:
+      type: string
+      enum: [lose]
+      description: Always "lose" for this skill
+    duration_sec:
+      type: number
+    width:
+      type: number
+    height:
+      type: number
+    fps:
+      type: number
+    format:
+      type: string
+    codec:
+      type: string
+    file_size_bytes:
+      type: number
+    generation_params:
+      type: object
+      required:
+        - outcome_text
+        - model
+      properties:
+        prompt:
+          type: string
+        outcome_text:
+          type: string
+        seed:
+          type: number
+        model:
+          type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/generate-outcome-video-lose/handler"
+
+produces_artifacts:
+  - artifact_type: video/outcome-lose
+    description: Encouraging lose outcome video
+
+policy:
+  max_runtime_sec: 600
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+    - "api.runwayml.com"
+    - "api.stability.ai"
+    - "api.replicate.com"
+    - "api.pikaart.com"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+      - "/tmp/assets/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

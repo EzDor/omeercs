@@ -1,0 +1,308 @@
+# Skill Descriptor: assemble_campaign_manifest
+# Assembles final campaign manifest for deployment
+
+skill_id: assemble_campaign_manifest
+version: "1.0.0"
+title: Assemble Campaign Manifest
+description: |
+  Assembles a complete campaign manifest from all generated assets.
+  Combines intro video, outcome videos, game bundle, button configuration,
+  campaign rules, analytics settings, and branding into a single
+  deployment-ready campaign_manifest.json file.
+
+tags:
+  - campaign
+  - manifest
+  - deployment
+  - packaging
+  - final
+  - orchestration
+
+input_schema:
+  type: object
+  required:
+    - campaign_id
+    - campaign_name
+    - intro_video_uri
+    - outcome_videos
+    - game_bundle_uri
+    - button_config
+  properties:
+    campaign_id:
+      type: string
+      description: Unique identifier for the campaign
+    campaign_name:
+      type: string
+      description: Human-readable campaign name
+    intro_video_uri:
+      type: string
+      description: URI to the intro video (looping)
+    outcome_videos:
+      type: object
+      required:
+        - win_video_uri
+        - lose_video_uri
+      description: Outcome video configuration
+      properties:
+        win_video_uri:
+          type: string
+          description: URI to the win outcome video
+        lose_video_uri:
+          type: string
+          description: URI to the lose outcome video
+        win_redirect_url:
+          type: string
+          description: URL to redirect after win
+        lose_redirect_url:
+          type: string
+          description: URL to redirect after lose
+        auto_redirect_delay_ms:
+          type: number
+          minimum: 0
+          default: 3000
+          description: Delay before auto-redirect in milliseconds
+    game_bundle_uri:
+      type: string
+      description: URI to the game bundle directory
+    button_config:
+      type: object
+      required:
+        - bounds
+      description: Start button configuration
+      properties:
+        bounds:
+          type: object
+          required:
+            - x
+            - y
+            - width
+            - height
+          description: Button bounding box
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+            width:
+              type: number
+            height:
+              type: number
+        mask_polygon:
+          type: object
+          description: Optional mask polygon for button shape
+          properties:
+            points:
+              type: array
+              items:
+                type: object
+                properties:
+                  x:
+                    type: number
+                  y:
+                    type: number
+            is_closed:
+              type: boolean
+        hover_effect:
+          type: string
+          enum: [glow, scale, pulse, none]
+          default: glow
+          description: Effect on button hover
+        click_sound_uri:
+          type: string
+          description: URI to click sound effect
+    rules:
+      type: object
+      description: Campaign rules and restrictions
+      properties:
+        start_date:
+          type: string
+          format: date-time
+          description: Campaign start date
+        end_date:
+          type: string
+          format: date-time
+          description: Campaign end date
+        max_plays_per_user:
+          type: number
+          minimum: 1
+          description: Maximum plays allowed per user
+        global_win_rate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Global win rate override (0-1)
+        require_login:
+          type: boolean
+          default: false
+          description: Require user login to play
+        allowed_regions:
+          type: array
+          items:
+            type: string
+          description: List of allowed region codes
+        excluded_regions:
+          type: array
+          items:
+            type: string
+          description: List of excluded region codes
+        rate_limiting:
+          type: object
+          properties:
+            max_requests_per_minute:
+              type: number
+            max_requests_per_hour:
+              type: number
+    analytics:
+      type: object
+      description: Analytics and tracking configuration
+      properties:
+        track_impressions:
+          type: boolean
+          default: true
+        track_interactions:
+          type: boolean
+          default: true
+        track_completions:
+          type: boolean
+          default: true
+        tracking_id:
+          type: string
+          description: External tracking ID (e.g., GA4)
+        custom_events:
+          type: array
+          items:
+            type: string
+          description: Custom events to track
+    branding:
+      type: object
+      description: Brand customization
+      properties:
+        brand_name:
+          type: string
+        logo_uri:
+          type: string
+        primary_color:
+          type: string
+        secondary_color:
+          type: string
+        font_family:
+          type: string
+    version:
+      type: string
+      default: "1.0.0"
+      description: Campaign version
+    metadata:
+      type: object
+      description: Additional metadata
+
+output_schema:
+  type: object
+  required:
+    - manifest_uri
+    - manifest
+    - validation
+    - deployment_ready
+  properties:
+    manifest_uri:
+      type: string
+      description: URI to the generated campaign_manifest.json
+    manifest:
+      type: object
+      description: Full campaign manifest object
+      required:
+        - manifest_version
+        - campaign_id
+        - campaign_name
+        - created_at
+        - updated_at
+        - version
+        - assets
+        - interaction
+        - flow
+        - rules
+        - analytics
+        - metadata
+        - checksum
+      properties:
+        manifest_version:
+          type: string
+        campaign_id:
+          type: string
+        campaign_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: string
+        assets:
+          type: object
+          properties:
+            intro_video:
+              type: object
+            win_video:
+              type: object
+            lose_video:
+              type: object
+            game_bundle:
+              type: object
+            additional:
+              type: array
+        interaction:
+          type: object
+        flow:
+          type: object
+        rules:
+          type: object
+        analytics:
+          type: object
+        branding:
+          type: object
+        metadata:
+          type: object
+        checksum:
+          type: string
+    validation:
+      type: object
+      required:
+        - all_assets_valid
+        - missing_assets
+        - warnings
+      properties:
+        all_assets_valid:
+          type: boolean
+        missing_assets:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    deployment_ready:
+      type: boolean
+      description: Whether the campaign is ready for deployment
+
+implementation:
+  type: ts_function
+  handler: "@skills/assemble-campaign-manifest/handler"
+
+produces_artifacts:
+  - artifact_type: json/campaign-manifest
+    description: Complete campaign manifest ready for deployment
+
+policy:
+  max_runtime_sec: 60
+  network: none
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

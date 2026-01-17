@@ -1,0 +1,182 @@
+# Skill Descriptor: generate_bgm_track
+# Generates background music tracks for games
+
+skill_id: generate_bgm_track
+version: "1.0.0"
+title: Generate BGM Track
+description: |
+  Generates background music tracks using AI audio generation.
+  Supports various genres, moods, and BPM settings for game soundtracks.
+  Can produce seamlessly loopable tracks for continuous playback.
+
+tags:
+  - audio
+  - generation
+  - ai
+  - bgm
+  - music
+  - game
+
+input_schema:
+  type: object
+  required:
+    - style
+    - duration_sec
+  properties:
+    style:
+      type: object
+      required:
+        - genre
+      description: Music style configuration
+      properties:
+        genre:
+          type: string
+          enum: [electronic, ambient, orchestral, rock, pop, jazz, classical, cinematic, retro, chiptune, lofi, upbeat, calm, energetic, mysterious]
+          description: Music genre/style
+        mood:
+          type: string
+          enum: [happy, sad, tense, relaxed, epic, playful, dramatic, neutral]
+          description: Mood of the music
+        instruments:
+          type: string
+          description: Preferred instruments (e.g., "piano, strings, synth")
+        energy_level:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Energy level (0.0 = low, 1.0 = high)
+    bpm:
+      type: number
+      minimum: 60
+      maximum: 200
+      default: 120
+      description: Tempo in beats per minute
+    duration_sec:
+      type: number
+      minimum: 5
+      maximum: 300
+      description: Duration in seconds
+    loopable:
+      type: boolean
+      default: true
+      description: Whether the track should loop seamlessly
+    specs:
+      type: object
+      description: Audio output specifications
+      properties:
+        format:
+          type: string
+          enum: [mp3, wav, ogg, aac]
+          default: mp3
+        bitrate_kbps:
+          type: number
+          minimum: 64
+          maximum: 320
+          default: 192
+        sample_rate:
+          type: number
+          minimum: 22050
+          maximum: 48000
+          default: 44100
+        channels:
+          type: number
+          minimum: 1
+          maximum: 2
+          default: 2
+    custom_prompt:
+      type: string
+      description: Custom prompt to guide music generation
+    seed:
+      type: number
+      description: Seed for reproducible generation
+    provider:
+      type: string
+      description: Audio generation provider to use
+
+output_schema:
+  type: object
+  required:
+    - audio_uri
+    - duration_sec
+    - bpm
+    - format
+    - sample_rate
+    - bitrate_kbps
+    - channels
+    - file_size_bytes
+    - is_loopable
+    - generation_params
+  properties:
+    audio_uri:
+      type: string
+      description: URI to the generated audio file
+    duration_sec:
+      type: number
+      description: Actual duration in seconds
+    bpm:
+      type: number
+      description: BPM of the generated track
+    format:
+      type: string
+      description: Audio format
+    sample_rate:
+      type: number
+      description: Sample rate in Hz
+    bitrate_kbps:
+      type: number
+      description: Bitrate in kbps
+    channels:
+      type: number
+      description: Number of audio channels
+    file_size_bytes:
+      type: number
+      description: File size in bytes
+    is_loopable:
+      type: boolean
+      description: Whether the track loops seamlessly
+    generation_params:
+      type: object
+      required:
+        - style
+        - bpm
+        - model
+      properties:
+        style:
+          type: string
+        mood:
+          type: string
+        bpm:
+          type: number
+        custom_prompt:
+          type: string
+        seed:
+          type: number
+        model:
+          type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/generate-bgm-track/handler"
+
+produces_artifacts:
+  - artifact_type: audio/bgm
+    description: Background music track
+
+policy:
+  max_runtime_sec: 600
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+    - "api.suno.ai"
+    - "api.stability.ai"
+    - "api.replicate.com"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

@@ -1,0 +1,149 @@
+# Skill Descriptor: segment_start_button
+# Detects and segments the start/play button in intro images
+
+skill_id: segment_start_button
+version: "1.0.0"
+title: Segment Start Button
+description: |
+  Detects and segments the start/play button in campaign intro images using computer vision.
+  Returns bounding box coordinates, mask polygon, and confidence score.
+  Used to identify interactive regions in intro video frames.
+
+tags:
+  - vision
+  - segmentation
+  - detection
+  - ui
+  - intro
+
+input_schema:
+  type: object
+  required:
+    - image_uri
+  properties:
+    image_uri:
+      type: string
+      description: URI to the image containing the button to detect
+    button_hint:
+      type: string
+      description: Hint about what the button looks like (e.g., "green play button", "circular start icon")
+    detection_method:
+      type: string
+      enum: [auto, edge_detection, semantic_segmentation, object_detection]
+      default: auto
+      description: Detection method to use
+    confidence_threshold:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0.7
+      description: Minimum confidence threshold for detection
+    generate_mask:
+      type: boolean
+      default: true
+      description: Whether to generate a mask image
+    provider:
+      type: string
+      description: Vision provider to use
+
+output_schema:
+  type: object
+  required:
+    - detected
+    - confidence
+    - bounds
+    - mask_polygon
+    - detection_method_used
+  properties:
+    detected:
+      type: boolean
+      description: Whether a button was detected
+    confidence:
+      type: number
+      minimum: 0
+      maximum: 1
+      description: Confidence score of the detection
+    bounds:
+      type: object
+      required:
+        - x
+        - y
+        - width
+        - height
+      properties:
+        x:
+          type: number
+          description: X coordinate of bounding box top-left
+        y:
+          type: number
+          description: Y coordinate of bounding box top-left
+        width:
+          type: number
+          description: Width of bounding box
+        height:
+          type: number
+          description: Height of bounding box
+    mask_polygon:
+      type: object
+      required:
+        - points
+        - is_closed
+      properties:
+        points:
+          type: array
+          items:
+            type: object
+            required:
+              - x
+              - y
+            properties:
+              x:
+                type: number
+              y:
+                type: number
+        is_closed:
+          type: boolean
+          description: Whether the polygon is closed
+    mask_image_uri:
+      type: string
+      description: URI to the generated mask image (if generate_mask was true)
+    button_type:
+      type: string
+      enum: [play, start, cta, unknown]
+      description: Detected type of button
+    detection_method_used:
+      type: string
+      enum: [auto, edge_detection, semantic_segmentation, object_detection]
+      description: Actual detection method used
+    analysis_notes:
+      type: string
+      description: Additional notes about the detection
+
+implementation:
+  type: ts_function
+  handler: "@skills/segment-start-button/handler"
+
+produces_artifacts:
+  - artifact_type: json/button-bounds
+    description: Button bounding box and polygon coordinates
+  - artifact_type: image/button-mask
+    description: Binary mask image of the detected button
+
+policy:
+  max_runtime_sec: 60
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+    - "api.openai.com"
+    - "vision.googleapis.com"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+      - "/tmp/assets/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true
