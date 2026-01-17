@@ -13,10 +13,21 @@ export interface ChatCompletionMessage {
   content: string | ChatCompletionContentPart[];
 }
 
+export interface ResponseFormat {
+  type: 'text' | 'json_object' | 'json_schema';
+  json_schema?: {
+    name: string;
+    description?: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
+}
+
 export interface ChatCompletionRequest {
   model: string;
   messages: ChatCompletionMessage[];
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  response_format?: ResponseFormat;
 }
