@@ -75,7 +75,7 @@ export class SkillRunnerService {
       // 5. Validate input
       const inputValidationStart = Date.now();
       if (descriptor.input_schema) {
-        const inputValidation = this.schemaValidatorService.validateInput(descriptor.input_schema, input, skillId);
+        const inputValidation = this.schemaValidatorService.validateInput(descriptor.input_schema, input, skillId, descriptor.version);
 
         if (!inputValidation.valid) {
           timings.input_validation = Date.now() - inputValidationStart;
@@ -114,8 +114,8 @@ export class SkillRunnerService {
 
       // 7. Validate output
       const outputValidationStart = Date.now();
-      if (handlerResult.ok && descriptor.output_schema && handlerResult.data) {
-        const outputValidation = this.schemaValidatorService.validateOutput(descriptor.output_schema, handlerResult.data, skillId);
+      if (handlerResult.ok && descriptor.output_schema && handlerResult.data !== undefined) {
+        const outputValidation = this.schemaValidatorService.validateOutput(descriptor.output_schema, handlerResult.data, skillId, descriptor.version);
 
         if (!outputValidation.valid) {
           timings.output_validation = Date.now() - outputValidationStart;
@@ -183,9 +183,13 @@ export class SkillRunnerService {
       const result = await Promise.race([
         handler.execute(input, context),
         new Promise<never>((_, reject) => {
-          controller.signal.addEventListener('abort', () => {
-            reject(new SkillTimeoutException(context.skillId, timeoutMs));
-          });
+          controller.signal.addEventListener(
+            'abort',
+            () => {
+              reject(new SkillTimeoutException(context.skillId, timeoutMs));
+            },
+            { once: true },
+          );
         }),
       ]);
 

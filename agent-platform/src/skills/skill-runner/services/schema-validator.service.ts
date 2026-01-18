@@ -47,10 +47,11 @@ export class SchemaValidatorService {
    * @param schema The JSON Schema to validate against
    * @param input The input data to validate
    * @param skillId Optional skill ID for caching
+   * @param version Optional version for cache key (prevents cross-version collisions)
    * @returns Validation result with any errors
    */
-  validateInput(schema: Record<string, unknown>, input: unknown, skillId?: string): SchemaValidationResult {
-    return this.validate(schema, input, `${skillId || 'unknown'}_input`);
+  validateInput(schema: Record<string, unknown>, input: unknown, skillId?: string, version?: string): SchemaValidationResult {
+    return this.validate(schema, input, `${skillId || 'unknown'}_${version || 'latest'}_input`);
   }
 
   /**
@@ -59,10 +60,11 @@ export class SchemaValidatorService {
    * @param schema The JSON Schema to validate against
    * @param output The output data to validate
    * @param skillId Optional skill ID for caching
+   * @param version Optional version for cache key (prevents cross-version collisions)
    * @returns Validation result with any errors
    */
-  validateOutput(schema: Record<string, unknown>, output: unknown, skillId?: string): SchemaValidationResult {
-    return this.validate(schema, output, `${skillId || 'unknown'}_output`);
+  validateOutput(schema: Record<string, unknown>, output: unknown, skillId?: string, version?: string): SchemaValidationResult {
+    return this.validate(schema, output, `${skillId || 'unknown'}_${version || 'latest'}_output`);
   }
 
   /**

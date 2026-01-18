@@ -44,9 +44,9 @@ export class ExecutionContextService {
     // Create scoped logger for this execution
     const scopedLogger = new Logger(`SkillRunner:${descriptor.skill_id}:${runId.substring(0, 8)}`);
 
-    // Create secrets accessor with provider restrictions from policy
-    const allowedProviders = descriptor.policy?.allowed_hosts;
-    const secrets = this.secretsService.createAccessor(descriptor.skill_id, allowedProviders);
+    // Create secrets accessor - don't restrict based on allowed_hosts (network hostnames)
+    // allowed_hosts is for network access control, not API provider filtering
+    const secrets = this.secretsService.createAccessor(descriptor.skill_id);
 
     // Build artifact base URI for this run
     const artifactBaseUri = this.buildArtifactBaseUri(tenantId, runId);

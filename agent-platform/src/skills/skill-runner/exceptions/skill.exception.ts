@@ -12,7 +12,15 @@ export enum SkillErrorType {
 /**
  * Error codes matching the OpenAPI specification
  */
-export type SkillErrorCode = 'INPUT_VALIDATION_FAILED' | 'OUTPUT_VALIDATION_FAILED' | 'EXECUTION_ERROR' | 'POLICY_VIOLATION' | 'TIMEOUT' | 'SKILL_NOT_FOUND' | 'VERSION_NOT_FOUND';
+export type SkillErrorCode =
+  | 'INPUT_VALIDATION_FAILED'
+  | 'OUTPUT_VALIDATION_FAILED'
+  | 'EXECUTION_ERROR'
+  | 'POLICY_VIOLATION'
+  | 'TIMEOUT'
+  | 'SKILL_NOT_FOUND'
+  | 'VERSION_NOT_FOUND'
+  | 'HANDLER_NOT_FOUND';
 
 /**
  * Base exception class for all skill-related errors
