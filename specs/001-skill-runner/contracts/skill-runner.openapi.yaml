@@ -1,0 +1,499 @@
+openapi: 3.1.0
+info:
+  title: Skill Runner API
+  description: |
+    Internal API for executing skills, managing artifacts, and querying the skill catalog.
+    This API is primarily used by the agent-platform worker service.
+  version: 1.0.0
+  contact:
+    name: Platform Team
+
+servers:
+  - url: http://localhost:3002
+    description: Local agent-platform worker
+
+tags:
+  - name: skills
+    description: Skill execution operations
+  - name: catalog
+    description: Skill catalog operations
+  - name: artifacts
+    description: Artifact registry operations
+
+paths:
+  /skills/execute:
+    post:
+      tags: [skills]
+      operationId: executeSkill
+      summary: Execute a registered skill
+      description: |
+        Executes a skill with the provided input. Validates input against the skill's schema,
+        runs the handler, validates output, and registers any produced artifacts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteSkillRequest'
+      responses:
+        '200':
+          description: Skill execution completed (success or failure)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResult'
+        '400':
+          description: Invalid request format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Skill or version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /catalog/skills:
+    get:
+      tags: [catalog]
+      operationId: listSkills
+      summary: List all registered skills
+      description: Returns metadata for all skills in the catalog.
+      parameters:
+        - name: includeSchemas
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include input/output schemas in response
+      responses:
+        '200':
+          description: List of skill descriptors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SkillDescriptorSummary'
+                  total:
+                    type: integer
+
+  /catalog/skills/{skillId}:
+    get:
+      tags: [catalog]
+      operationId: getSkill
+      summary: Get skill descriptor
+      description: Returns the full descriptor for a specific skill.
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9_]*$'
+            maxLength: 64
+        - name: version
+          in: query
+          schema:
+            type: string
+            pattern: '^\d+\.\d+\.\d+$'
+          description: Specific version (defaults to latest)
+      responses:
+        '200':
+          description: Skill descriptor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDescriptor'
+        '404':
+          description: Skill not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /artifacts:
+    get:
+      tags: [artifacts]
+      operationId: listArtifacts
+      summary: List artifacts
+      description: Query artifacts by run_id, skill_id, or type.
+      parameters:
+        - name: runId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: skillId
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of artifacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifacts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Artifact'
+                  total:
+                    type: integer
+
+  /artifacts/{artifactId}:
+    get:
+      tags: [artifacts]
+      operationId: getArtifact
+      summary: Get artifact metadata
+      description: Returns metadata for a specific artifact by ID.
+      parameters:
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Artifact metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Artifact'
+        '404':
+          description: Artifact not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    ExecuteSkillRequest:
+      type: object
+      required:
+        - skillId
+        - input
+      properties:
+        skillId:
+          type: string
+          description: Skill identifier
+          pattern: '^[a-z][a-z0-9_]*$'
+          maxLength: 64
+          example: generate_bgm_track
+        version:
+          type: string
+          description: Specific version (optional, defaults to latest)
+          pattern: '^\d+\.\d+\.\d+$'
+          example: '1.0.0'
+        input:
+          type: object
+          description: Skill-specific input (validated against skill's input_schema)
+          additionalProperties: true
+        context:
+          $ref: '#/components/schemas/ExecutionContextOverrides'
+
+    ExecutionContextOverrides:
+      type: object
+      description: Optional context overrides for execution
+      properties:
+        provider:
+          type: string
+          description: Override the default provider
+        timeout_ms:
+          type: integer
+          minimum: 1000
+          maximum: 600000
+          description: Override the skill's timeout
+
+    SkillResult:
+      type: object
+      required:
+        - ok
+        - artifacts
+        - debug
+      properties:
+        ok:
+          type: boolean
+          description: Whether execution succeeded
+        data:
+          type: object
+          description: Output data (present when ok=true)
+          additionalProperties: true
+        error:
+          type: string
+          description: Error message (present when ok=false)
+        error_code:
+          $ref: '#/components/schemas/SkillErrorCode'
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactRef'
+        debug:
+          $ref: '#/components/schemas/SkillDebugInfo'
+
+    SkillErrorCode:
+      type: string
+      enum:
+        - INPUT_VALIDATION_FAILED
+        - OUTPUT_VALIDATION_FAILED
+        - EXECUTION_ERROR
+        - POLICY_VIOLATION
+        - TIMEOUT
+        - SKILL_NOT_FOUND
+        - VERSION_NOT_FOUND
+
+    ArtifactRef:
+      type: object
+      required:
+        - id
+        - type
+        - uri
+        - contentHash
+        - sizeBytes
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          example: audio/wav
+        uri:
+          type: string
+          format: uri
+          example: file:///tmp/skill-workspaces/run-abc123/output.wav
+        contentHash:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: SHA-256 hash
+        sizeBytes:
+          type: integer
+          minimum: 0
+        filename:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    SkillDebugInfo:
+      type: object
+      required:
+        - run_id
+        - skill_id
+        - version
+        - duration_ms
+        - timing
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        skill_id:
+          type: string
+        version:
+          type: string
+        duration_ms:
+          type: integer
+        timing:
+          type: object
+          properties:
+            input_validation_ms:
+              type: integer
+            execution_ms:
+              type: integer
+            output_validation_ms:
+              type: integer
+            artifact_registration_ms:
+              type: integer
+        provider:
+          type: string
+        model:
+          type: string
+
+    SkillDescriptor:
+      type: object
+      required:
+        - skill_id
+        - version
+        - title
+        - input_schema
+        - output_schema
+        - implementation
+      properties:
+        skill_id:
+          type: string
+          pattern: '^[a-z][a-z0-9_]*$'
+        version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+$'
+        title:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+          description: JSON Schema for input validation
+        output_schema:
+          type: object
+          description: JSON Schema for output validation
+        implementation:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [ts_function, http_call, cli_command]
+            handler:
+              type: string
+        produces_artifacts:
+          type: array
+          items:
+            type: string
+        policy:
+          $ref: '#/components/schemas/SkillPolicy'
+        observability:
+          type: object
+          properties:
+            log_level:
+              type: string
+              enum: [debug, info, warn, error]
+            metrics_emit:
+              type: boolean
+
+    SkillDescriptorSummary:
+      type: object
+      required:
+        - skill_id
+        - version
+        - title
+      properties:
+        skill_id:
+          type: string
+        version:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        produces_artifacts:
+          type: array
+          items:
+            type: string
+
+    SkillPolicy:
+      type: object
+      properties:
+        timeout_ms:
+          type: integer
+          minimum: 1000
+          maximum: 600000
+          default: 60000
+        max_retries:
+          type: integer
+          minimum: 0
+          default: 0
+        allowed_providers:
+          type: array
+          items:
+            type: string
+
+    Artifact:
+      type: object
+      required:
+        - id
+        - tenant_id
+        - run_id
+        - skill_id
+        - type
+        - uri
+        - content_hash
+        - size_bytes
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+        skill_id:
+          type: string
+        type:
+          type: string
+        uri:
+          type: string
+          format: uri
+        content_hash:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        size_bytes:
+          type: integer
+        filename:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required:
+        - statusCode
+        - message
+        - error
+      properties:
+        statusCode:
+          type: integer
+        message:
+          type: string
+        error:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk JWT token
+
+security:
+  - bearerAuth: []

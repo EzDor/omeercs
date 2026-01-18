@@ -31,7 +31,18 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+<!--
+  Reference: .specify/memory/constitution.md v1.0.0
+  Verify each principle below. Mark PASS, FAIL (with justification), or N/A.
+-->
+
+| Principle | Status | Notes |
+|-----------|--------|-------|
+| I. Spec-Driven Development | [PASS/FAIL/N/A] | [Spec files exist in /specs/###-feature-name/] |
+| II. Type Safety & Schema Validation | [PASS/FAIL/N/A] | [TypeScript strict, class-validator DTOs, JSON Schema for configs] |
+| III. Multi-Tenant First | [PASS/FAIL/N/A] | [New entities include tenantId, or explicitly system-level] |
+| IV. Monorepo Discipline | [PASS/FAIL/N/A] | [Follows dto→common→dao→services hierarchy] |
+| V. Error Handling & Observability | [PASS/FAIL/N/A] | [Result objects for failures, structured logging] |
 
 ## Project Structure
 

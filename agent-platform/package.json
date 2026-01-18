@@ -21,6 +21,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "@agentic-template/common": "workspace:^",
     "@agentic-template/dao": "workspace:*",
     "@agentic-template/dto": "workspace:*",
@@ -47,6 +49,7 @@
     "pg": "^8.11.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "semver": "^7.6.3",
     "typeorm": "^0.3.27",
     "uuid": "^13.0.0"
   },
@@ -61,6 +64,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.18.8",
     "@types/pg": "^8.10.9",
+    "@types/semver": "^7.5.8",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^11.0.0",
     "eslint": "^9.18.0",
