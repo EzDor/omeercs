@@ -115,3 +115,10 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 
 ## .specify Directory
 Agentic workflow system for specification-driven development. Contains templates (spec, plan, tasks) and scripts for AI-assisted feature development. Used with Claude Code skills in `.claude/commands/`.
+
+## Active Technologies
+- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation) (001-skill-runner)
+- PostgreSQL with TypeORM (for artifact registry metadata) (001-skill-runner)
+
+## Recent Changes
+- 001-skill-runner: Added TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation)
