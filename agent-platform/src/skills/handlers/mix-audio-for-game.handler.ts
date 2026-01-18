@@ -1,13 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  MixAudioForGameInput,
-  MixAudioForGameOutput,
-  NormalizedAudioFile,
-  SkillResult,
-  skillSuccess,
-  skillFailure,
-} from '@agentic-template/dto/src/skills';
+import { MixAudioForGameInput, MixAudioForGameOutput, NormalizedAudioFile, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -69,7 +62,7 @@ export class MixAudioForGameHandler implements SkillHandler<MixAudioForGameInput
 
       // Load SFX files from manifest or direct references
       const sfxStart = Date.now();
-      const sfxFiles = await this.loadSfxFiles(input);
+      const sfxFiles = this.loadSfxFiles(input);
       const normalizedSfx: NormalizedAudioFile[] = [];
 
       for (const sfxFile of sfxFiles) {
@@ -194,7 +187,7 @@ export class MixAudioForGameHandler implements SkillHandler<MixAudioForGameInput
     };
   }
 
-  private async loadSfxFiles(input: MixAudioForGameInput): Promise<Array<{ name: string; uri: string; volume_adjust_db?: number }>> {
+  private loadSfxFiles(input: MixAudioForGameInput): Array<{ name: string; uri: string; volume_adjust_db?: number }> {
     const sfxFiles: Array<{ name: string; uri: string; volume_adjust_db?: number }> = [];
 
     // Load from direct file references
@@ -206,7 +199,7 @@ export class MixAudioForGameHandler implements SkillHandler<MixAudioForGameInput
     if (input.sfx_manifest) {
       try {
         const manifestContent = fs.readFileSync(input.sfx_manifest.manifest_uri, 'utf-8');
-        const manifest = JSON.parse(manifestContent);
+        const manifest = JSON.parse(manifestContent) as { sfx_files?: Array<{ name: string; filename: string }> };
 
         if (manifest.sfx_files && Array.isArray(manifest.sfx_files)) {
           const packDir = input.sfx_manifest.pack_uri || path.dirname(input.sfx_manifest.manifest_uri);
@@ -290,7 +283,7 @@ export class MixAudioForGameHandler implements SkillHandler<MixAudioForGameInput
         // Parse the loudnorm JSON output
         const jsonMatch = output.match(/\{[\s\S]*?"input_i"[\s\S]*?\}/);
         if (jsonMatch) {
-          const loudnormData = JSON.parse(jsonMatch[0]);
+          const loudnormData = JSON.parse(jsonMatch[0]) as { input_i: string };
           return {
             lufs: parseFloat(loudnormData.input_i),
             duration_sec,

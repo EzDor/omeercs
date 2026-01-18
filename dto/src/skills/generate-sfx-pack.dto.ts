@@ -1,6 +1,6 @@
 import { IsString, IsNotEmpty, IsNumber, IsOptional, IsArray, ValidateNested, Min, Max, IsEnum, ArrayMinSize } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AudioFormat, AudioSpecs } from './generate-bgm-track.dto';
+import { AudioSpecs } from './generate-bgm-track.dto';
 
 /**
  * Common SFX intent types for games

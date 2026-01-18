@@ -161,7 +161,7 @@ export class ReviewAssetQualityHandler implements SkillHandler<ReviewAssetQualit
         return skillFailure('No content in LLM response', 'EMPTY_RESPONSE', { timings_ms: { total: Date.now() - startTime, ...timings } });
       }
 
-      const reviewResult: ReviewAssetQualityOutput = JSON.parse(content);
+      const reviewResult = JSON.parse(content) as ReviewAssetQualityOutput;
       timings['parse'] = Date.now() - parseStartTime;
 
       const totalTime = Date.now() - startTime;

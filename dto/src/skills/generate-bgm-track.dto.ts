@@ -36,23 +36,7 @@ export type AudioFormat = 'mp3' | 'wav' | 'ogg' | 'aac';
  */
 export class BgmStyle {
   @IsString()
-  @IsEnum([
-    'electronic',
-    'ambient',
-    'orchestral',
-    'rock',
-    'pop',
-    'jazz',
-    'classical',
-    'cinematic',
-    'retro',
-    'chiptune',
-    'lofi',
-    'upbeat',
-    'calm',
-    'energetic',
-    'mysterious',
-  ])
+  @IsEnum(['electronic', 'ambient', 'orchestral', 'rock', 'pop', 'jazz', 'classical', 'cinematic', 'retro', 'chiptune', 'lofi', 'upbeat', 'calm', 'energetic', 'mysterious'])
   @IsNotEmpty()
   genre: MusicStyle;
 

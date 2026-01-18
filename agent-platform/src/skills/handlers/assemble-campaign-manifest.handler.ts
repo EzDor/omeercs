@@ -27,16 +27,14 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
   }
 
-  async execute(
-    input: AssembleCampaignManifestInput,
-    context: SkillExecutionContext,
-  ): Promise<SkillResult<AssembleCampaignManifestOutput>> {
+  async execute(input: AssembleCampaignManifestInput, context: SkillExecutionContext): Promise<SkillResult<AssembleCampaignManifestOutput>> {
     const startTime = Date.now();
     const timings: Record<string, number> = {};
 
-    this.logger.log(
-      `Executing assemble_campaign_manifest for campaign ${input.campaign_id}, tenant ${context.tenantId}, execution ${context.executionId}`,
-    );
+    this.logger.log(`Executing assemble_campaign_manifest for campaign ${input.campaign_id}, tenant ${context.tenantId}, execution ${context.executionId}`);
+
+    // Yield to event loop for proper async behavior
+    await Promise.resolve();
 
     try {
       // Create output directory
@@ -49,12 +47,12 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
 
       // Validate assets
       const validationStart = Date.now();
-      const assetValidation = await this.validateAssets(input);
+      const assetValidation = this.validateAssets(input);
       timings['validate_assets'] = Date.now() - validationStart;
 
       // Build asset references
       const assetsStart = Date.now();
-      const assetRefs = await this.buildAssetRefs(input);
+      const assetRefs = this.buildAssetRefs(input);
       timings['build_asset_refs'] = Date.now() - assetsStart;
 
       // Build manifest
@@ -93,13 +91,14 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
           sequence: ['intro', 'game', 'outcome'],
           intro_to_game_trigger: 'button_click',
           game_to_outcome_trigger: 'game_complete',
-          outcome_redirect: input.outcome_videos.win_redirect_url || input.outcome_videos.lose_redirect_url
-            ? {
-                win_url: input.outcome_videos.win_redirect_url,
-                lose_url: input.outcome_videos.lose_redirect_url,
-                delay_ms: input.outcome_videos.auto_redirect_delay_ms || 3000,
-              }
-            : undefined,
+          outcome_redirect:
+            input.outcome_videos.win_redirect_url || input.outcome_videos.lose_redirect_url
+              ? {
+                  win_url: input.outcome_videos.win_redirect_url,
+                  lose_url: input.outcome_videos.lose_redirect_url,
+                  delay_ms: input.outcome_videos.auto_redirect_delay_ms || 3000,
+                }
+              : undefined,
         },
 
         rules: {
@@ -138,10 +137,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
 
       // Compute manifest checksum
       const manifestWithoutChecksum = { ...manifest, checksum: '' };
-      manifest.checksum = crypto
-        .createHash('sha256')
-        .update(JSON.stringify(manifestWithoutChecksum))
-        .digest('hex');
+      manifest.checksum = crypto.createHash('sha256').update(JSON.stringify(manifestWithoutChecksum)).digest('hex');
 
       timings['build_manifest'] = Date.now() - manifestStart;
 
@@ -152,10 +148,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
       timings['write_manifest'] = Date.now() - writeStart;
 
       // Determine deployment readiness
-      const deploymentReady =
-        assetValidation.allValid &&
-        assetValidation.missingAssets.length === 0 &&
-        assetValidation.warnings.length === 0;
+      const deploymentReady = assetValidation.allValid && assetValidation.missingAssets.length === 0 && assetValidation.warnings.length === 0;
 
       const totalTime = Date.now() - startTime;
       this.logger.log(`Campaign manifest assembled successfully in ${totalTime}ms`);
@@ -189,23 +182,15 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
       });
     } catch (error) {
       const totalTime = Date.now() - startTime;
-      this.logger.error(
-        `Failed to assemble campaign manifest: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      this.logger.error(`Failed to assemble campaign manifest: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(
-        error instanceof Error ? error.message : 'Unknown error during manifest assembly',
-        'EXECUTION_ERROR',
-        {
-          timings_ms: { total: totalTime, ...timings },
-        },
-      );
+      return skillFailure(error instanceof Error ? error.message : 'Unknown error during manifest assembly', 'EXECUTION_ERROR', {
+        timings_ms: { total: totalTime, ...timings },
+      });
     }
   }
 
-  private async validateAssets(
-    input: AssembleCampaignManifestInput,
-  ): Promise<{ allValid: boolean; missingAssets: string[]; warnings: string[] }> {
+  private validateAssets(input: AssembleCampaignManifestInput): { allValid: boolean; missingAssets: string[]; warnings: string[] } {
     const missingAssets: string[] = [];
     const warnings: string[] = [];
 
@@ -247,11 +232,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
     }
 
     // Validate button bounds
-    if (
-      !input.button_config.bounds ||
-      input.button_config.bounds.width <= 0 ||
-      input.button_config.bounds.height <= 0
-    ) {
+    if (!input.button_config.bounds || input.button_config.bounds.width <= 0 || input.button_config.bounds.height <= 0) {
       warnings.push('Invalid button bounds: width and height must be positive');
     }
 
@@ -287,13 +268,13 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
     return !uri.startsWith('http://') && !uri.startsWith('https://');
   }
 
-  private async buildAssetRefs(input: AssembleCampaignManifestInput): Promise<{
+  private buildAssetRefs(input: AssembleCampaignManifestInput): {
     intro_video: ManifestAssetRef;
     win_video: ManifestAssetRef;
     lose_video: ManifestAssetRef;
     game_bundle: ManifestAssetRef;
     additional: ManifestAssetRef[];
-  }> {
+  } {
     const additional: ManifestAssetRef[] = [];
 
     // Add click sound if present
@@ -401,14 +382,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
   }
 
   private buildAnalyticsEvents(analytics?: AssembleCampaignManifestInput['analytics']): string[] {
-    const defaultEvents = [
-      'campaign_view',
-      'intro_started',
-      'button_clicked',
-      'game_started',
-      'game_completed',
-      'outcome_shown',
-    ];
+    const defaultEvents = ['campaign_view', 'intro_started', 'button_clicked', 'game_started', 'game_completed', 'outcome_shown'];
 
     if (!analytics) return defaultEvents;
 

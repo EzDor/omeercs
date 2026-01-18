@@ -2,18 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ChatCompletionRequest } from './interfaces/chat-completion-request.interface';
 import { ChatCompletionResponse } from './interfaces/chat-completion-response.interface';
 import { ImageGenerationRequest, ImageGenerationResponse } from './interfaces/image-generation-request.interface';
-import {
-  VideoGenerationRequest,
-  VideoGenerationResponse,
-  VideoGenerationStatusRequest,
-  VideoGenerationStatusResponse,
-} from './interfaces/video-generation-request.interface';
-import {
-  AudioGenerationRequest,
-  AudioGenerationResponse,
-  AudioGenerationStatusRequest,
-  AudioGenerationStatusResponse,
-} from './interfaces/audio-generation-request.interface';
+import { VideoGenerationRequest, VideoGenerationResponse, VideoGenerationStatusRequest, VideoGenerationStatusResponse } from './interfaces/video-generation-request.interface';
+import { AudioGenerationRequest, AudioGenerationResponse, AudioGenerationStatusRequest, AudioGenerationStatusResponse } from './interfaces/audio-generation-request.interface';
 import {
   Model3DGenerationRequest,
   Model3DGenerationResponse,

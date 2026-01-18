@@ -154,7 +154,7 @@ export class GameConfigFromTemplateHandler implements SkillHandler<GameConfigFro
         return skillFailure('No content in LLM response', 'EMPTY_RESPONSE', { timings_ms: { total: Date.now() - startTime, ...timings } });
       }
 
-      const gameConfig: GameConfigOutput = JSON.parse(content);
+      const gameConfig = JSON.parse(content) as GameConfigOutput;
       timings['parse'] = Date.now() - parseStartTime;
 
       const totalTime = Date.now() - startTime;

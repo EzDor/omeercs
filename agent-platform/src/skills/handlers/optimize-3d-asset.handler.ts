@@ -2,15 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
 import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
-import {
-  Optimize3DAssetInput,
-  Optimize3DAssetOutput,
-  OptimizationMetrics,
-  SkillResult,
-  SkillArtifact,
-  skillSuccess,
-  skillFailure,
-} from '@agentic-template/dto/src/skills';
+import { Optimize3DAssetInput, Optimize3DAssetOutput, OptimizationMetrics, SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
 import { Model3DFormat } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
@@ -58,7 +50,7 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
       const optimizationStart = Date.now();
       const model = input.provider || this.defaultModel;
 
-      const modelUrl = await this.resolveModelUrl(input.model_uri);
+      const modelUrl = this.resolveModelUrl(input.model_uri);
 
       const response = await this.llmClient.model3DOptimization({
         model,
@@ -201,7 +193,7 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
             uri,
             metadata: {
               lod_level: idx,
-              triangles: lodInfo!.triangle_counts[idx],
+              triangles: lodInfo.triangle_counts[idx],
             },
           });
         });
@@ -242,7 +234,7 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
     return validFormats.includes(extension as Model3DFormat) ? (extension as Model3DFormat) : null;
   }
 
-  private async resolveModelUrl(uri: string): Promise<string> {
+  private resolveModelUrl(uri: string): string {
     // If it's already a URL, return it
     if (uri.startsWith('http://') || uri.startsWith('https://')) {
       return uri;

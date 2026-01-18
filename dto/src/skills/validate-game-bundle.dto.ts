@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsArray, IsOptional, IsBoolean, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsArray, IsOptional, IsBoolean } from 'class-validator';
 
 /**
  * Severity levels for validation issues
@@ -8,14 +8,7 @@ export type ValidationIssueSeverity = 'error' | 'warning' | 'info';
 /**
  * Categories of validation checks
  */
-export type ValidationCategory =
-  | 'structure'
-  | 'manifest'
-  | 'assets'
-  | 'config'
-  | 'performance'
-  | 'compatibility'
-  | 'security';
+export type ValidationCategory = 'structure' | 'manifest' | 'assets' | 'config' | 'performance' | 'compatibility' | 'security';
 
 /**
  * Validation checks to perform

@@ -2,16 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
 import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
-import {
-  SegmentStartButtonInput,
-  SegmentStartButtonOutput,
-  BoundingBox,
-  MaskPolygon,
-  DetectionMethod,
-  SkillResult,
-  skillSuccess,
-  skillFailure,
-} from '@agentic-template/dto/src/skills';
+import { SegmentStartButtonInput, SegmentStartButtonOutput, BoundingBox, MaskPolygon, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -101,7 +92,7 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
     try {
       // Prepare image for vision model
       const prepareStart = Date.now();
-      const imageUrl = await this.prepareImageUrl(input.image_uri);
+      const imageUrl = this.prepareImageUrl(input.image_uri);
       timings['prepare'] = Date.now() - prepareStart;
 
       // Build the detection prompt
@@ -166,7 +157,7 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
       let maskImageUri: string | undefined;
       if (input.generate_mask && detectionResult.detected) {
         const maskStart = Date.now();
-        maskImageUri = await this.generateMaskImage(detectionResult.mask_polygon, detectionResult.bounds, context.executionId);
+        maskImageUri = this.generateMaskImage(detectionResult.mask_polygon, detectionResult.bounds, context.executionId);
         timings['mask_generation'] = Date.now() - maskStart;
       }
 
@@ -180,7 +171,7 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
         mask_polygon: detectionResult.mask_polygon,
         mask_image_uri: maskImageUri,
         button_type: detectionResult.button_type,
-        detection_method_used: (input.detection_method || 'auto') as DetectionMethod,
+        detection_method_used: input.detection_method || 'auto',
         analysis_notes: detectionResult.analysis_notes,
       };
 
@@ -246,7 +237,7 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
     return parts.join(' ');
   }
 
-  private async prepareImageUrl(imageUri: string): Promise<string> {
+  private prepareImageUrl(imageUri: string): string {
     // If it's already a URL, return as-is
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
       return imageUri;
@@ -264,7 +255,7 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
     throw new Error(`Invalid image URI: ${imageUri}`);
   }
 
-  private async generateMaskImage(polygon: MaskPolygon, bounds: BoundingBox, executionId: string): Promise<string> {
+  private generateMaskImage(polygon: MaskPolygon, bounds: BoundingBox, executionId: string): string {
     // In a production system, this would generate an actual mask image
     // using a canvas library like sharp or canvas
     // For now, we'll create a placeholder JSON file with the mask data

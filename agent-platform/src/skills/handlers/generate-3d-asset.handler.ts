@@ -2,16 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
 import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
-import {
-  Generate3DAssetInput,
-  Generate3DAssetOutput,
-  Model3DFormat,
-  Model3DStyle,
-  SkillResult,
-  SkillArtifact,
-  skillSuccess,
-  skillFailure,
-} from '@agentic-template/dto/src/skills';
+import { Generate3DAssetInput, Generate3DAssetOutput, Model3DFormat, Model3DStyle, SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -190,7 +181,7 @@ export class Generate3DAssetHandler implements SkillHandler<Generate3DAssetInput
             uri,
             metadata: {
               index: idx,
-              resolution: textureInfo!.resolution,
+              resolution: textureInfo.resolution,
             },
           });
         });

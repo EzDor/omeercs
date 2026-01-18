@@ -60,11 +60,7 @@ export interface SkillResult<T = unknown> {
 /**
  * Helper to create a successful SkillResult
  */
-export function skillSuccess<T>(
-  data: T,
-  artifacts: SkillArtifact[] = [],
-  debug: SkillDebugInfo,
-): SkillResult<T> {
+export function skillSuccess<T>(data: T, artifacts: SkillArtifact[] = [], debug: SkillDebugInfo): SkillResult<T> {
   return {
     ok: true,
     data,
@@ -76,11 +72,7 @@ export function skillSuccess<T>(
 /**
  * Helper to create a failed SkillResult
  */
-export function skillFailure(
-  error: string,
-  error_code?: string,
-  debug?: Partial<SkillDebugInfo>,
-): SkillResult<never> {
+export function skillFailure(error: string, error_code?: string, debug?: Partial<SkillDebugInfo>): SkillResult<never> {
   return {
     ok: false,
     error,

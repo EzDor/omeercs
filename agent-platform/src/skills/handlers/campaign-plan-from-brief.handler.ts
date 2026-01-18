@@ -172,7 +172,7 @@ export class CampaignPlanFromBriefHandler implements SkillHandler<CampaignPlanFr
         return skillFailure('No content in LLM response', 'EMPTY_RESPONSE', { timings_ms: { total: Date.now() - startTime, ...timings } });
       }
 
-      const campaignPlan: CampaignPlanOutput = JSON.parse(content);
+      const campaignPlan = JSON.parse(content) as CampaignPlanOutput;
       timings['parse'] = Date.now() - parseStartTime;
 
       const totalTime = Date.now() - startTime;

@@ -31,7 +31,7 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     try {
       // Prepare image for video generation
       const prepareStart = Date.now();
-      const imageData = await this.prepareImageData(input.image_uri);
+      const imageData = this.prepareImageData(input.image_uri);
       timings['prepare'] = Date.now() - prepareStart;
 
       // Build motion prompt
@@ -57,7 +57,6 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
       });
 
       // Handle async generation if needed
-      let videoUrl: string | undefined;
       let videoData = response.data?.[0];
 
       if (response.status === 'pending' || response.status === 'processing') {
@@ -78,7 +77,7 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
 
       timings['generation'] = Date.now() - generationStart;
 
-      videoUrl = videoData?.url;
+      const videoUrl = videoData?.url;
       if (!videoUrl) {
         return skillFailure('No video URL in response', 'NO_VIDEO_URL', {
           timings_ms: { total: Date.now() - startTime, ...timings },
@@ -212,7 +211,7 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     };
   }
 
-  private async prepareImageData(imageUri: string): Promise<{ value: string; isUrl: boolean }> {
+  private prepareImageData(imageUri: string): { value: string; isUrl: boolean } {
     // If it's already a URL, return as-is
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
       return { value: imageUri, isUrl: true };
@@ -230,11 +229,7 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     throw new Error(`Invalid image URI: ${imageUri}`);
   }
 
-  private async saveVideo(
-    videoUrl: string,
-    executionId: string,
-    format: string,
-  ): Promise<{ uri: string; fileSize: number }> {
+  private async saveVideo(videoUrl: string, executionId: string, format: string): Promise<{ uri: string; fileSize: number }> {
     // Ensure output directory exists
     const outputPath = path.join(this.outputDir, executionId);
     if (!fs.existsSync(outputPath)) {

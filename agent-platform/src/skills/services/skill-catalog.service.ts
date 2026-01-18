@@ -46,15 +46,15 @@ export class SkillCatalogService implements OnModuleInit {
     this.catalogPath = configService.get<string>('SKILLS_CATALOG_PATH') || path.join(process.cwd(), '..', 'skills', 'catalog');
   }
 
-  async onModuleInit(): Promise<void> {
-    await this.loadCatalog();
+  onModuleInit(): void {
+    this.loadCatalog();
     this.registerHandlers();
   }
 
   /**
    * Load all skill descriptors from the catalog
    */
-  private async loadCatalog(): Promise<void> {
+  private loadCatalog(): void {
     try {
       const indexPath = path.join(this.catalogPath, 'index.yaml');
 
@@ -74,7 +74,7 @@ export class SkillCatalogService implements OnModuleInit {
           continue;
         }
 
-        await this.loadSkillDescriptor(skillEntry.skill_id);
+        this.loadSkillDescriptor(skillEntry.skill_id);
       }
 
       this.logger.log(`Loaded ${this.descriptors.size} skill descriptors`);
@@ -86,7 +86,7 @@ export class SkillCatalogService implements OnModuleInit {
   /**
    * Load a single skill descriptor
    */
-  private async loadSkillDescriptor(skillId: string): Promise<void> {
+  private loadSkillDescriptor(skillId: string): void {
     try {
       const descriptorPath = path.join(this.catalogPath, `${skillId}.yaml`);
 

@@ -9,19 +9,7 @@ export type Model3DFormat = 'glb' | 'gltf' | 'obj' | 'fbx' | 'usdz';
 /**
  * 3D style/theme for generation
  */
-export type Model3DStyle =
-  | 'realistic'
-  | 'stylized'
-  | 'low_poly'
-  | 'cartoon'
-  | 'anime'
-  | 'voxel'
-  | 'hand_painted'
-  | 'sci_fi'
-  | 'fantasy'
-  | 'modern'
-  | 'retro'
-  | 'minimalist';
+export type Model3DStyle = 'realistic' | 'stylized' | 'low_poly' | 'cartoon' | 'anime' | 'voxel' | 'hand_painted' | 'sci_fi' | 'fantasy' | 'modern' | 'retro' | 'minimalist';
 
 /**
  * Texture resolution options
@@ -31,19 +19,7 @@ export type TextureResolution = '256' | '512' | '1024' | '2048' | '4096';
 /**
  * 3D asset category
  */
-export type AssetCategory =
-  | 'character'
-  | 'prop'
-  | 'environment'
-  | 'vehicle'
-  | 'weapon'
-  | 'furniture'
-  | 'food'
-  | 'plant'
-  | 'animal'
-  | 'architecture'
-  | 'ui_element'
-  | 'other';
+export type AssetCategory = 'character' | 'prop' | 'environment' | 'vehicle' | 'weapon' | 'furniture' | 'food' | 'plant' | 'animal' | 'architecture' | 'ui_element' | 'other';
 
 /**
  * Style configuration for 3D generation

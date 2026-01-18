@@ -5,7 +5,6 @@ import {
   ValidateGameBundleOutput,
   ValidationIssue,
   ValidationSummary,
-  ValidationCategory,
   ValidationChecks,
   BundlePerformanceMetrics,
   BundleManifest,
@@ -35,6 +34,9 @@ export class ValidateGameBundleHandler implements SkillHandler<ValidateGameBundl
 
     this.logger.log(`Executing validate_game_bundle for bundle ${input.bundle_uri}, tenant ${context.tenantId}`);
 
+    // Yield to event loop for proper async behavior
+    await Promise.resolve();
+
     const issues: ValidationIssue[] = [];
     const checks = input.checks || {
       verify_structure: true,
@@ -57,7 +59,6 @@ export class ValidateGameBundleHandler implements SkillHandler<ValidateGameBundl
 
       const bundlePath = input.bundle_uri;
       let manifest: BundleManifest | null = null;
-      let gameConfig: Record<string, unknown> | null = null;
       let fileCount = 0;
 
       // Structure validation
@@ -82,9 +83,8 @@ export class ValidateGameBundleHandler implements SkillHandler<ValidateGameBundl
       if (checks.verify_config !== false) {
         const configStart = Date.now();
         const configPath = path.join(bundlePath, 'game_config.json');
-        const { issues: configIssues, config: loadedConfig } = this.validateConfig(configPath);
+        const { issues: configIssues } = this.validateConfig(configPath);
         issues.push(...configIssues);
-        gameConfig = loadedConfig;
         timings['validate_config'] = Date.now() - configStart;
       }
 
@@ -362,13 +362,7 @@ export class ValidateGameBundleHandler implements SkillHandler<ValidateGameBundl
     }
 
     // Check that all listed assets exist
-    const allAssets = [
-      ...manifest.assets.images,
-      ...manifest.assets.audio,
-      ...manifest.assets.video,
-      ...manifest.assets.models,
-      ...manifest.assets.configs,
-    ];
+    const allAssets = [...manifest.assets.images, ...manifest.assets.audio, ...manifest.assets.video, ...manifest.assets.models, ...manifest.assets.configs];
 
     for (const assetPath of allAssets) {
       const fullPath = path.join(bundlePath, assetPath);
@@ -507,11 +501,7 @@ export class ValidateGameBundleHandler implements SkillHandler<ValidateGameBundl
     };
   }
 
-  private checkCompatibility(
-    bundlePath: string,
-    platforms: ('web' | 'mobile' | 'desktop')[],
-    manifest: BundleManifest | null,
-  ): ValidateGameBundleOutput['compatibility'] {
+  private checkCompatibility(bundlePath: string, platforms: ('web' | 'mobile' | 'desktop')[], manifest: BundleManifest | null): ValidateGameBundleOutput['compatibility'] {
     const issuesByPlatform: Record<string, ValidationIssue[]> = {};
 
     // Check web compatibility
@@ -653,7 +643,7 @@ export class ValidateGameBundleHandler implements SkillHandler<ValidateGameBundl
     // Count checks that passed (categories with no errors)
     const totalChecks = Object.keys(checks).filter((k) => checks[k] !== false).length;
     let passedChecks = 0;
-    for (const [category, stats] of Object.entries(byCategory)) {
+    for (const [, stats] of Object.entries(byCategory)) {
       if (stats.failed === 0) {
         passedChecks++;
         stats.passed = 1;

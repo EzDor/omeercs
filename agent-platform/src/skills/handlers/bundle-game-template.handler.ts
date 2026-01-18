@@ -49,14 +49,14 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       // Copy template files
       const templateStart = Date.now();
       const templatePath = path.join(this.templatesDir, input.template_id);
-      const templateFiles = await this.copyTemplateFiles(templatePath, bundlePath);
+      await this.copyTemplateFiles(templatePath, bundlePath);
       timings['copy_template'] = Date.now() - templateStart;
 
       // Write game config
       const configStart = Date.now();
       const configPath = path.join(bundlePath, 'game_config.json');
       fs.writeFileSync(configPath, JSON.stringify(input.game_config, null, 2));
-      const configStats = fs.statSync(configPath);
+      fs.statSync(configPath);
       timings['write_config'] = Date.now() - configStart;
 
       // Copy assets
@@ -86,19 +86,12 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
 
       // Generate file list with checksums
       const filesStart = Date.now();
-      const allFiles = await this.getAllFiles(bundlePath, bundlePath);
+      const allFiles = this.getAllFiles(bundlePath, bundlePath);
       timings['generate_file_list'] = Date.now() - filesStart;
 
       // Create manifest
       const manifestStart = Date.now();
-      const manifest = this.createManifest(
-        bundleId,
-        input.template_id,
-        input.version || DEFAULT_VERSION,
-        allFiles,
-        assetFiles,
-        optimizationsApplied,
-      );
+      const manifest = this.createManifest(bundleId, input.template_id, input.version || DEFAULT_VERSION, allFiles, assetFiles, optimizationsApplied);
 
       const manifestPath = path.join(bundlePath, 'bundle_manifest.json');
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
@@ -299,7 +292,7 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
     return assetFiles;
   }
 
-  private async getAllFiles(dir: string, basePath: string): Promise<BundledFileInfo[]> {
+  private getAllFiles(dir: string, basePath: string): BundledFileInfo[] {
     const files: BundledFileInfo[] = [];
 
     const processDir = (currentDir: string) => {

@@ -65,7 +65,6 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       });
 
       // Handle async generation if needed
-      let audioUrl: string | undefined;
       let audioData = response.data?.[0];
 
       if (response.status === 'pending' || response.status === 'processing') {
@@ -85,7 +84,7 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
 
       timings['generation'] = Date.now() - generationStart;
 
-      audioUrl = audioData?.url;
+      const audioUrl = audioData?.url;
       if (!audioUrl) {
         return skillFailure('No audio URL in response', 'NO_AUDIO_URL', {
           timings_ms: { total: Date.now() - startTime, ...timings },
