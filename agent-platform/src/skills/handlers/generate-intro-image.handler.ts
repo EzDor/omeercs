@@ -181,7 +181,12 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
     return '1024x1024';
   }
 
-  private async saveImage(imageUrl: string, executionId: string, format: string, size: string): Promise<{ uri: string; width: number; height: number; format: string; fileSize: number }> {
+  private async saveImage(
+    imageUrl: string,
+    executionId: string,
+    format: string,
+    size: string,
+  ): Promise<{ uri: string; width: number; height: number; format: string; fileSize: number }> {
     // Ensure output directory exists
     const outputPath = path.join(this.outputDir, executionId);
     if (!fs.existsSync(outputPath)) {

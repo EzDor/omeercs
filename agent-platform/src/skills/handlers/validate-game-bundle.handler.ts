@@ -642,7 +642,15 @@ export class ValidateGameBundleHandler implements SkillHandler<ValidateGameBundl
 
     // Count checks that passed (categories with no errors)
     // Note: verify_checksums is excluded because it reports issues under 'assets' category
-    const checkCategories: (keyof ValidationChecks)[] = ['verify_structure', 'verify_manifest', 'verify_assets', 'verify_config', 'check_performance', 'check_compatibility', 'check_security'];
+    const checkCategories: (keyof ValidationChecks)[] = [
+      'verify_structure',
+      'verify_manifest',
+      'verify_assets',
+      'verify_config',
+      'check_performance',
+      'check_compatibility',
+      'check_security',
+    ];
     const totalChecks = checkCategories.filter((k) => checks[k] !== false).length;
     let passedChecks = 0;
     for (const [, stats] of Object.entries(byCategory)) {
