@@ -1,0 +1,237 @@
+# Skill Descriptor: generate_3d_asset
+# Generates 3D models from text prompts
+
+skill_id: generate_3d_asset
+version: "1.0.0"
+title: Generate 3D Asset
+description: |
+  Generates 3D models from text prompts using AI model generation.
+  Supports various styles (realistic, stylized, low-poly, cartoon, etc.)
+  and output formats (GLB, GLTF, OBJ, FBX, USDZ).
+  Can generate textures, LODs, and optimize for different platforms.
+
+tags:
+  - 3d
+  - generation
+  - ai
+  - model
+  - asset
+  - game
+
+input_schema:
+  type: object
+  required:
+    - prompt
+    - style
+  properties:
+    prompt:
+      type: string
+      description: Text description of the 3D model to generate
+    style:
+      type: object
+      required:
+        - theme
+      description: Style configuration for the 3D model
+      properties:
+        theme:
+          type: string
+          enum: [realistic, stylized, low_poly, cartoon, anime, voxel, hand_painted, sci_fi, fantasy, modern, retro, minimalist]
+          description: Visual style/theme for the model
+        category:
+          type: string
+          enum: [character, prop, environment, vehicle, weapon, furniture, food, plant, animal, architecture, ui_element, other]
+          description: Category of the 3D asset
+        color_palette:
+          type: array
+          items:
+            type: string
+          description: Preferred color palette for the model
+        material_style:
+          type: string
+          description: Material/shader style preference
+        generate_textures:
+          type: boolean
+          default: true
+          description: Whether to generate textures for the model
+        texture_resolution:
+          type: string
+          enum: ["256", "512", "1024", "2048", "4096"]
+          default: "1024"
+          description: Resolution for generated textures
+    poly_budget:
+      type: object
+      description: Polygon/geometry constraints
+      properties:
+        max_triangles:
+          type: number
+          minimum: 100
+          maximum: 10000000
+          description: Maximum triangle count
+        max_vertices:
+          type: number
+          minimum: 100
+          maximum: 5000000
+          description: Maximum vertex count
+        target_platform:
+          type: string
+          enum: [mobile, web, desktop, vr, cinematic]
+          description: Target platform for optimization
+    specs:
+      type: object
+      description: Output specifications
+      properties:
+        format:
+          type: string
+          enum: [glb, gltf, obj, fbx, usdz]
+          default: glb
+          description: Output 3D format
+        embed_textures:
+          type: boolean
+          default: true
+          description: Embed textures in the model file
+        generate_lods:
+          type: boolean
+          description: Generate level-of-detail variants
+        lod_count:
+          type: number
+          minimum: 1
+          maximum: 5
+          description: Number of LOD levels to generate
+        center_origin:
+          type: boolean
+          default: true
+          description: Center the model at origin
+        scale:
+          type: number
+          minimum: 0.001
+          maximum: 1000
+          description: Scale factor for the output model
+    reference_image_uri:
+      type: string
+      description: Reference image URI for guided generation
+    seed:
+      type: number
+      description: Seed for reproducible generation
+    provider:
+      type: string
+      description: 3D generation provider to use
+
+output_schema:
+  type: object
+  required:
+    - model_uri
+    - format
+    - file_size_bytes
+    - geometry
+    - bounding_box
+    - generation_params
+  properties:
+    model_uri:
+      type: string
+      description: URI to the generated 3D model
+    format:
+      type: string
+      description: Output format of the model
+    file_size_bytes:
+      type: number
+      description: File size in bytes
+    geometry:
+      type: object
+      required:
+        - triangles
+        - vertices
+        - materials
+      properties:
+        triangles:
+          type: number
+          description: Number of triangles
+        vertices:
+          type: number
+          description: Number of vertices
+        materials:
+          type: number
+          description: Number of materials
+    textures:
+      type: object
+      properties:
+        count:
+          type: number
+        total_size_bytes:
+          type: number
+        resolution:
+          type: string
+        uris:
+          type: array
+          items:
+            type: string
+    lods:
+      type: object
+      properties:
+        count:
+          type: number
+        uris:
+          type: array
+          items:
+            type: string
+    bounding_box:
+      type: object
+      required:
+        - width
+        - height
+        - depth
+      properties:
+        width:
+          type: number
+        height:
+          type: number
+        depth:
+          type: number
+    generation_params:
+      type: object
+      required:
+        - prompt
+        - style
+        - model
+      properties:
+        prompt:
+          type: string
+        style:
+          type: string
+        category:
+          type: string
+        poly_budget:
+          type: object
+        seed:
+          type: number
+        model:
+          type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/generate-3d-asset/handler"
+
+produces_artifacts:
+  - artifact_type: model/3d
+    description: Generated 3D model file (GLB/GLTF/OBJ/FBX/USDZ)
+  - artifact_type: image/texture
+    description: Generated texture files (if not embedded)
+
+policy:
+  max_runtime_sec: 900
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+    - "api.meshy.ai"
+    - "api.tripo3d.ai"
+    - "api.stability.ai"
+    - "api.replicate.com"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

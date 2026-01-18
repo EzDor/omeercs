@@ -1,0 +1,198 @@
+# Skill Descriptor: generate_intro_video_loop
+# Creates looping intro videos from static images
+
+skill_id: generate_intro_video_loop
+version: "1.0.0"
+title: Generate Intro Video Loop
+description: |
+  Generates a seamless looping intro video from a static image using AI video generation.
+  Applies subtle motion effects (pan, zoom, parallax, breathing) to create engaging
+  video content suitable for campaign intros and landing pages.
+
+tags:
+  - video
+  - generation
+  - ai
+  - intro
+  - loop
+  - animation
+
+input_schema:
+  type: object
+  required:
+    - image_uri
+  properties:
+    image_uri:
+      type: string
+      description: URI to the source image (URL or local path)
+    motion_params:
+      type: object
+      description: Motion configuration for the video
+      properties:
+        motion_type:
+          type: string
+          enum: [pan, zoom, rotate, parallax, subtle_movement, breathing]
+          description: Type of motion to apply
+        direction:
+          type: string
+          enum: [left, right, up, down, in, out, clockwise, counterclockwise]
+          description: Direction of motion
+        intensity:
+          type: number
+          minimum: 0.1
+          maximum: 1.0
+          description: Motion intensity (0.1 = subtle, 1.0 = strong)
+        speed:
+          type: number
+          minimum: 0.5
+          maximum: 10.0
+          description: Motion speed multiplier
+    loop_config:
+      type: object
+      description: Loop configuration
+      properties:
+        seamless:
+          type: boolean
+          default: true
+          description: Whether to ensure seamless looping
+        crossfade_duration:
+          type: number
+          minimum: 0.1
+          maximum: 1.0
+          description: Crossfade duration for seamless loop (seconds)
+        easing:
+          type: string
+          enum: [linear, ease_in, ease_out, ease_in_out]
+          default: ease_in_out
+    specs:
+      type: object
+      description: Output video specifications
+      properties:
+        duration_sec:
+          type: number
+          minimum: 1
+          maximum: 30
+          default: 5
+        fps:
+          type: number
+          minimum: 15
+          maximum: 60
+          default: 30
+        width:
+          type: number
+          minimum: 480
+          maximum: 4096
+          default: 1920
+        height:
+          type: number
+          minimum: 480
+          maximum: 4096
+          default: 1080
+        format:
+          type: string
+          enum: [mp4, webm]
+          default: mp4
+        codec:
+          type: string
+          enum: [h264, h265, vp9]
+          default: h264
+        bitrate_kbps:
+          type: number
+          minimum: 500
+          maximum: 50000
+    motion_prompt:
+      type: string
+      description: Custom motion description prompt
+    seed:
+      type: number
+      description: Seed for reproducible generation
+    provider:
+      type: string
+      description: Video generation provider to use
+
+output_schema:
+  type: object
+  required:
+    - video_uri
+    - duration_sec
+    - width
+    - height
+    - fps
+    - format
+    - codec
+    - file_size_bytes
+    - is_loopable
+    - generation_params
+  properties:
+    video_uri:
+      type: string
+      description: URI to the generated video
+    duration_sec:
+      type: number
+      description: Actual video duration in seconds
+    width:
+      type: number
+      description: Video width in pixels
+    height:
+      type: number
+      description: Video height in pixels
+    fps:
+      type: number
+      description: Frames per second
+    format:
+      type: string
+      description: Video format (mp4, webm)
+    codec:
+      type: string
+      description: Video codec used
+    file_size_bytes:
+      type: number
+      description: File size in bytes
+    is_loopable:
+      type: boolean
+      description: Whether the video is seamlessly loopable
+    generation_params:
+      type: object
+      required:
+        - source_image_uri
+        - model
+      properties:
+        source_image_uri:
+          type: string
+        motion_type:
+          type: string
+        motion_prompt:
+          type: string
+        seed:
+          type: number
+        model:
+          type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/generate-intro-video-loop/handler"
+
+produces_artifacts:
+  - artifact_type: video/intro-loop
+    description: Seamlessly looping intro video
+
+policy:
+  max_runtime_sec: 600
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+    - "api.runwayml.com"
+    - "api.stability.ai"
+    - "api.replicate.com"
+    - "api.pikaart.com"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+      - "/tmp/assets/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

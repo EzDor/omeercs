@@ -4,6 +4,7 @@ import { APP_FILTER } from '@nestjs/core';
 import { CoreModule } from 'src/core/core.module';
 import { WorkflowOrchestrationModule } from 'src/workflow-orchestration/workflow-orchestration.module';
 import { HealthModule } from 'src/health/health.module';
+import { SkillsModule } from 'src/skills/skills.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UnhandledExceptionFilter } from '@agentic-template/common/src/filters/unhandled-exception.filter';
@@ -17,6 +18,7 @@ import { GlobalHttpExceptionFilter } from '@agentic-template/common/src/filters/
     CoreModule,
     WorkflowOrchestrationModule,
     HealthModule,
+    SkillsModule,
   ],
   controllers: [AppController],
   providers: [

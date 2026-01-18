@@ -1,0 +1,211 @@
+# Skill Descriptor: campaign_plan_from_brief
+# Generates a structured campaign plan from a marketing brief
+
+skill_id: campaign_plan_from_brief
+version: "1.0.0"
+title: Campaign Plan from Brief
+description: |
+  Generates a comprehensive campaign plan from a marketing brief.
+  Uses Claude for structured JSON output with schema validation.
+  Outputs include theme, tone, required assets, game template choice, and video prompts.
+
+tags:
+  - planning
+  - ai
+  - campaign
+  - configuration
+
+input_schema:
+  type: object
+  required:
+    - brief
+  properties:
+    brief:
+      type: string
+      description: The marketing brief describing the campaign goals and requirements
+      minLength: 10
+      maxLength: 10000
+    brand_assets:
+      type: array
+      description: References to brand assets (logos, colors, fonts, etc.)
+      items:
+        type: object
+        required:
+          - uri
+          - type
+        properties:
+          uri:
+            type: string
+            description: URI to the asset (object storage or local path)
+          type:
+            type: string
+            enum: [logo, color_palette, font, image, video, audio, other]
+          description:
+            type: string
+    constraints:
+      type: object
+      description: Constraints for campaign generation
+      properties:
+        max_game_duration_sec:
+          type: number
+          minimum: 5
+          maximum: 120
+          default: 30
+        target_audience:
+          type: string
+        excluded_themes:
+          type: array
+          items:
+            type: string
+        required_features:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+          default: en
+        region:
+          type: string
+    provider:
+      type: string
+      description: LLM provider to use (defaults to configured default)
+
+output_schema:
+  type: object
+  required:
+    - theme
+    - tone
+    - color_scheme
+    - game_template
+    - difficulty
+    - required_assets
+    - video_prompts
+    - audio_specs
+    - copy
+  properties:
+    theme:
+      type: string
+      description: Campaign theme (e.g., "summer beach vibes", "retro arcade")
+    tone:
+      type: string
+      description: Tone of the campaign (e.g., "playful", "professional")
+    color_scheme:
+      type: object
+      required: [primary, secondary, accent, background]
+      properties:
+        primary:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        secondary:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        accent:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        background:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+    game_template:
+      type: object
+      required: [template_id, template_name, rationale]
+      properties:
+        template_id:
+          type: string
+        template_name:
+          type: string
+        rationale:
+          type: string
+    difficulty:
+      type: object
+      required: [level, win_probability, rationale]
+      properties:
+        level:
+          type: string
+          enum: [easy, medium, hard]
+        win_probability:
+          type: number
+          minimum: 0
+          maximum: 1
+        rationale:
+          type: string
+    required_assets:
+      type: array
+      items:
+        type: object
+        required: [asset_type, description, specifications]
+        properties:
+          asset_type:
+            type: string
+            enum: [image, video, audio, 3d_model, sfx]
+          description:
+            type: string
+          specifications:
+            type: object
+    video_prompts:
+      type: array
+      items:
+        type: object
+        required: [type, prompt, style_notes, duration_sec]
+        properties:
+          type:
+            type: string
+            enum: [intro, win, lose]
+          prompt:
+            type: string
+          style_notes:
+            type: string
+          duration_sec:
+            type: number
+    audio_specs:
+      type: object
+      required: [bgm_style, bgm_bpm, sfx_list]
+      properties:
+        bgm_style:
+          type: string
+        bgm_bpm:
+          type: number
+        sfx_list:
+          type: array
+          items:
+            type: string
+    copy:
+      type: object
+      required: [intro_headline, intro_subtext, win_message, lose_message, cta_text]
+      properties:
+        intro_headline:
+          type: string
+        intro_subtext:
+          type: string
+        win_message:
+          type: string
+        lose_message:
+          type: string
+        cta_text:
+          type: string
+    planning_notes:
+      type: string
+      description: Additional notes from the planning process
+
+implementation:
+  type: ts_function
+  handler: "@skills/campaign-plan-from-brief/handler"
+
+produces_artifacts:
+  - artifact_type: json/campaign-plan
+    description: The generated campaign plan as a JSON document
+
+policy:
+  max_runtime_sec: 60
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

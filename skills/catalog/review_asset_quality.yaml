@@ -1,0 +1,170 @@
+# Skill Descriptor: review_asset_quality
+# AI-powered asset quality review using Claude for critique
+
+skill_id: review_asset_quality
+version: "1.0.0"
+title: Review Asset Quality
+description: |
+  Reviews generated assets against a quality rubric using Claude for critique.
+  Returns pass/fail status with detailed issues and suggested fixes.
+  Supports images, videos, audio, and 3D models.
+
+tags:
+  - qa
+  - ai
+  - review
+  - assets
+
+input_schema:
+  type: object
+  required:
+    - artifact_refs
+    - rubric_id
+  properties:
+    artifact_refs:
+      type: array
+      description: References to artifacts to review
+      minItems: 1
+      items:
+        type: object
+        required:
+          - uri
+          - type
+        properties:
+          uri:
+            type: string
+            description: URI to the artifact (object storage or local path)
+          type:
+            type: string
+            enum: [image, video, audio, 3d_model, json]
+          name:
+            type: string
+            description: Human-readable name for the artifact
+          metadata:
+            type: object
+            description: Additional metadata about the artifact
+    rubric_id:
+      type: string
+      description: ID of the quality rubric to apply
+      enum:
+        - brand_consistency
+        - technical_quality
+        - accessibility
+        - performance
+        - general
+    context:
+      type: object
+      description: Additional context for the review
+      properties:
+        brand_guidelines:
+          type: string
+          description: Brand guidelines text or reference
+        target_platform:
+          type: string
+          enum: [web, mobile, desktop, all]
+        quality_threshold:
+          type: string
+          enum: [strict, standard, lenient]
+          default: standard
+    provider:
+      type: string
+      description: LLM provider to use
+
+output_schema:
+  type: object
+  required:
+    - pass
+    - overall_score
+    - reviews
+  properties:
+    pass:
+      type: boolean
+      description: Whether all artifacts passed the quality check
+    overall_score:
+      type: number
+      minimum: 0
+      maximum: 100
+      description: Overall quality score (0-100)
+    reviews:
+      type: array
+      items:
+        type: object
+        required:
+          - artifact_uri
+          - pass
+          - score
+          - issues
+        properties:
+          artifact_uri:
+            type: string
+          artifact_name:
+            type: string
+          pass:
+            type: boolean
+          score:
+            type: number
+            minimum: 0
+            maximum: 100
+          issues:
+            type: array
+            items:
+              type: object
+              required:
+                - severity
+                - category
+                - description
+              properties:
+                severity:
+                  type: string
+                  enum: [critical, major, minor, info]
+                category:
+                  type: string
+                description:
+                  type: string
+                location:
+                  type: string
+                  description: Where in the artifact the issue was found
+          suggested_fixes:
+            type: array
+            items:
+              type: object
+              required:
+                - issue_index
+                - suggestion
+              properties:
+                issue_index:
+                  type: number
+                suggestion:
+                  type: string
+                effort:
+                  type: string
+                  enum: [trivial, minor, moderate, major]
+                automated:
+                  type: boolean
+                  description: Whether this fix could be automated
+    summary:
+      type: string
+      description: Human-readable summary of the review
+
+implementation:
+  type: ts_function
+  handler: "@skills/review-asset-quality/handler"
+
+produces_artifacts:
+  - artifact_type: json/quality-report
+    description: Detailed quality review report
+
+policy:
+  max_runtime_sec: 120
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+      - "/tmp/assets/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

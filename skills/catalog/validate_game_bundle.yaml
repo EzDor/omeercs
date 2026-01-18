@@ -1,0 +1,223 @@
+# Skill Descriptor: validate_game_bundle
+# Validates game bundle integrity and quality
+
+skill_id: validate_game_bundle
+version: "1.0.0"
+title: Validate Game Bundle
+description: |
+  Validates a game bundle for integrity, completeness, and quality.
+  Performs structure validation, manifest verification, asset checks,
+  checksum validation, performance analysis, compatibility testing,
+  and security scanning. Returns detailed issues and recommendations.
+
+tags:
+  - game
+  - validation
+  - qa
+  - bundling
+  - testing
+  - quality
+
+input_schema:
+  type: object
+  required:
+    - bundle_uri
+  properties:
+    bundle_uri:
+      type: string
+      description: URI to the game bundle directory to validate
+    checks:
+      type: object
+      description: Which validation checks to perform
+      properties:
+        verify_structure:
+          type: boolean
+          default: true
+          description: Verify bundle directory structure
+        verify_manifest:
+          type: boolean
+          default: true
+          description: Verify bundle_manifest.json validity
+        verify_assets:
+          type: boolean
+          default: true
+          description: Verify all listed assets exist
+        verify_config:
+          type: boolean
+          default: true
+          description: Verify game_config.json validity
+        verify_checksums:
+          type: boolean
+          default: true
+          description: Verify file checksums match manifest
+        check_performance:
+          type: boolean
+          default: true
+          description: Analyze bundle performance metrics
+        check_compatibility:
+          type: boolean
+          default: true
+          description: Check platform compatibility
+        check_security:
+          type: boolean
+          default: true
+          description: Perform security checks
+    target_platforms:
+      type: array
+      items:
+        type: string
+        enum: [web, mobile, desktop]
+      default: [web, mobile, desktop]
+      description: Target platforms to check compatibility for
+    strict_mode:
+      type: boolean
+      default: false
+      description: Fail on warnings (not just errors)
+
+output_schema:
+  type: object
+  required:
+    - pass
+    - issues
+    - summary
+    - bundle_info
+  properties:
+    pass:
+      type: boolean
+      description: Whether the bundle passed validation
+    issues:
+      type: array
+      description: List of validation issues found
+      items:
+        type: object
+        required:
+          - code
+          - message
+          - severity
+          - category
+        properties:
+          code:
+            type: string
+            description: Issue code for programmatic handling
+          message:
+            type: string
+            description: Human-readable issue description
+          severity:
+            type: string
+            enum: [error, warning, info]
+            description: Issue severity level
+          category:
+            type: string
+            enum: [structure, manifest, assets, config, performance, compatibility, security]
+            description: Issue category
+          file:
+            type: string
+            description: File path related to the issue
+          line:
+            type: number
+            description: Line number in the file
+          suggestion:
+            type: string
+            description: Suggested fix for the issue
+    summary:
+      type: object
+      required:
+        - total_checks
+        - passed_checks
+        - failed_checks
+        - warnings
+        - errors
+        - by_category
+      properties:
+        total_checks:
+          type: number
+        passed_checks:
+          type: number
+        failed_checks:
+          type: number
+        warnings:
+          type: number
+        errors:
+          type: number
+        by_category:
+          type: object
+          description: Results grouped by category
+    bundle_info:
+      type: object
+      description: Information about the validated bundle
+      properties:
+        bundle_id:
+          type: string
+        template_id:
+          type: string
+        version:
+          type: string
+        entry_point:
+          type: string
+        file_count:
+          type: number
+    performance:
+      type: object
+      description: Performance metrics for the bundle
+      properties:
+        total_size_bytes:
+          type: number
+        largest_file:
+          type: object
+          properties:
+            path:
+              type: string
+            size_bytes:
+              type: number
+        asset_breakdown:
+          type: object
+          properties:
+            images_bytes:
+              type: number
+            audio_bytes:
+              type: number
+            video_bytes:
+              type: number
+            models_bytes:
+              type: number
+            code_bytes:
+              type: number
+            other_bytes:
+              type: number
+        estimated_load_time_ms:
+          type: number
+        compression_ratio:
+          type: number
+    compatibility:
+      type: object
+      description: Platform compatibility results
+      properties:
+        web:
+          type: boolean
+        mobile:
+          type: boolean
+        desktop:
+          type: boolean
+        issues_by_platform:
+          type: object
+          description: Issues specific to each platform
+
+implementation:
+  type: ts_function
+  handler: "@skills/validate-game-bundle/handler"
+
+produces_artifacts:
+  - artifact_type: json/validation-report
+    description: Detailed validation report with all issues and metrics
+
+policy:
+  max_runtime_sec: 120
+  network: none
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes: []
+
+observability:
+  log_level_default: info
+  emit_metrics: true

@@ -1,0 +1,174 @@
+# Skill Descriptor: game_config_from_template
+# Generates a game configuration JSON from a selected template
+
+skill_id: game_config_from_template
+version: "1.0.0"
+title: Game Config from Template
+description: |
+  Generates a schema-validated game_config.json from a chosen game template.
+  Uses Claude for intelligent config generation based on theme, difficulty, and assets.
+  Does NOT generate arbitrary code - only structured configuration.
+
+tags:
+  - configuration
+  - ai
+  - game
+  - planning
+
+input_schema:
+  type: object
+  required:
+    - template_id
+    - theme
+    - difficulty
+  properties:
+    template_id:
+      type: string
+      description: ID of the game template to configure
+      enum:
+        - spin_wheel
+        - scratch_card
+        - slot_machine
+        - memory_match
+        - catch_game
+        - quiz
+    theme:
+      type: string
+      description: Theme for the game (e.g., "summer beach", "retro arcade")
+    difficulty:
+      type: object
+      required:
+        - level
+        - win_probability
+      properties:
+        level:
+          type: string
+          enum: [easy, medium, hard]
+        win_probability:
+          type: number
+          minimum: 0
+          maximum: 1
+    asset_refs:
+      type: array
+      description: References to assets to use in the game
+      items:
+        type: object
+        required:
+          - uri
+          - type
+        properties:
+          uri:
+            type: string
+          type:
+            type: string
+            enum: [background, sprite, icon, audio, model]
+          slot:
+            type: string
+            description: Slot name where this asset should be used
+    color_scheme:
+      type: object
+      properties:
+        primary:
+          type: string
+        secondary:
+          type: string
+        accent:
+          type: string
+        background:
+          type: string
+    copy:
+      type: object
+      description: Text content for the game
+      properties:
+        title:
+          type: string
+        instructions:
+          type: string
+        win_message:
+          type: string
+        lose_message:
+          type: string
+    provider:
+      type: string
+      description: LLM provider to use
+
+output_schema:
+  type: object
+  required:
+    - template_id
+    - version
+    - settings
+    - visuals
+    - audio
+    - mechanics
+  properties:
+    template_id:
+      type: string
+    version:
+      type: string
+    settings:
+      type: object
+      required:
+        - duration_sec
+        - difficulty
+      properties:
+        duration_sec:
+          type: number
+        difficulty:
+          type: object
+        locale:
+          type: string
+    visuals:
+      type: object
+      required:
+        - theme
+        - colors
+      properties:
+        theme:
+          type: string
+        colors:
+          type: object
+        assets:
+          type: object
+        animations:
+          type: object
+    audio:
+      type: object
+      properties:
+        bgm:
+          type: object
+        sfx:
+          type: object
+    mechanics:
+      type: object
+      description: Template-specific game mechanics configuration
+    copy:
+      type: object
+      properties:
+        title:
+          type: string
+        instructions:
+          type: string
+        win_message:
+          type: string
+        lose_message:
+          type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/game-config-from-template/handler"
+
+produces_artifacts:
+  - artifact_type: json/game-config
+    description: The generated game configuration JSON
+
+policy:
+  max_runtime_sec: 30
+  network: allowlist
+  allowed_hosts:
+    - "*.litellm.local"
+    - "localhost:4000"
+
+observability:
+  log_level_default: info
+  emit_metrics: true
