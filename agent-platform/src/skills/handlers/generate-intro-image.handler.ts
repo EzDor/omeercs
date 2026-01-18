@@ -63,7 +63,7 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
 
       // Download and save the image
       const saveStart = Date.now();
-      const savedImageInfo = await this.saveImage(imageUrl, context.executionId, input.specs?.format || 'png');
+      const savedImageInfo = await this.saveImage(imageUrl, context.executionId, input.specs?.format || 'png', size);
       timings['save'] = Date.now() - saveStart;
 
       const totalTime = Date.now() - startTime;
@@ -181,7 +181,7 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
     return '1024x1024';
   }
 
-  private async saveImage(imageUrl: string, executionId: string, format: string): Promise<{ uri: string; width: number; height: number; format: string; fileSize: number }> {
+  private async saveImage(imageUrl: string, executionId: string, format: string, size: string): Promise<{ uri: string; width: number; height: number; format: string; fileSize: number }> {
     // Ensure output directory exists
     const outputPath = path.join(this.outputDir, executionId);
     if (!fs.existsSync(outputPath)) {
@@ -200,14 +200,15 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
 
     fs.writeFileSync(filePath, buffer);
 
-    // For now, we'll estimate dimensions based on the API size used
-    // In a production system, you'd parse the actual image dimensions
     const stats = fs.statSync(filePath);
+
+    // Parse dimensions from the size string (e.g., "1024x1792" → width: 1024, height: 1792)
+    const [width, height] = size.split('x').map(Number);
 
     return {
       uri: filePath,
-      width: 1792, // Default, should be parsed from actual image
-      height: 1024,
+      width,
+      height,
       format,
       fileSize: stats.size,
     };
