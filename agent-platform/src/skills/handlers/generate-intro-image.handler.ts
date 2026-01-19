@@ -4,13 +4,22 @@ import { ImageProviderRegistry } from '@agentic-template/common/src/providers';
 import { ProviderError } from '@agentic-template/common/src/providers';
 import { GenerateIntroImageInput, GenerateIntroImageOutput, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 
 @Injectable()
 export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImageInput, GenerateIntroImageOutput> {
   private readonly logger = new Logger(GenerateIntroImageHandler.name);
   private readonly outputDir: string;
+
+  // Allowed domains for image URLs (SSRF prevention)
+  private readonly ALLOWED_IMAGE_DOMAINS = [
+    'oaidalleapiprodscus.blob.core.windows.net', // OpenAI DALL-E
+    'stability.ai',
+    'api.stability.ai',
+    'storage.googleapis.com',
+    'replicate.delivery',
+  ];
 
   constructor(
     private readonly configService: ConfigService,
@@ -186,11 +195,12 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
     width: number,
     height: number,
   ): Promise<{ uri: string; width: number; height: number; format: string; fileSize: number }> {
-    // Ensure output directory exists
+    // Validate URL origin (SSRF prevention)
+    this.validateImageUrl(imageUrl);
+
+    // Ensure output directory exists (async mkdir with recursive handles existence check)
     const outputPath = path.join(this.outputDir, executionId);
-    if (!fs.existsSync(outputPath)) {
-      fs.mkdirSync(outputPath, { recursive: true });
-    }
+    await fs.mkdir(outputPath, { recursive: true });
 
     // Download the image
     const response = await fetch(imageUrl);
@@ -202,9 +212,8 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
     const filename = `intro-frame.${format}`;
     const filePath = path.join(outputPath, filename);
 
-    fs.writeFileSync(filePath, buffer);
-
-    const stats = fs.statSync(filePath);
+    await fs.writeFile(filePath, buffer);
+    const stats = await fs.stat(filePath);
 
     return {
       uri: filePath,
@@ -213,5 +222,21 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
       format,
       fileSize: stats.size,
     };
+  }
+
+  private validateImageUrl(url: string): void {
+    try {
+      const parsed = new URL(url);
+      const isAllowed = this.ALLOWED_IMAGE_DOMAINS.some((domain) => parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`));
+      if (!isAllowed) {
+        this.logger.warn(`Image URL from untrusted domain blocked: ${parsed.hostname}`);
+        throw new Error(`Image URL from untrusted domain: ${parsed.hostname}`);
+      }
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error(`Invalid image URL: ${url}`);
+      }
+      throw error;
+    }
   }
 }
