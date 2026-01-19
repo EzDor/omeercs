@@ -5,6 +5,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { CoreModule } from 'src/core/core.module';
 import { ChatModule } from './chat/chat.module';
 import { HealthModule } from './health/health.module';
+import { RunEngineModule } from './run-engine/run-engine.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UnhandledExceptionFilter } from '@agentic-template/common/src/filters/unhandled-exception.filter';
@@ -26,6 +27,7 @@ import { GlobalHttpExceptionFilter } from '@agentic-template/common/src/filters/
     CoreModule,
     ChatModule,
     HealthModule,
+    RunEngineModule,
   ],
   controllers: [AppController],
   providers: [

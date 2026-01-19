@@ -28,11 +28,11 @@
 
 **Purpose**: Project initialization, dependencies, and basic structure
 
-- [ ] T001 Install new dependencies: `pnpm --filter agent-platform add fast-json-stable-stringify typescript-graph && pnpm --filter agent-platform add -D @types/fast-json-stable-stringify`
-- [ ] T002 [P] Create run-engine directory structure in `agent-platform/src/run-engine/` with subdirs: services/, processors/, interfaces/
-- [ ] T003 [P] Create run-engine directory structure in `api-center/src/run-engine/` with subdirs: services/
-- [ ] T004 [P] Create run-engine directory structure in `dto/src/run-engine/`
-- [ ] T005 Add RUN_ORCHESTRATION and RUN_STEPS queue names to `common/src/queues/queue-names.ts`
+- [X] T001 Install new dependencies: `pnpm --filter agent-platform add fast-json-stable-stringify typescript-graph && pnpm --filter agent-platform add -D @types/fast-json-stable-stringify`
+- [X] T002 [P] Create run-engine directory structure in `agent-platform/src/run-engine/` with subdirs: services/, processors/, interfaces/
+- [X] T003 [P] Create run-engine directory structure in `api-center/src/run-engine/` with subdirs: services/
+- [X] T004 [P] Create run-engine directory structure in `dto/src/run-engine/`
+- [X] T005 Add RUN_ORCHESTRATION and RUN_STEPS queue names to `common/src/queues/queue-names.ts`
 
 ---
 
@@ -44,41 +44,41 @@
 
 ### DTOs
 
-- [ ] T006 [P] Create WorkflowSpec and StepSpec interfaces in `dto/src/run-engine/workflow.dto.ts` per data-model.md
-- [ ] T007 [P] Create RunContext and StepOutput interfaces in `dto/src/run-engine/run-context.dto.ts` per data-model.md
-- [ ] T008 [P] Create ChangeRequest and ChangeRequestType types in `dto/src/run-engine/change-request.dto.ts` per data-model.md
-- [ ] T009 [P] Create TriggerRunRequest, TriggerRunResponse DTOs in `dto/src/run-engine/run.dto.ts` per OpenAPI spec
-- [ ] T010 [P] Create RunResponse, RunStepsResponse DTOs in `dto/src/run-engine/run.dto.ts` per OpenAPI spec
-- [ ] T011 [P] Create RunStep, RunError, StepError DTOs in `dto/src/run-engine/run-step.dto.ts` per OpenAPI spec
-- [ ] T012 Create dto barrel export in `dto/src/run-engine/index.ts` and update `dto/src/index.ts`
+- [X] T006 [P] Create WorkflowSpec and StepSpec interfaces in `dto/src/run-engine/workflow.dto.ts` per data-model.md
+- [X] T007 [P] Create RunContext and StepOutput interfaces in `dto/src/run-engine/run-context.dto.ts` per data-model.md
+- [X] T008 [P] Create ChangeRequest and ChangeRequestType types in `dto/src/run-engine/change-request.dto.ts` per data-model.md
+- [X] T009 [P] Create TriggerRunRequest, TriggerRunResponse DTOs in `dto/src/run-engine/run.dto.ts` per OpenAPI spec
+- [X] T010 [P] Create RunResponse, RunStepsResponse DTOs in `dto/src/run-engine/run.dto.ts` per OpenAPI spec
+- [X] T011 [P] Create RunStep, RunError, StepError DTOs in `dto/src/run-engine/run-step.dto.ts` per OpenAPI spec
+- [X] T012 Create dto barrel export in `dto/src/run-engine/index.ts` and update `dto/src/index.ts`
 
 ### Entities & Database
 
-- [ ] T013 [P] Create Run entity in `dao/src/entities/run.entity.ts` extending BaseEntity per data-model.md
-- [ ] T014 [P] Create RunStep entity in `dao/src/entities/run-step.entity.ts` extending BaseEntity per data-model.md
-- [ ] T015 [P] Create StepCache entity in `dao/src/entities/step-cache.entity.ts` extending BaseEntity per data-model.md
-- [ ] T016 Create TypeORM migration for run_status, run_trigger_type, step_status, cache_scope enums and runs, run_steps, step_cache tables in `dao/src/migrations/{timestamp}-CreateRunEngineSchema.ts` per data-model.md
-- [ ] T017 Register Run, RunStep, StepCache entities in `dao/src/entities/index.ts` and DataSource configuration
+- [X] T013 [P] Create Run entity in `dao/src/entities/run.entity.ts` extending BaseEntity per data-model.md
+- [X] T014 [P] Create RunStep entity in `dao/src/entities/run-step.entity.ts` extending BaseEntity per data-model.md
+- [X] T015 [P] Create StepCache entity in `dao/src/entities/step-cache.entity.ts` extending BaseEntity per data-model.md
+- [X] T016 Create TypeORM migration for run_status, run_trigger_type, step_status, cache_scope enums and runs, run_steps, step_cache tables in `dao/src/migrations/{timestamp}-CreateRunEngineSchema.ts` per data-model.md
+- [X] T017 Register Run, RunStep, StepCache entities in `dao/src/entities/index.ts` and DataSource configuration
 - [ ] T018 Run migration: `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/agentic_template pnpm migration:run`
 
 ### Core Interfaces
 
-- [ ] T019 [P] Create WorkflowSpec interface in `agent-platform/src/run-engine/interfaces/workflow-spec.interface.ts`
-- [ ] T020 [P] Create StepSpec interface in `agent-platform/src/run-engine/interfaces/step-spec.interface.ts`
-- [ ] T021 [P] Create RunContext interface in `agent-platform/src/run-engine/interfaces/run-context.interface.ts`
+- [X] T019 [P] Create WorkflowSpec interface in `agent-platform/src/run-engine/interfaces/workflow-spec.interface.ts`
+- [X] T020 [P] Create StepSpec interface in `agent-platform/src/run-engine/interfaces/step-spec.interface.ts`
+- [X] T021 [P] Create RunContext interface in `agent-platform/src/run-engine/interfaces/run-context.interface.ts`
 
 ### Core Services
 
-- [ ] T022 Implement InputHasherService with computeHash() and createCacheKey() methods using fast-json-stable-stringify in `agent-platform/src/run-engine/services/input-hasher.service.ts` per research.md
-- [ ] T023 Implement DependencyGraphService with topologicalSort() and downstreamClosure() methods using typescript-graph in `agent-platform/src/run-engine/services/dependency-graph.service.ts` per research.md
-- [ ] T024 Implement WorkflowRegistryService with register(), getWorkflow(), listWorkflows() methods in `agent-platform/src/run-engine/services/workflow-registry.service.ts`
+- [X] T022 Implement InputHasherService with computeHash() and createCacheKey() methods using fast-json-stable-stringify in `agent-platform/src/run-engine/services/input-hasher.service.ts` per research.md
+- [X] T023 Implement DependencyGraphService with topologicalSort() and downstreamClosure() methods using typescript-graph in `agent-platform/src/run-engine/services/dependency-graph.service.ts` per research.md
+- [X] T024 Implement WorkflowRegistryService with register(), getWorkflow(), listWorkflows() methods in `agent-platform/src/run-engine/services/workflow-registry.service.ts`
 
 ### Module Setup
 
-- [ ] T025 Create RunEngineModule in `agent-platform/src/run-engine/run-engine.module.ts` importing entities, registering services and processors
-- [ ] T026 Create RunEngineModule in `api-center/src/run-engine/run-engine.module.ts` importing DTOs, registering controller and API service
-- [ ] T027 Import RunEngineModule in `agent-platform/src/app.module.ts`
-- [ ] T028 Import RunEngineModule in `api-center/src/app.module.ts`
+- [X] T025 Create RunEngineModule in `agent-platform/src/run-engine/run-engine.module.ts` importing entities, registering services and processors
+- [X] T026 Create RunEngineModule in `api-center/src/run-engine/run-engine.module.ts` importing DTOs, registering controller and API service
+- [X] T027 Import RunEngineModule in `agent-platform/src/app.module.ts`
+- [X] T028 Import RunEngineModule in `api-center/src/app.module.ts`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -92,17 +92,17 @@
 
 ### Implementation for User Story 1
 
-- [ ] T029 [US1] Implement RunEngineService.trigger() method to create Run and RunStep records, enqueue to RUN_ORCHESTRATION queue in `agent-platform/src/run-engine/services/run-engine.service.ts`
-- [ ] T030 [US1] Implement RunEngineService.createRunSteps() to create pending RunStep records for all workflow steps in `agent-platform/src/run-engine/services/run-engine.service.ts`
-- [ ] T031 [US1] Implement RunOrchestratorProcessor to process RUN_ORCHESTRATION jobs, execute steps in topological order using DependencyGraphService in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
-- [ ] T032 [US1] Implement step execution loop: find ready steps (dependencies completed), execute via SkillRunner, update RunStep status in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
-- [ ] T033 [US1] Implement parallel step execution using Promise.all for independent steps with satisfied dependencies in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
-- [ ] T034 [US1] Implement input computation for each step using inputSelector from StepSpec and RunContext in `agent-platform/src/run-engine/services/run-engine.service.ts`
-- [ ] T035 [US1] Implement run completion logic: update Run status to "completed" when all steps complete in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
-- [ ] T036 [US1] Implement RunEngineApiService.triggerRun() as queue producer in `api-center/src/run-engine/services/run-engine-api.service.ts`
-- [ ] T037 [US1] Implement POST /runs endpoint in `api-center/src/run-engine/run-engine.controller.ts` per OpenAPI spec
-- [ ] T038 [US1] Implement GET /runs/{runId} endpoint in `api-center/src/run-engine/run-engine.controller.ts` per OpenAPI spec
-- [ ] T039 [US1] Add structured logging for run start, step start, step complete, run complete events per FR-031/FR-032 in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
+- [X] T029 [US1] Implement RunEngineService.trigger() method to create Run and RunStep records, enqueue to RUN_ORCHESTRATION queue in `agent-platform/src/run-engine/services/run-engine.service.ts`
+- [X] T030 [US1] Implement RunEngineService.createRunSteps() to create pending RunStep records for all workflow steps in `agent-platform/src/run-engine/services/run-engine.service.ts`
+- [X] T031 [US1] Implement RunOrchestratorProcessor to process RUN_ORCHESTRATION jobs, execute steps in topological order using DependencyGraphService in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
+- [X] T032 [US1] Implement step execution loop: find ready steps (dependencies completed), execute via SkillRunner, update RunStep status in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
+- [X] T033 [US1] Implement parallel step execution using Promise.all for independent steps with satisfied dependencies in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
+- [X] T034 [US1] Implement input computation for each step using inputSelector from StepSpec and RunContext in `agent-platform/src/run-engine/services/run-engine.service.ts`
+- [X] T035 [US1] Implement run completion logic: update Run status to "completed" when all steps complete in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
+- [X] T036 [US1] Implement RunEngineApiService.triggerRun() as queue producer in `api-center/src/run-engine/services/run-engine-api.service.ts`
+- [X] T037 [US1] Implement POST /runs endpoint in `api-center/src/run-engine/run-engine.controller.ts` per OpenAPI spec
+- [X] T038 [US1] Implement GET /runs/{runId} endpoint in `api-center/src/run-engine/run-engine.controller.ts` per OpenAPI spec
+- [X] T039 [US1] Add structured logging for run start, step start, step complete, run complete events per FR-031/FR-032 in `agent-platform/src/run-engine/processors/run-orchestrator.processor.ts`
 
 **Checkpoint**: User Story 1 complete - full workflow execution works end-to-end
 
