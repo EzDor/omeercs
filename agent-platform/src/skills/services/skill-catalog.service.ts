@@ -6,6 +6,7 @@ import * as yaml from 'js-yaml';
 import * as semver from 'semver';
 import { SkillDescriptor, SkillResult } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
+import { ImageProviderRegistry } from '@agentic-template/common/src/providers';
 import { CampaignPlanFromBriefHandler } from '../handlers/campaign-plan-from-brief.handler';
 import { GameConfigFromTemplateHandler } from '../handlers/game-config-from-template.handler';
 import { ReviewAssetQualityHandler } from '../handlers/review-asset-quality.handler';
@@ -69,7 +70,10 @@ export class SkillCatalogService implements OnModuleInit {
   /** Track validation errors during catalog loading */
   private readonly validationErrors: DescriptorValidationError[] = [];
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly imageProviderRegistry: ImageProviderRegistry,
+  ) {
     // Default to project root /skills/catalog
     this.catalogPath = configService.get<string>('SKILLS_CATALOG_PATH') || path.join(process.cwd(), '..', 'skills', 'catalog');
   }
@@ -259,7 +263,7 @@ export class SkillCatalogService implements OnModuleInit {
     this.handlers.set('review_asset_quality', reviewAssetHandler);
 
     // Register generate_intro_image handler
-    const generateIntroImageHandler = new GenerateIntroImageHandler(this.configService);
+    const generateIntroImageHandler = new GenerateIntroImageHandler(this.configService, this.imageProviderRegistry);
     this.handlers.set('generate_intro_image', generateIntroImageHandler);
 
     // Register segment_start_button handler

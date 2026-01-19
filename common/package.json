@@ -13,6 +13,11 @@
       "require": "./dist/auth/public.decorator.js",
       "types": "./dist/auth/public.decorator.d.ts"
     },
+    "./src/providers": {
+      "import": "./dist/providers/index.js",
+      "require": "./dist/providers/index.js",
+      "types": "./dist/providers/index.d.ts"
+    },
     "./src/*": {
       "import": "./dist/*.js",
       "require": "./dist/*.js",
