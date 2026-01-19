@@ -149,7 +149,7 @@ describe('SkillRunnerService', () => {
     it('should execute a skill successfully', async () => {
       catalogService.getSkill.mockReturnValue(mockDescriptor);
       catalogService.getHandler.mockReturnValue(mockHandler);
-      contextService.createContext.mockResolvedValue(mockContext);
+      contextService.createContext.mockReturnValue(mockContext);
       workspaceService.createWorkspace.mockResolvedValue('/tmp/workspace');
       schemaValidatorService.validateInput.mockReturnValue({ valid: true, errors: [] });
       schemaValidatorService.validateOutput.mockReturnValue({ valid: true, errors: [] });
@@ -186,7 +186,7 @@ describe('SkillRunnerService', () => {
     it('should execute specific version when requested', async () => {
       catalogService.getSkill.mockReturnValue(mockDescriptor);
       catalogService.getHandler.mockReturnValue(mockHandler);
-      contextService.createContext.mockResolvedValue(mockContext);
+      contextService.createContext.mockReturnValue(mockContext);
       workspaceService.createWorkspace.mockResolvedValue('/tmp/workspace');
       schemaValidatorService.validateInput.mockReturnValue({ valid: true, errors: [] });
       schemaValidatorService.validateOutput.mockReturnValue({ valid: true, errors: [] });
@@ -202,7 +202,7 @@ describe('SkillRunnerService', () => {
       catalogService.getHandler.mockReturnValue({
         execute: jest.fn().mockRejectedValue(new Error('Handler error')),
       });
-      contextService.createContext.mockResolvedValue(mockContext);
+      contextService.createContext.mockReturnValue(mockContext);
       workspaceService.createWorkspace.mockResolvedValue('/tmp/workspace');
       schemaValidatorService.validateInput.mockReturnValue({ valid: true, errors: [] });
 
@@ -215,7 +215,7 @@ describe('SkillRunnerService', () => {
     it('should include timing info in result debug info', async () => {
       catalogService.getSkill.mockReturnValue(mockDescriptor);
       catalogService.getHandler.mockReturnValue(mockHandler);
-      contextService.createContext.mockResolvedValue(mockContext);
+      contextService.createContext.mockReturnValue(mockContext);
       workspaceService.createWorkspace.mockResolvedValue('/tmp/workspace');
       schemaValidatorService.validateInput.mockReturnValue({ valid: true, errors: [] });
       schemaValidatorService.validateOutput.mockReturnValue({ valid: true, errors: [] });
@@ -264,7 +264,7 @@ describe('SkillRunnerService', () => {
 
       catalogService.getSkill.mockReturnValue(shortTimeoutDescriptor);
       catalogService.getHandler.mockReturnValue(slowHandler);
-      contextService.createContext.mockResolvedValue(shortTimeoutContext);
+      contextService.createContext.mockReturnValue(shortTimeoutContext);
       workspaceService.createWorkspace.mockResolvedValue('/tmp/workspace');
       schemaValidatorService.validateInput.mockReturnValue({ valid: true, errors: [] });
 

@@ -14,6 +14,11 @@
       "import": "./dist/skills/index.js",
       "require": "./dist/skills/index.js",
       "types": "./dist/skills/index.d.ts"
+    },
+    "./src/providers": {
+      "import": "./dist/providers/index.js",
+      "require": "./dist/providers/index.js",
+      "types": "./dist/providers/index.d.ts"
     }
   },
   "scripts": {

@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UnhandledExceptionFilter } from '@agentic-template/common/src/filters/unhandled-exception.filter';
 import { GlobalHttpExceptionFilter } from '@agentic-template/common/src/filters/global-http-exception.filter';
+import { ProvidersModule } from '@agentic-template/common/src/providers';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { GlobalHttpExceptionFilter } from '@agentic-template/common/src/filters/
     WorkflowOrchestrationModule,
     HealthModule,
     SkillsModule,
+    ProvidersModule,
   ],
   controllers: [AppController],
   providers: [

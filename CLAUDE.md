@@ -119,6 +119,8 @@ Agentic workflow system for specification-driven development. Contains templates
 ## Active Technologies
 - TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation) (001-skill-runner)
 - PostgreSQL with TypeORM (for artifact registry metadata) (001-skill-runner)
+- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, existing LiteLLMHttpClien (003-provider-adapters)
+- N/A (provider-hosted URLs returned directly, no platform storage layer) (003-provider-adapters)
 
 ## Recent Changes
 - 001-skill-runner: Added TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation)

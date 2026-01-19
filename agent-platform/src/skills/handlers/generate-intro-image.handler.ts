@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
-import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
+import { ImageProviderRegistry } from '@agentic-template/common/src/providers';
+import { ProviderError } from '@agentic-template/common/src/providers';
 import { GenerateIntroImageInput, GenerateIntroImageOutput, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
@@ -10,13 +10,12 @@ import * as path from 'path';
 @Injectable()
 export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImageInput, GenerateIntroImageOutput> {
   private readonly logger = new Logger(GenerateIntroImageHandler.name);
-  private readonly llmClient: LiteLLMHttpClient;
-  private readonly defaultModel: string;
   private readonly outputDir: string;
 
-  constructor(private readonly configService: ConfigService) {
-    this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
-    this.defaultModel = configService.get<string>('IMAGE_GENERATION_MODEL') || 'dall-e-3';
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly imageProviders: ImageProviderRegistry,
+  ) {
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
   }
 
@@ -32,42 +31,34 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
       const enhancedPrompt = this.buildEnhancedPrompt(input);
       timings['prompt_build'] = Date.now() - promptBuildStart;
 
-      // Determine image size from specs
-      const size = this.determineSize(input.specs);
+      // Determine image dimensions
+      const { width, height } = this.determineDimensions(input.specs);
 
-      // Call image generation API
+      // Get provider from registry (use specified provider or default)
+      const provider = input.provider ? this.imageProviders.getProvider(input.provider) : this.imageProviders.getDefaultProvider();
+
+      // Call image generation API via provider adapter
       const generationStart = Date.now();
-      const model = input.provider || this.defaultModel;
-
-      const response = await this.llmClient.imageGeneration({
-        model,
+      const result = await provider.generateImage({
         prompt: enhancedPrompt,
-        n: 1,
-        size,
+        negativePrompt: input.negative_prompt,
+        width,
+        height,
         quality: 'hd',
-        style: 'vivid',
-        response_format: 'url',
+        seed: input.seed,
+        format: input.specs?.format || 'png',
       });
       timings['generation'] = Date.now() - generationStart;
 
-      if (!response.data || response.data.length === 0) {
-        return skillFailure('No image data in response', 'EMPTY_RESPONSE', { timings_ms: { total: Date.now() - startTime, ...timings } });
-      }
-
-      const imageData = response.data[0];
-      const imageUrl = imageData.url;
-
-      if (!imageUrl) {
-        return skillFailure('No image URL in response', 'NO_IMAGE_URL', { timings_ms: { total: Date.now() - startTime, ...timings } });
-      }
+      const imageUrl = result.uri;
 
       // Download and save the image
       const saveStart = Date.now();
-      const savedImageInfo = await this.saveImage(imageUrl, context.executionId, input.specs?.format || 'png', size);
+      const savedImageInfo = await this.saveImage(imageUrl, context.executionId, result.metadata.format, result.metadata.width, result.metadata.height);
       timings['save'] = Date.now() - saveStart;
 
       const totalTime = Date.now() - startTime;
-      this.logger.log(`Intro image generated successfully in ${totalTime}ms`);
+      this.logger.log(`Intro image generated successfully in ${totalTime}ms via provider '${provider.providerId}'`);
 
       const output: GenerateIntroImageOutput = {
         image_uri: savedImageInfo.uri,
@@ -79,7 +70,7 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
           prompt: enhancedPrompt,
           negative_prompt: input.negative_prompt,
           seed: input.seed,
-          model,
+          model: result.metadata.model,
         },
       };
 
@@ -93,7 +84,9 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
               width: savedImageInfo.width,
               height: savedImageInfo.height,
               format: savedImageInfo.format,
-              revised_prompt: imageData.revised_prompt,
+              revised_prompt: result.metadata.revisedPrompt,
+              provider_id: result.metadata.providerId,
+              model: result.metadata.model,
             },
           },
         ],
@@ -101,8 +94,8 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
           timings_ms: { total: totalTime, ...timings },
           provider_calls: [
             {
-              provider: 'litellm',
-              model,
+              provider: result.metadata.providerId,
+              model: result.metadata.model,
               duration_ms: timings['generation'],
             },
           ],
@@ -110,6 +103,15 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
       );
     } catch (error) {
       const totalTime = Date.now() - startTime;
+
+      // Handle ProviderError specifically for better error messages
+      if (error instanceof ProviderError) {
+        this.logger.error(`Provider error during image generation: [${error.code}] ${error.message} (provider: ${error.providerId})`);
+        return skillFailure(error.message, error.code, {
+          timings_ms: { total: totalTime, ...timings },
+        });
+      }
+
       this.logger.error(`Failed to generate intro image: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
       return skillFailure(error instanceof Error ? error.message : 'Unknown error during image generation', 'EXECUTION_ERROR', {
@@ -154,38 +156,35 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
     return parts.join('. ');
   }
 
-  private determineSize(specs?: GenerateIntroImageInput['specs']): '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792' {
+  private determineDimensions(specs?: GenerateIntroImageInput['specs']): { width: number; height: number } {
     if (!specs) {
-      return '1792x1024'; // Default to 16:9 landscape
+      return { width: 1792, height: 1024 }; // Default to 16:9 landscape
     }
 
+    // Use explicit dimensions if provided
+    if (specs.width && specs.height) {
+      return { width: specs.width, height: specs.height };
+    }
+
+    // Map aspect ratios to dimensions
     const aspectRatio = specs.aspect_ratio;
-    const width = specs.width;
-    const height = specs.height;
-
-    // Map aspect ratios to supported sizes
-    if (aspectRatio === '16:9' || (width && height && width / height > 1.5)) {
-      return '1792x1024';
-    } else if (aspectRatio === '9:16' || (width && height && height / width > 1.5)) {
-      return '1024x1792';
+    if (aspectRatio === '16:9') {
+      return { width: 1792, height: 1024 };
+    } else if (aspectRatio === '9:16') {
+      return { width: 1024, height: 1792 };
     } else if (aspectRatio === '1:1') {
-      return '1024x1024';
+      return { width: 1024, height: 1024 };
     }
 
-    // Default based on dimensions
-    if (width && height) {
-      if (width > height) return '1792x1024';
-      if (height > width) return '1024x1792';
-    }
-
-    return '1024x1024';
+    return { width: 1024, height: 1024 };
   }
 
   private async saveImage(
     imageUrl: string,
     executionId: string,
     format: string,
-    size: string,
+    width: number,
+    height: number,
   ): Promise<{ uri: string; width: number; height: number; format: string; fileSize: number }> {
     // Ensure output directory exists
     const outputPath = path.join(this.outputDir, executionId);
@@ -206,9 +205,6 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
     fs.writeFileSync(filePath, buffer);
 
     const stats = fs.statSync(filePath);
-
-    // Parse dimensions from the size string (e.g., "1024x1792" → width: 1024, height: 1792)
-    const [width, height] = size.split('x').map(Number);
 
     return {
       uri: filePath,
