@@ -5,6 +5,7 @@ import { CoreModule } from 'src/core/core.module';
 import { WorkflowOrchestrationModule } from 'src/workflow-orchestration/workflow-orchestration.module';
 import { HealthModule } from 'src/health/health.module';
 import { SkillsModule } from 'src/skills/skills.module';
+import { RunEngineModule } from 'src/run-engine/run-engine.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UnhandledExceptionFilter } from '@agentic-template/common/src/filters/unhandled-exception.filter';
@@ -21,6 +22,7 @@ import { ProvidersModule } from '@agentic-template/common/src/providers';
     HealthModule,
     SkillsModule,
     ProvidersModule,
+    RunEngineModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,0 +1,720 @@
+openapi: 3.0.3
+info:
+  title: Run Engine API
+  description: |
+    REST API for the Run Engine (Workflow Orchestrator + Partial Rebuild).
+
+    Key operations:
+    - Trigger new workflow runs (initial build)
+    - Trigger update runs (partial rebuild)
+    - Query run and step status
+    - Retrieve run artifacts
+    - Cancel running workflows
+  version: 1.0.0
+  contact:
+    name: Agentic Platform Team
+
+servers:
+  - url: /api/v1
+    description: API Center base path
+
+tags:
+  - name: Runs
+    description: Workflow run operations
+  - name: Workflows
+    description: Workflow registry operations
+
+paths:
+  /runs:
+    post:
+      summary: Trigger a new workflow run
+      description: |
+        Creates a new run for the specified workflow. For initial builds, creates
+        all steps in pending status. Returns immediately with run ID; execution
+        happens asynchronously via BullMQ.
+      operationId: triggerRun
+      tags:
+        - Runs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerRunRequest'
+            examples:
+              initial:
+                summary: Initial campaign build
+                value:
+                  workflowName: campaign.build.v1
+                  triggerPayload:
+                    campaignId: "123e4567-e89b-12d3-a456-426614174000"
+                    brief:
+                      title: "Summer Sale Campaign"
+                      style: "energetic"
+      responses:
+        '202':
+          description: Run created and queued for execution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerRunResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /runs/{runId}:
+    get:
+      summary: Get run status and details
+      description: |
+        Returns the current status of a run including all step statuses.
+        Use this to monitor run progress.
+      operationId: getRun
+      tags:
+        - Runs
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /runs/{runId}/update:
+    post:
+      summary: Trigger a partial rebuild (update run)
+      description: |
+        Creates an update run based on a completed initial run. Only impacted
+        steps and their downstream dependents will be re-executed; unchanged
+        steps will use cached artifacts from the base run.
+      operationId: triggerUpdate
+      tags:
+        - Runs
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerUpdateRequest'
+            examples:
+              audioUpdate:
+                summary: Update audio assets
+                value:
+                  changeRequest:
+                    type: audio.update
+                    payload:
+                      audioStyle: "epic"
+                      volumeBoost: 1.2
+              introUpdate:
+                summary: Update intro sequence
+                value:
+                  changeRequest:
+                    type: intro.update
+                    payload:
+                      introText: "New Summer Collection"
+      responses:
+        '202':
+          description: Update run created and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerRunResponse'
+        '400':
+          description: Invalid change request or base run not completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /runs/{runId}/cancel:
+    post:
+      summary: Cancel a running workflow
+      description: |
+        Cancels an in-progress run. Steps that have already completed remain
+        completed; pending and running steps are marked as cancelled.
+      operationId: cancelRun
+      tags:
+        - Runs
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Run cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '400':
+          description: Run is not in a cancellable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /runs/{runId}/steps:
+    get:
+      summary: Get all steps for a run
+      description: |
+        Returns detailed information about all steps in a run, including
+        status, timing, and artifact references.
+      operationId: getRunSteps
+      tags:
+        - Runs
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: status
+          in: query
+          description: Filter by step status
+          schema:
+            $ref: '#/components/schemas/StepStatus'
+      responses:
+        '200':
+          description: List of run steps
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunStepsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /runs/{runId}/artifacts:
+    get:
+      summary: Get all artifacts produced by a run
+      description: |
+        Returns all artifacts produced by completed steps in the run.
+        For update runs, includes both newly generated and cached artifacts.
+      operationId: getRunArtifacts
+      tags:
+        - Runs
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: stepId
+          in: query
+          description: Filter artifacts by step ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of artifacts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /workflows:
+    get:
+      summary: List available workflows
+      description: |
+        Returns all registered workflow definitions. Use this to discover
+        available workflows and their required inputs.
+      operationId: listWorkflows
+      tags:
+        - Workflows
+      responses:
+        '200':
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowsResponse'
+
+  /workflows/{workflowName}:
+    get:
+      summary: Get workflow definition
+      description: |
+        Returns the full definition of a workflow including all steps,
+        dependencies, and configuration.
+      operationId: getWorkflow
+      tags:
+        - Workflows
+      parameters:
+        - name: workflowName
+          in: path
+          required: true
+          schema:
+            type: string
+          example: campaign.build.v1
+        - name: version
+          in: query
+          description: Specific version (defaults to latest)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    RunId:
+      name: runId
+      in: path
+      required: true
+      description: Unique run identifier
+      schema:
+        type: string
+        format: uuid
+      example: 123e4567-e89b-12d3-a456-426614174000
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # Request schemas
+    TriggerRunRequest:
+      type: object
+      required:
+        - workflowName
+      properties:
+        workflowName:
+          type: string
+          description: Name of the workflow to execute
+          example: campaign.build.v1
+        workflowVersion:
+          type: string
+          description: Specific version (optional, defaults to latest)
+          example: "1.0.0"
+        triggerPayload:
+          type: object
+          description: Workflow-specific input data
+          additionalProperties: true
+
+    TriggerUpdateRequest:
+      type: object
+      required:
+        - changeRequest
+      properties:
+        changeRequest:
+          $ref: '#/components/schemas/ChangeRequest'
+
+    ChangeRequest:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          $ref: '#/components/schemas/ChangeRequestType'
+        payload:
+          type: object
+          description: Type-specific change data
+          additionalProperties: true
+
+    ChangeRequestType:
+      type: string
+      enum:
+        - audio.update
+        - intro.update
+        - outcome.update
+        - game_config.update
+        - asset3d.replace
+        - full_rebuild
+      description: Type of change request
+
+    # Response schemas
+    TriggerRunResponse:
+      type: object
+      required:
+        - runId
+        - status
+      properties:
+        runId:
+          type: string
+          format: uuid
+          description: Unique identifier for the created run
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        message:
+          type: string
+          description: Human-readable status message
+          example: "Run queued for execution"
+
+    RunResponse:
+      type: object
+      required:
+        - id
+        - workflowName
+        - triggerType
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflowName:
+          type: string
+          example: campaign.build.v1
+        workflowVersion:
+          type: string
+          example: "1.0.0"
+        triggerType:
+          $ref: '#/components/schemas/TriggerType'
+        triggerPayload:
+          type: object
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        baseRunId:
+          type: string
+          format: uuid
+          description: For update runs, the base run ID
+        error:
+          $ref: '#/components/schemas/RunError'
+        stepsSummary:
+          $ref: '#/components/schemas/StepsSummary'
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RunStepsResponse:
+      type: object
+      required:
+        - runId
+        - steps
+      properties:
+        runId:
+          type: string
+          format: uuid
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunStep'
+
+    RunStep:
+      type: object
+      required:
+        - id
+        - stepId
+        - skillId
+        - status
+        - inputHash
+        - attempt
+      properties:
+        id:
+          type: string
+          format: uuid
+        stepId:
+          type: string
+          description: Step identifier from workflow definition
+          example: generate_bgm_track
+        skillId:
+          type: string
+          description: Skill used for execution
+          example: audio.generate_bgm
+        status:
+          $ref: '#/components/schemas/StepStatus'
+        inputHash:
+          type: string
+          description: SHA-256 hash of step input
+          example: a3f2c1e4b5d6789012345678901234567890123456789012345678901234abcd
+        attempt:
+          type: integer
+          description: Current retry attempt (1-based)
+          minimum: 1
+          example: 1
+        outputArtifactIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Artifact IDs produced by this step
+        error:
+          $ref: '#/components/schemas/StepError'
+        cacheHit:
+          type: boolean
+          description: Whether result was from cache
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+          description: Execution duration in milliseconds
+
+    ArtifactsResponse:
+      type: object
+      required:
+        - runId
+        - artifacts
+      properties:
+        runId:
+          type: string
+          format: uuid
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Artifact'
+
+    Artifact:
+      type: object
+      required:
+        - id
+        - type
+        - uri
+        - contentHash
+      properties:
+        id:
+          type: string
+          format: uuid
+        stepId:
+          type: string
+          description: Step that produced this artifact
+        type:
+          type: string
+          description: MIME type
+          example: video/mp4
+        uri:
+          type: string
+          description: Storage location
+          example: file:///artifacts/123/output.mp4
+        contentHash:
+          type: string
+          description: SHA-256 of content
+        sizeBytes:
+          type: integer
+          format: int64
+        filename:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    WorkflowsResponse:
+      type: object
+      required:
+        - workflows
+      properties:
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSummary'
+
+    WorkflowSummary:
+      type: object
+      required:
+        - name
+        - version
+        - stepCount
+      properties:
+        name:
+          type: string
+          example: campaign.build.v1
+        version:
+          type: string
+          example: "1.0.0"
+        description:
+          type: string
+        stepCount:
+          type: integer
+          example: 13
+
+    WorkflowResponse:
+      type: object
+      required:
+        - name
+        - version
+        - steps
+      properties:
+        name:
+          type: string
+          example: campaign.build.v1
+        version:
+          type: string
+          example: "1.0.0"
+        description:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/StepDefinition'
+        changeRequestMappings:
+          type: object
+          description: Maps change request types to impacted step IDs
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    StepDefinition:
+      type: object
+      required:
+        - stepId
+        - skillId
+        - dependsOn
+      properties:
+        stepId:
+          type: string
+          example: generate_bgm_track
+        skillId:
+          type: string
+          example: audio.generate_bgm
+        description:
+          type: string
+        dependsOn:
+          type: array
+          items:
+            type: string
+          description: Step IDs this step depends on
+        cachePolicy:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            scope:
+              type: string
+              enum: [global, run_only]
+              default: global
+        retryPolicy:
+          type: object
+          properties:
+            maxAttempts:
+              type: integer
+              minimum: 1
+              maximum: 5
+              default: 3
+            backoffMs:
+              type: integer
+              minimum: 1000
+              default: 3000
+
+    # Enum schemas
+    RunStatus:
+      type: string
+      enum:
+        - queued
+        - running
+        - completed
+        - failed
+        - cancelled
+
+    TriggerType:
+      type: string
+      enum:
+        - initial
+        - update
+
+    StepStatus:
+      type: string
+      enum:
+        - pending
+        - running
+        - skipped
+        - completed
+        - failed
+
+    # Error schemas
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: WORKFLOW_NOT_FOUND
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          additionalProperties: true
+
+    RunError:
+      type: object
+      properties:
+        code:
+          type: string
+          example: STEP_EXECUTION_FAILED
+        message:
+          type: string
+        failedStepId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    StepError:
+      type: object
+      properties:
+        code:
+          type: string
+          example: SKILL_TIMEOUT
+        message:
+          type: string
+        attempt:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: object
+          additionalProperties: true
+
+    StepsSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 13
+        pending:
+          type: integer
+          example: 5
+        running:
+          type: integer
+          example: 2
+        completed:
+          type: integer
+          example: 4
+        skipped:
+          type: integer
+          example: 1
+        failed:
+          type: integer
+          example: 1

@@ -2,6 +2,9 @@ import { DataSource } from 'typeorm';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { Artifact } from './entities/artifact.entity';
+import { Run } from './entities/run.entity';
+import { RunStep } from './entities/run-step.entity';
+import { StepCache } from './entities/step-cache.entity';
 
 function buildDatabaseUrl(): string {
   if (process.env.DATABASE_URL) {
@@ -37,7 +40,7 @@ const AppDataSource = new DataSource({
   type: 'postgres',
   url: buildDatabaseUrl(),
   schema: process.env.APP_SCHEMA || 'app',
-  entities: [ChatSession, ChatMessage, Artifact],
+  entities: [ChatSession, ChatMessage, Artifact, Run, RunStep, StepCache],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
   synchronize: false,
