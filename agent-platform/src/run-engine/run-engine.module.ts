@@ -18,11 +18,16 @@ import { WorkflowRegistryService } from './services/workflow-registry.service';
 import { RunEngineService } from './services/run-engine.service';
 import { StepCacheService } from './services/step-cache.service';
 
-// Processors
-import { RunOrchestratorProcessor } from './processors/run-orchestrator.processor';
+// LangGraph services
+import { CachedStepExecutorService } from './services/cached-step-executor.service';
+import { LangGraphWorkflowBuilderService } from './services/langgraph-workflow-builder.service';
 
-// Skill runner integration
+// Processors
+import { LangGraphRunProcessor } from './processors/langgraph-run.processor';
+
+// Integration modules
 import { SkillsModule } from '../skills/skills.module';
+import { WorkflowOrchestrationModule } from '../workflow-orchestration/workflow-orchestration.module';
 
 @Module({
   imports: [
@@ -36,6 +41,7 @@ import { SkillsModule } from '../skills/skills.module';
       name: QueueNames.RUN_STEPS,
     }),
     SkillsModule,
+    WorkflowOrchestrationModule,
   ],
   providers: [
     // Core services
@@ -45,8 +51,12 @@ import { SkillsModule } from '../skills/skills.module';
     RunEngineService,
     StepCacheService,
 
+    // LangGraph services
+    CachedStepExecutorService,
+    LangGraphWorkflowBuilderService,
+
     // Processors
-    RunOrchestratorProcessor,
+    LangGraphRunProcessor,
   ],
   exports: [RunEngineService, WorkflowRegistryService, InputHasherService, DependencyGraphService, StepCacheService],
 })
