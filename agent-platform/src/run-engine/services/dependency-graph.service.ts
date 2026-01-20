@@ -28,34 +28,6 @@ export class DependencyGraphService {
     return graph.topologicallySortedNodes();
   }
 
-  downstreamClosure(allSteps: StepSpec[], changedStepIds: string[]): Set<string> {
-    const closure = new Set<string>(changedStepIds);
-    const queue = [...changedStepIds];
-
-    const dependentsMap = new Map<string, string[]>();
-    for (const step of allSteps) {
-      for (const depId of step.dependsOn) {
-        const dependents = dependentsMap.get(depId) || [];
-        dependents.push(step.stepId);
-        dependentsMap.set(depId, dependents);
-      }
-    }
-
-    while (queue.length > 0) {
-      const stepId = queue.shift()!;
-      const dependents = dependentsMap.get(stepId) || [];
-
-      for (const dependent of dependents) {
-        if (!closure.has(dependent)) {
-          closure.add(dependent);
-          queue.push(dependent);
-        }
-      }
-    }
-
-    return closure;
-  }
-
   validateNoCycles(steps: StepSpec[]): { valid: boolean; error?: string } {
     try {
       this.topologicalSort(steps);
@@ -68,23 +40,5 @@ export class DependencyGraphService {
 
   getEntrySteps(steps: StepSpec[]): StepSpec[] {
     return steps.filter((step) => step.dependsOn.length === 0);
-  }
-
-  getReadySteps(allSteps: StepSpec[], completedStepIds: Set<string>, pendingStepIds: Set<string>): StepSpec[] {
-    const ready: StepSpec[] = [];
-
-    for (const step of allSteps) {
-      if (!pendingStepIds.has(step.stepId)) {
-        continue;
-      }
-
-      const allDependenciesMet = step.dependsOn.every((depId) => completedStepIds.has(depId));
-
-      if (allDependenciesMet) {
-        ready.push(step);
-      }
-    }
-
-    return ready;
   }
 }

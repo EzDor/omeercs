@@ -45,14 +45,10 @@ export class LangGraphWorkflowBuilderService {
       if (terminalSteps.has(stepSpec.stepId)) {
         graph.addEdge(stepSpec.stepId, END);
       } else if (dependents.length === 1) {
-        graph.addConditionalEdges(
-          stepSpec.stepId,
-          (state: RunStateType) => (state.error ? END : 'next'),
-          {
-            [END]: END,
-            next: dependents[0],
-          },
-        );
+        graph.addConditionalEdges(stepSpec.stepId, (state: RunStateType) => (state.error ? END : 'next'), {
+          [END]: END,
+          next: dependents[0],
+        });
       } else if (dependents.length > 1) {
         for (const dependent of dependents) {
           graph.addEdge(stepSpec.stepId, dependent);

@@ -1,15 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
-import { QueueNames } from '@agentic-template/common/src/queues/queue-names';
+import { Repository } from 'typeorm';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
-import { Run, RunStatusType, RunTriggerType } from '@agentic-template/dao/src/entities/run.entity';
+import { Run, RunStatusType } from '@agentic-template/dao/src/entities/run.entity';
 import { RunStep, StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
 import { WorkflowSpec } from '../interfaces/workflow-spec.interface';
-import { RunContext, createRunContext, StepOutput } from '../interfaces/run-context.interface';
-import { WorkflowRegistryService } from './workflow-registry.service';
+import { RunContext, createRunContext } from '../interfaces/run-context.interface';
 import { InputHasherService } from './input-hasher.service';
 import { DependencyGraphService } from './dependency-graph.service';
 
@@ -27,56 +23,10 @@ export class RunEngineService {
     private readonly runRepository: Repository<Run>,
     @InjectRepository(RunStep)
     private readonly runStepRepository: Repository<RunStep>,
-    @InjectQueue(QueueNames.RUN_ORCHESTRATION)
-    private readonly orchestrationQueue: Queue<RunOrchestrationJobData>,
     private readonly tenantClsService: TenantClsService,
-    private readonly workflowRegistryService: WorkflowRegistryService,
     private readonly inputHasherService: InputHasherService,
     private readonly dependencyGraphService: DependencyGraphService,
   ) {}
-
-  async trigger(workflowName: string, triggerPayload: Record<string, unknown> = {}, workflowVersion?: string): Promise<string> {
-    const tenantId = this.tenantClsService.getTenantId();
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    const workflow = this.workflowRegistryService.getWorkflow(workflowName, workflowVersion);
-    if (!workflow) {
-      throw new Error(`Workflow '${workflowName}' not found`);
-    }
-
-    const run = this.runRepository.create({
-      tenantId,
-      workflowName: workflow.workflowName,
-      workflowVersion: workflow.version,
-      triggerType: 'initial' as RunTriggerType,
-      triggerPayload,
-      status: 'queued' as RunStatusType,
-    });
-
-    const savedRun = await this.runRepository.save(run);
-    this.logger.log(`Run created: ${savedRun.id} for workflow ${workflowName}`);
-
-    await this.createRunSteps(savedRun.id, tenantId, workflow, triggerPayload);
-
-    await this.orchestrationQueue.add(
-      'orchestrate',
-      {
-        runId: savedRun.id,
-        tenantId,
-      },
-      {
-        jobId: `run-${savedRun.id}`,
-        removeOnComplete: true,
-        removeOnFail: false,
-      },
-    );
-
-    this.logger.log(`Run ${savedRun.id} queued for orchestration`);
-
-    return savedRun.id;
-  }
 
   async createRunSteps(runId: string, tenantId: string, workflow: WorkflowSpec, triggerPayload: Record<string, unknown>): Promise<void> {
     const context = createRunContext({
@@ -270,16 +220,6 @@ export class RunEngineService {
     await this.runStepRepository.save(step);
   }
 
-  async getRunStep(stepId: string): Promise<RunStep | null> {
-    const tenantId = this.tenantClsService.getTenantId();
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-    return this.runStepRepository.findOne({
-      where: { id: stepId, tenantId },
-    });
-  }
-
   async getRunStepByStepId(runId: string, stepId: string): Promise<RunStep | null> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -288,41 +228,6 @@ export class RunEngineService {
     return this.runStepRepository.findOne({
       where: { runId, stepId, tenantId },
     });
-  }
-
-  async buildRunContext(runId: string, workflow: WorkflowSpec, triggerPayload: Record<string, unknown>): Promise<RunContext> {
-    const tenantId = this.tenantClsService.getTenantId();
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    const context = createRunContext({
-      runId,
-      tenantId,
-      workflowName: workflow.workflowName,
-      triggerPayload,
-    });
-
-    const completedSteps = await this.runStepRepository.find({
-      where: {
-        runId,
-        tenantId,
-        status: In(['completed', 'skipped']),
-      },
-    });
-
-    for (const step of completedSteps) {
-      const output: StepOutput = {
-        stepId: step.stepId,
-        status: step.status as 'completed' | 'skipped' | 'failed',
-        outputArtifactIds: step.outputArtifactIds || [],
-      };
-
-      context.stepOutputs.set(step.stepId, output);
-      context.artifacts.set(step.stepId, step.outputArtifactIds || []);
-    }
-
-    return context;
   }
 
   async updateRunStepInputHash(stepId: string, inputHash: string): Promise<void> {

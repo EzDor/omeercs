@@ -62,13 +62,7 @@ export class LangGraphRunProcessor extends WorkerHost {
 
         this.logger.log(`[LangGraphRun] Executing workflow via LangGraph: ${workflow.workflowName}`);
 
-        const result = await this.workflowEngineService.executeWorkflow(
-          graph,
-          initialState as RunStateType,
-          runId,
-          tenantId,
-          `run-engine:${workflow.workflowName}`,
-        );
+        const result = await this.workflowEngineService.executeWorkflow(graph, initialState as RunStateType, runId, tenantId, `run-engine:${workflow.workflowName}`);
 
         const finalState = result as unknown as RunStateType;
         const stepResults = finalState.stepResults || new Map();
