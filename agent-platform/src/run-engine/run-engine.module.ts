@@ -16,6 +16,7 @@ import { InputHasherService } from './services/input-hasher.service';
 import { DependencyGraphService } from './services/dependency-graph.service';
 import { WorkflowRegistryService } from './services/workflow-registry.service';
 import { RunEngineService } from './services/run-engine.service';
+import { StepCacheService } from './services/step-cache.service';
 
 // Processors
 import { RunOrchestratorProcessor } from './processors/run-orchestrator.processor';
@@ -42,10 +43,11 @@ import { SkillsModule } from '../skills/skills.module';
     DependencyGraphService,
     WorkflowRegistryService,
     RunEngineService,
+    StepCacheService,
 
     // Processors
     RunOrchestratorProcessor,
   ],
-  exports: [RunEngineService, WorkflowRegistryService, InputHasherService, DependencyGraphService],
+  exports: [RunEngineService, WorkflowRegistryService, InputHasherService, DependencyGraphService, StepCacheService],
 })
 export class RunEngineModule {}

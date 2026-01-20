@@ -1,32 +1,23 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { QueueNames } from '@agentic-template/common/src/queues/queue-names';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
 
-// Entities
 import { Run } from '@agentic-template/dao/src/entities/run.entity';
 import { RunStep, StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
 import { Artifact } from '@agentic-template/dao/src/entities/artifact.entity';
 
-// DTOs
 import { TriggerRunRequest, TriggerRunResponse, RunResponse, RunStatus, StepsSummary } from '@agentic-template/dto/src/run-engine/run.dto';
 import { RunStepsResponse, RunStep as RunStepDto, ArtifactsResponse, ArtifactDto } from '@agentic-template/dto/src/run-engine/run-step.dto';
 
-/**
- * Job data for the run orchestration queue
- */
 export interface RunOrchestrationJobData {
   runId: string;
   tenantId: string;
 }
 
-/**
- * API service for the Run Engine.
- * Acts as a queue producer and query interface for the API Center.
- */
 @Injectable()
 export class RunEngineApiService {
   private readonly logger = new Logger(RunEngineApiService.name);
@@ -43,19 +34,12 @@ export class RunEngineApiService {
     private readonly tenantClsService: TenantClsService,
   ) {}
 
-  /**
-   * Trigger a new workflow run by enqueueing to the orchestration queue.
-   *
-   * @param request The trigger run request
-   * @returns The trigger response with run ID
-   */
   async triggerRun(request: TriggerRunRequest): Promise<TriggerRunResponse> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
 
-    // Create run record
     const run = this.runRepository.create({
       tenantId,
       workflowName: request.workflowName,
@@ -68,7 +52,6 @@ export class RunEngineApiService {
     const savedRun = await this.runRepository.save(run);
     this.logger.log(`Run created: ${savedRun.id} for workflow ${request.workflowName}`);
 
-    // Enqueue for orchestration
     await this.orchestrationQueue.add(
       'orchestrate',
       {
@@ -89,12 +72,6 @@ export class RunEngineApiService {
     };
   }
 
-  /**
-   * Get run details by ID.
-   *
-   * @param runId The run ID
-   * @returns The run response
-   */
   async getRun(runId: string): Promise<RunResponse> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -109,7 +86,6 @@ export class RunEngineApiService {
       throw new NotFoundException(`Run ${runId} not found`);
     }
 
-    // Get step counts by status
     const steps = await this.runStepRepository.find({
       where: { runId, tenantId },
     });
@@ -147,20 +123,12 @@ export class RunEngineApiService {
     };
   }
 
-  /**
-   * Get all steps for a run.
-   *
-   * @param runId The run ID
-   * @param statusFilter Optional status filter
-   * @returns The run steps response
-   */
   async getRunSteps(runId: string, statusFilter?: StepStatusType): Promise<RunStepsResponse> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
 
-    // Verify run exists
     const run = await this.runRepository.findOne({
       where: { id: runId, tenantId },
     });
@@ -212,20 +180,12 @@ export class RunEngineApiService {
     };
   }
 
-  /**
-   * Get all artifacts produced by a run.
-   *
-   * @param runId The run ID
-   * @param stepId Optional filter by step ID
-   * @returns The artifacts response
-   */
   async getRunArtifacts(runId: string, stepId?: string): Promise<ArtifactsResponse> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
 
-    // Verify run exists
     const run = await this.runRepository.findOne({
       where: { id: runId, tenantId },
     });
@@ -234,12 +194,10 @@ export class RunEngineApiService {
       throw new NotFoundException(`Run ${runId} not found`);
     }
 
-    // Get completed steps to find artifact IDs
     const steps = await this.runStepRepository.find({
       where: { runId, tenantId },
     });
 
-    // Collect all artifact IDs
     const artifactIdsByStep = new Map<string, string[]>();
     for (const step of steps) {
       if (step.outputArtifactIds && step.outputArtifactIds.length > 0) {
@@ -255,12 +213,10 @@ export class RunEngineApiService {
       return { runId, artifacts: [] };
     }
 
-    // Fetch artifacts
     const artifacts = await this.artifactRepository.find({
-      where: { tenantId, runId },
+      where: { tenantId, id: In(allArtifactIds) },
     });
 
-    // Map step IDs to artifacts
     const stepIdByArtifactId = new Map<string, string>();
     for (const [sId, artIds] of artifactIdsByStep) {
       for (const artId of artIds) {

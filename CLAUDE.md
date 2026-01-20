@@ -113,6 +113,10 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 - ESLint: TypeScript with type checking, decorators allowed
 - Pre-commit hooks via Husky
 
+## General Coding Principles
+- **No code comments**: NEVER write code comments unless explicitly requested. Instead, extract the intended comment into a small, well-named function that makes the code self-documenting.
+- **No README files**: NEVER create a README.md unless explicitly requested.
+
 ## .specify Directory
 Agentic workflow system for specification-driven development. Contains templates (spec, plan, tasks) and scripts for AI-assisted feature development. Used with Claude Code skills in `.claude/commands/`.
 

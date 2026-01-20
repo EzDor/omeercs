@@ -5,32 +5,19 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { QueueNames } from '@agentic-template/common/src/queues/queue-names';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
-
-// Entities
 import { Run, RunStatusType, RunTriggerType } from '@agentic-template/dao/src/entities/run.entity';
 import { RunStep, StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
-
-// Interfaces
 import { WorkflowSpec } from '../interfaces/workflow-spec.interface';
 import { RunContext, createRunContext, StepOutput } from '../interfaces/run-context.interface';
-
-// Services
 import { WorkflowRegistryService } from './workflow-registry.service';
 import { InputHasherService } from './input-hasher.service';
 import { DependencyGraphService } from './dependency-graph.service';
 
-/**
- * Job data for the run orchestration queue
- */
 export interface RunOrchestrationJobData {
   runId: string;
   tenantId: string;
 }
 
-/**
- * Main service for the Run Engine.
- * Handles triggering runs, creating run steps, and computing step inputs.
- */
 @Injectable()
 export class RunEngineService {
   private readonly logger = new Logger(RunEngineService.name);
@@ -48,27 +35,17 @@ export class RunEngineService {
     private readonly dependencyGraphService: DependencyGraphService,
   ) {}
 
-  /**
-   * Trigger a new workflow run.
-   *
-   * @param workflowName Name of the workflow to execute
-   * @param triggerPayload Input data for the workflow
-   * @param workflowVersion Optional specific version
-   * @returns The created run ID
-   */
   async trigger(workflowName: string, triggerPayload: Record<string, unknown> = {}, workflowVersion?: string): Promise<string> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
 
-    // 1. Get workflow definition
     const workflow = this.workflowRegistryService.getWorkflow(workflowName, workflowVersion);
     if (!workflow) {
       throw new Error(`Workflow '${workflowName}' not found`);
     }
 
-    // 2. Create run record
     const run = this.runRepository.create({
       tenantId,
       workflowName: workflow.workflowName,
@@ -81,10 +58,8 @@ export class RunEngineService {
     const savedRun = await this.runRepository.save(run);
     this.logger.log(`Run created: ${savedRun.id} for workflow ${workflowName}`);
 
-    // 3. Create run steps
     await this.createRunSteps(savedRun.id, tenantId, workflow, triggerPayload);
 
-    // 4. Enqueue for orchestration
     await this.orchestrationQueue.add(
       'orchestrate',
       {
@@ -103,16 +78,7 @@ export class RunEngineService {
     return savedRun.id;
   }
 
-  /**
-   * Create RunStep records for all workflow steps.
-   *
-   * @param runId The run ID
-   * @param tenantId The tenant ID
-   * @param workflow The workflow specification
-   * @param triggerPayload The trigger payload for input computation
-   */
   async createRunSteps(runId: string, tenantId: string, workflow: WorkflowSpec, triggerPayload: Record<string, unknown>): Promise<void> {
-    // Create initial run context for input computation
     const context = createRunContext({
       runId,
       tenantId,
@@ -120,13 +86,10 @@ export class RunEngineService {
       triggerPayload,
     });
 
-    // Create steps in topological order
     const sortedSteps = this.dependencyGraphService.topologicalSort(workflow.steps);
-
     const runSteps: RunStep[] = [];
 
     for (const stepSpec of sortedSteps) {
-      // Compute initial input hash (will be recomputed during execution when dependencies complete)
       const initialInput = this.computeStepInput(stepSpec, context);
       const inputHash = this.inputHasherService.computeHash(initialInput);
 
@@ -148,13 +111,6 @@ export class RunEngineService {
     this.logger.log(`Created ${runSteps.length} run steps for run ${runId}`);
   }
 
-  /**
-   * Compute the input for a step using its inputSelector function.
-   *
-   * @param stepSpec The step specification
-   * @param context The run context
-   * @returns The computed input object
-   */
   computeStepInput(stepSpec: { inputSelector: (ctx: RunContext) => Record<string, unknown> }, context: RunContext): Record<string, unknown> {
     try {
       return stepSpec.inputSelector(context);
@@ -165,12 +121,6 @@ export class RunEngineService {
     }
   }
 
-  /**
-   * Get a run by ID.
-   *
-   * @param runId The run ID
-   * @returns The run entity or null
-   */
   async getRun(runId: string): Promise<Run | null> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -181,12 +131,6 @@ export class RunEngineService {
     });
   }
 
-  /**
-   * Get run with steps summary.
-   *
-   * @param runId The run ID
-   * @returns Run with step counts or null
-   */
   async getRunWithSummary(runId: string): Promise<(Run & { stepsSummary: Record<string, number> }) | null> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -201,7 +145,6 @@ export class RunEngineService {
       return null;
     }
 
-    // Get step counts by status
     const steps = await this.runStepRepository.find({
       where: { runId, tenantId },
     });
@@ -218,13 +161,6 @@ export class RunEngineService {
     return { ...run, stepsSummary };
   }
 
-  /**
-   * Get all steps for a run.
-   *
-   * @param runId The run ID
-   * @param statusFilter Optional status filter
-   * @returns Array of run steps
-   */
   async getRunSteps(runId: string, statusFilter?: StepStatusType): Promise<RunStep[]> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -246,13 +182,6 @@ export class RunEngineService {
     });
   }
 
-  /**
-   * Update run status.
-   *
-   * @param runId The run ID
-   * @param status New status
-   * @param error Optional error details
-   */
   async updateRunStatus(runId: string, status: RunStatusType, error?: { code: string; message: string; failedStepId?: string }): Promise<void> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -286,13 +215,6 @@ export class RunEngineService {
     await this.runRepository.save(run);
   }
 
-  /**
-   * Update run step status.
-   *
-   * @param stepId The run step ID
-   * @param status New status
-   * @param data Additional update data
-   */
   async updateRunStepStatus(
     stepId: string,
     status: StepStatusType,
@@ -348,12 +270,6 @@ export class RunEngineService {
     await this.runStepRepository.save(step);
   }
 
-  /**
-   * Get a run step by ID.
-   *
-   * @param stepId The run step ID
-   * @returns The run step or null
-   */
   async getRunStep(stepId: string): Promise<RunStep | null> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -364,13 +280,6 @@ export class RunEngineService {
     });
   }
 
-  /**
-   * Get a run step by run ID and step ID.
-   *
-   * @param runId The run ID
-   * @param stepId The step ID (from workflow definition)
-   * @returns The run step or null
-   */
   async getRunStepByStepId(runId: string, stepId: string): Promise<RunStep | null> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -381,14 +290,6 @@ export class RunEngineService {
     });
   }
 
-  /**
-   * Build run context from completed steps.
-   *
-   * @param runId The run ID
-   * @param workflow The workflow specification
-   * @param triggerPayload The original trigger payload
-   * @returns The run context with step outputs populated
-   */
   async buildRunContext(runId: string, workflow: WorkflowSpec, triggerPayload: Record<string, unknown>): Promise<RunContext> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {
@@ -402,7 +303,6 @@ export class RunEngineService {
       triggerPayload,
     });
 
-    // Get completed and skipped steps
     const completedSteps = await this.runStepRepository.find({
       where: {
         runId,
@@ -411,7 +311,6 @@ export class RunEngineService {
       },
     });
 
-    // Populate step outputs
     for (const step of completedSteps) {
       const output: StepOutput = {
         stepId: step.stepId,
@@ -426,11 +325,14 @@ export class RunEngineService {
     return context;
   }
 
-  /**
-   * Increment retry attempt for a step.
-   *
-   * @param stepId The run step ID
-   */
+  async updateRunStepInputHash(stepId: string, inputHash: string): Promise<void> {
+    const tenantId = this.tenantClsService.getTenantId();
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    await this.runStepRepository.update({ id: stepId, tenantId }, { inputHash });
+  }
+
   async incrementStepAttempt(stepId: string): Promise<void> {
     const tenantId = this.tenantClsService.getTenantId();
     if (!tenantId) {

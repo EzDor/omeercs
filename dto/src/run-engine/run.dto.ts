@@ -1,18 +1,9 @@
 import { IsString, IsObject, IsOptional, IsUUID, IsEnum } from 'class-validator';
 
-/**
- * Run status enum
- */
 export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-/**
- * Trigger type enum
- */
 export type TriggerType = 'initial' | 'update';
 
-/**
- * Summary of step statuses within a run
- */
 export interface StepsSummary {
   total: number;
   pending: number;
@@ -22,9 +13,6 @@ export interface StepsSummary {
   failed: number;
 }
 
-/**
- * Run error details
- */
 export interface RunError {
   code: string;
   message: string;
@@ -32,9 +20,6 @@ export interface RunError {
   timestamp: Date;
 }
 
-/**
- * Request to trigger a new workflow run
- */
 export class TriggerRunRequest {
   @IsString()
   workflowName: string;
@@ -48,9 +33,6 @@ export class TriggerRunRequest {
   triggerPayload?: Record<string, unknown>;
 }
 
-/**
- * Response after triggering a run
- */
 export class TriggerRunResponse {
   @IsUUID()
   runId: string;
@@ -63,9 +45,6 @@ export class TriggerRunResponse {
   message?: string;
 }
 
-/**
- * Run details response
- */
 export class RunResponse {
   id: string;
   workflowName: string;
@@ -82,9 +61,6 @@ export class RunResponse {
   updatedAt: Date;
 }
 
-/**
- * Response containing list of runs
- */
 export class RunListResponse {
   runs: RunResponse[];
   total: number;

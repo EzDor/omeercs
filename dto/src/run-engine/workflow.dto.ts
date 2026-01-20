@@ -1,24 +1,15 @@
 import { RunContext } from './run-context.dto';
 
-/**
- * Cache policy configuration for a workflow step
- */
 export interface CachePolicy {
   enabled: boolean;
   scope: 'global' | 'run_only';
 }
 
-/**
- * Retry policy configuration for a workflow step
- */
 export interface RetryPolicy {
-  maxAttempts: number; // 1-5
-  backoffMs: number; // Initial backoff (exponential)
+  maxAttempts: number;
+  backoffMs: number;
 }
 
-/**
- * Step specification within a workflow definition
- */
 export interface StepSpec {
   stepId: string;
   skillId: string;
@@ -29,9 +20,6 @@ export interface StepSpec {
   description?: string;
 }
 
-/**
- * Workflow specification defining the DAG structure
- */
 export interface WorkflowSpec {
   workflowName: string;
   version: string;

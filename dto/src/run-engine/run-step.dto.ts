@@ -1,11 +1,5 @@
-/**
- * Step status enum
- */
 export type StepStatus = 'pending' | 'running' | 'skipped' | 'completed' | 'failed';
 
-/**
- * Step error details
- */
 export interface StepError {
   code: string;
   message: string;
@@ -14,9 +8,6 @@ export interface StepError {
   details?: Record<string, unknown>;
 }
 
-/**
- * Run step details
- */
 export class RunStep {
   id: string;
   stepId: string;
@@ -32,17 +23,11 @@ export class RunStep {
   durationMs?: number;
 }
 
-/**
- * Response containing run steps
- */
 export class RunStepsResponse {
   runId: string;
   steps: RunStep[];
 }
 
-/**
- * Artifact details
- */
 export class ArtifactDto {
   id: string;
   stepId?: string;
@@ -55,9 +40,6 @@ export class ArtifactDto {
   createdAt: Date;
 }
 
-/**
- * Response containing artifacts for a run
- */
 export class ArtifactsResponse {
   runId: string;
   artifacts: ArtifactDto[];

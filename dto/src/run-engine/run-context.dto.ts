@@ -1,6 +1,3 @@
-/**
- * Output from a completed or skipped step
- */
 export interface StepOutput {
   stepId: string;
   status: 'completed' | 'skipped' | 'failed';
@@ -8,14 +5,11 @@ export interface StepOutput {
   data?: Record<string, unknown>;
 }
 
-/**
- * Runtime context passed to step inputSelectors
- */
 export interface RunContext {
   runId: string;
   tenantId: string;
   workflowName: string;
   triggerPayload: Record<string, unknown>;
   stepOutputs: Map<string, StepOutput>;
-  artifacts: Map<string, string[]>; // stepId → artifactIds
+  artifacts: Map<string, string[]>;
 }
