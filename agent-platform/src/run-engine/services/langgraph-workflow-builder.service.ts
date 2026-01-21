@@ -6,6 +6,15 @@ import { RunStateAnnotation, RunStateType } from '../interfaces/langgraph-run-st
 import { CachedStepExecutorService } from './cached-step-executor.service';
 import { DependencyGraphService } from './dependency-graph.service';
 
+type NodeFunction = (state: RunStateType) => Promise<Partial<RunStateType>>;
+type ConditionFunction = (state: RunStateType) => string;
+
+interface StateGraphBuilder {
+  addNode(name: string, fn: NodeFunction): void;
+  addEdge(from: string, to: string): void;
+  addConditionalEdges(from: string, condition: ConditionFunction, mapping: Record<string, string>): void;
+}
+
 @Injectable()
 export class LangGraphWorkflowBuilderService {
   private readonly logger = new Logger(LangGraphWorkflowBuilderService.name);
@@ -23,8 +32,8 @@ export class LangGraphWorkflowBuilderService {
       throw new Error(`Workflow has cycles: ${validation.error}`);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const graph: any = new StateGraph(RunStateAnnotation);
+    const stateGraph = new StateGraph(RunStateAnnotation);
+    const graph = stateGraph as unknown as StateGraphBuilder;
 
     for (const stepSpec of workflow.steps) {
       const nodeFunction = this.cachedStepExecutor.createNodeFunction(stepSpec);
@@ -58,7 +67,7 @@ export class LangGraphWorkflowBuilderService {
 
     this.logger.log(`LangGraph built with ${workflow.steps.length} nodes, ${entrySteps.length} entry points, ${terminalSteps.size} terminal steps`);
 
-    return graph as StateGraph<RunStateType>;
+    return stateGraph as StateGraph<RunStateType>;
   }
 
   private buildDependentsMap(steps: StepSpec[]): Map<string, string[]> {
