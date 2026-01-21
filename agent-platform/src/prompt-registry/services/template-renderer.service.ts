@@ -8,6 +8,10 @@ import type { LoadedPromptTemplate, LoadedConfigTemplate } from '../interfaces/r
 export class TemplateRendererService {
   private readonly logger = new Logger(TemplateRendererService.name);
 
+  constructor() {
+    (Mustache as { escape: (text: string) => string }).escape = (text: string) => text;
+  }
+
   renderPrompt(template: LoadedPromptTemplate, vars: Record<string, unknown>): RegistryResult<RenderedPrompt> {
     const validationResult = this.validateVars(template.compiledVarsValidator, vars, template.promptId);
     if (!validationResult.ok) {
@@ -79,8 +83,6 @@ export class TemplateRendererService {
         },
       };
     }
-
-    Object.assign(vars, varsWithDefaults);
 
     return { ok: true, data: undefined };
   }

@@ -281,11 +281,11 @@ export class TemplateLoaderService {
     };
   }
 
-  private compileSchema(schema: JSONSchema, cacheKey: string): ValidateFunction {
+  private compileSchema(schema: JSONSchema, schemaId: string): ValidateFunction {
     try {
       return this.ajv.compile(schema);
     } catch (error) {
-      throw new Error(`Invalid JSON Schema (${cacheKey}): ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Invalid JSON Schema (${schemaId}): ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
