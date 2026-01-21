@@ -19,6 +19,11 @@
       "import": "./dist/providers/index.js",
       "require": "./dist/providers/index.js",
       "types": "./dist/providers/index.d.ts"
+    },
+    "./src/prompt-registry": {
+      "import": "./dist/prompt-registry/index.js",
+      "require": "./dist/prompt-registry/index.js",
+      "types": "./dist/prompt-registry/index.d.ts"
     }
   },
   "scripts": {

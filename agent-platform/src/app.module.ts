@@ -6,6 +6,7 @@ import { WorkflowOrchestrationModule } from 'src/workflow-orchestration/workflow
 import { HealthModule } from 'src/health/health.module';
 import { SkillsModule } from 'src/skills/skills.module';
 import { RunEngineModule } from 'src/run-engine/run-engine.module';
+import { PromptRegistryModule } from 'src/prompt-registry/prompt-registry.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UnhandledExceptionFilter } from '@agentic-template/common/src/filters/unhandled-exception.filter';
@@ -23,6 +24,7 @@ import { ProvidersModule } from '@agentic-template/common/src/providers';
     SkillsModule,
     ProvidersModule,
     RunEngineModule,
+    PromptRegistryModule,
   ],
   controllers: [AppController],
   providers: [
