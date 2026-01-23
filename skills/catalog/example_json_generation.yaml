@@ -1,0 +1,73 @@
+skill_id: example_json_generation
+version: "1.0.0"
+title: Example JSON Generation Skill
+description: |
+  An example skill demonstrating the LLM_JSON_GENERATION template type.
+  Takes text input and generates structured JSON output with schema validation.
+  Showcases automatic retry on validation failure.
+
+tags:
+  - example
+  - generation
+  - json
+  - ai
+
+template_type: LLM_JSON_GENERATION
+template_config:
+  prompt_id: example_json_generation
+  prompt_version: "1.0.0"
+  model: claude-3-5-sonnet
+  temperature: 0.7
+  retry_on_validation_failure: true
+
+input_schema:
+  type: object
+  required:
+    - input_data
+  properties:
+    input_data:
+      type: string
+      description: The text input to process and structure
+      minLength: 1
+      maxLength: 5000
+    output_format:
+      type: string
+      description: Optional description of the desired output format
+
+output_schema:
+  type: object
+  required:
+    - result
+    - items
+  properties:
+    result:
+      type: string
+      description: A summary or processed version of the input
+    items:
+      type: array
+      items:
+        type: string
+      description: List of extracted or generated items
+    metadata:
+      type: object
+      properties:
+        processed_at:
+          type: string
+        input_length:
+          type: integer
+
+implementation:
+  type: ts_function
+  handler: null
+
+produces_artifacts: []
+
+policy:
+  max_runtime_sec: 60
+  network: allowlist
+  allowed_hosts:
+    - localhost:4000
+
+observability:
+  log_level_default: info
+  emit_metrics: true

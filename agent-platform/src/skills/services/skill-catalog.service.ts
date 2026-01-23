@@ -218,6 +218,33 @@ export class SkillCatalogService implements OnModuleInit {
       }
     }
 
+    // Validate template_type if present
+    if (desc.template_type !== undefined) {
+      if (!['LLM_JSON_GENERATION', 'LLM_REVIEW'].includes(desc.template_type as string)) {
+        errors.push({ skillId, field: 'template_type', message: 'template_type must be one of: LLM_JSON_GENERATION, LLM_REVIEW' });
+      }
+
+      // template_config is required when template_type is set
+      if (desc.template_config === undefined || desc.template_config === null) {
+        errors.push({ skillId, field: 'template_config', message: 'template_config is required when template_type is set' });
+      } else if (typeof desc.template_config !== 'object') {
+        errors.push({ skillId, field: 'template_config', message: 'template_config must be an object' });
+      } else {
+        const config = desc.template_config as Record<string, unknown>;
+
+        // Validate template_config based on template_type
+        if (desc.template_type === 'LLM_JSON_GENERATION') {
+          if (!config.prompt_id || typeof config.prompt_id !== 'string') {
+            errors.push({ skillId, field: 'template_config.prompt_id', message: 'prompt_id is required for LLM_JSON_GENERATION template' });
+          }
+        } else if (desc.template_type === 'LLM_REVIEW') {
+          if (!config.rubric_id || typeof config.rubric_id !== 'string') {
+            errors.push({ skillId, field: 'template_config.rubric_id', message: 'rubric_id is required for LLM_REVIEW template' });
+          }
+        }
+      }
+    }
+
     return { valid: errors.length === 0, errors };
   }
 

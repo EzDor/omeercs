@@ -5,6 +5,26 @@
 
 export type SkillImplementationType = 'ts_function' | 'http_call' | 'cli_command';
 
+export type SkillTemplateType = 'LLM_JSON_GENERATION' | 'LLM_REVIEW';
+
+export interface LlmJsonGenerationTemplateConfig {
+  prompt_id: string;
+  prompt_version?: string;
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+  retry_on_validation_failure?: boolean;
+}
+
+export interface LlmReviewTemplateConfig {
+  rubric_id: string;
+  rubric_version?: string;
+  evaluation_model?: string;
+  include_criteria_details?: boolean;
+}
+
+export type SkillTemplateConfig = LlmJsonGenerationTemplateConfig | LlmReviewTemplateConfig;
+
 export interface SkillImplementation {
   /** Implementation type */
   type: SkillImplementationType;
@@ -63,4 +83,8 @@ export interface SkillDescriptor {
   policy: SkillPolicy;
   /** Observability configuration */
   observability: SkillObservability;
+  /** Template type for LLM-based skill patterns (optional) */
+  template_type?: SkillTemplateType;
+  /** Template-specific configuration (required when template_type is set) */
+  template_config?: SkillTemplateConfig;
 }

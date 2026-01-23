@@ -5,7 +5,9 @@ import { WorkspaceService } from './services/workspace.service';
 import { SecretsService } from './services/secrets.service';
 import { ExecutionContextService } from './services/execution-context.service';
 import { SchemaValidatorService } from './services/schema-validator.service';
+import { LlmGenerationService } from './services/llm-generation.service';
 import { SkillCatalogService } from '../services/skill-catalog.service';
+import { PromptRegistryModule } from '../../prompt-registry/prompt-registry.module';
 
 /**
  * Module for skill execution services.
@@ -14,8 +16,8 @@ import { SkillCatalogService } from '../services/skill-catalog.service';
  * Note: TenantClsService is available globally via TenantClsModule (@Global).
  */
 @Module({
-  imports: [ConfigModule],
-  providers: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, SkillCatalogService],
-  exports: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService],
+  imports: [ConfigModule, PromptRegistryModule],
+  providers: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService, SkillCatalogService],
+  exports: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService],
 })
 export class SkillRunnerModule {}
