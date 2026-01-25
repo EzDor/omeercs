@@ -1,4 +1,4 @@
-import type { JSONSchema } from './prompt-template.interface';
+import type { JSONSchema } from './prompt-template.interface.js';
 
 export interface RubricCriterion {
   name: string;

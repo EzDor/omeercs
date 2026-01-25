@@ -1,4 +1,4 @@
-import { GenerationParams, GenerationResult, ProviderMetadata } from '../types';
+import { GenerationParams, GenerationResult, ProviderMetadata } from '../types/generation-params.interface';
 
 /**
  * Parameters specific to 3D asset generation.

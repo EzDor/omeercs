@@ -1,5 +1,5 @@
 import type { ValidateFunction } from 'ajv';
-import type { JSONSchema, ModelDefaults } from '@agentic-template/dto/src/prompt-registry';
+import type { JSONSchema, ModelDefaults } from '@agentic-template/dto/src/prompt-registry/prompt-template.interface';
 
 export interface LoadedPromptTemplate {
   promptId: string;

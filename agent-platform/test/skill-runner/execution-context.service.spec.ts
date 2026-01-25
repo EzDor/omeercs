@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ExecutionContextService } from '../../src/skills/skill-runner/services/execution-context.service';
 import { SecretsService } from '../../src/skills/skill-runner/services/secrets.service';
 import { WorkspaceService } from '../../src/skills/skill-runner/services/workspace.service';
-import { SkillDescriptor } from '@agentic-template/dto/src/skills';
+import { SkillDescriptor } from '@agentic-template/dto/src/skills/skill-descriptor.interface';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
 
 describe('ExecutionContextService', () => {

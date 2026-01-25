@@ -1,4 +1,4 @@
-import { SkillResult } from '@agentic-template/dto/src/skills';
+import { SkillResult } from '@agentic-template/dto/src/skills/skill-result.interface';
 
 /**
  * Context passed to skill handlers during execution

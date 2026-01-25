@@ -1,16 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as Mustache from 'mustache';
 import type { ValidateFunction, ErrorObject } from 'ajv';
-import type { RegistryResult, RenderedPrompt, RenderedConfig, ValidationError } from '@agentic-template/dto/src/prompt-registry';
+import type { RegistryResult, ValidationError } from '@agentic-template/dto/src/prompt-registry/registry-result.interface';
+import type { RenderedPrompt } from '@agentic-template/dto/src/prompt-registry/prompt-template.interface';
+import type { RenderedConfig } from '@agentic-template/dto/src/prompt-registry/config-template.interface';
 import type { LoadedPromptTemplate, LoadedConfigTemplate } from '../interfaces/registry-types';
 
 @Injectable()
 export class TemplateRendererService {
   private readonly logger = new Logger(TemplateRendererService.name);
-
-  constructor() {
-    (Mustache as { escape: (text: string) => string }).escape = (text: string) => text;
-  }
 
   renderPrompt(template: LoadedPromptTemplate, vars: Record<string, unknown>): RegistryResult<RenderedPrompt> {
     const validationResult = this.validateVars(template.compiledVarsValidator, vars, template.promptId);
@@ -19,7 +16,7 @@ export class TemplateRendererService {
     }
 
     try {
-      const content = Mustache.render(template.template, vars);
+      const content = this.renderFString(template.template, vars);
 
       return {
         ok: true,
@@ -114,11 +111,11 @@ export class TemplateRendererService {
 
     for (const [key, value] of Object.entries(obj)) {
       if (typeof value === 'string') {
-        result[key] = Mustache.render(value, vars);
+        result[key] = this.renderFString(value, vars);
       } else if (Array.isArray(value)) {
         result[key] = (value as unknown[]).map((item: unknown): unknown => {
           if (typeof item === 'string') {
-            return Mustache.render(item, vars);
+            return this.renderFString(item, vars);
           } else if (typeof item === 'object' && item !== null) {
             return this.renderObjectRecursively(item as Record<string, unknown>, vars);
           }
@@ -132,5 +129,32 @@ export class TemplateRendererService {
     }
 
     return result;
+  }
+
+  private renderFString(template: string, vars: Record<string, unknown>): string {
+    return template.replace(/\{([^{}]+)\}/g, (_match, key: string) => {
+      const value = this.getNestedValue(vars, key.trim());
+      return this.valueToString(value);
+    });
+  }
+
+  private getNestedValue(obj: Record<string, unknown>, path: string): unknown {
+    return path.split('.').reduce((current, part) => (current && typeof current === 'object' ? (current as Record<string, unknown>)[part] : undefined), obj as unknown);
+  }
+
+  private valueToString(value: unknown): string {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+    return '';
   }
 }

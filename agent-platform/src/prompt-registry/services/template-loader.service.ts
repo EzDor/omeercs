@@ -6,7 +6,7 @@ import matter from 'gray-matter';
 import * as semver from 'semver';
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
-import type { JSONSchema } from '@agentic-template/dto/src/prompt-registry';
+import type { JSONSchema } from '@agentic-template/dto/src/prompt-registry/prompt-template.interface';
 import { LoadedPromptTemplate, LoadedConfigTemplate, LoadedReviewRubric } from '../interfaces/registry-types';
 
 interface LoadResult<T> {
@@ -290,7 +290,7 @@ export class TemplateLoaderService {
   }
 
   extractTemplateVariables(template: string): string[] {
-    const regex = /\{\{([^{}#/^!>]+)\}\}/g;
+    const regex = /\{([^{}]+)\}/g;
     const variables = new Set<string>();
     let match: RegExpExecArray | null;
 

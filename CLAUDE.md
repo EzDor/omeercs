@@ -116,6 +116,7 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 ## General Coding Principles
 - **No code comments**: NEVER write code comments unless explicitly requested. Instead, extract the intended comment into a small, well-named function that makes the code self-documenting.
 - **No README files**: NEVER create a README.md unless explicitly requested.
+- **No barrel files (index.ts)**: NEVER create index.ts files that re-export from other files. Always import directly from the source file (e.g., import from './skill-result.interface' not from './index'). Exception: index.ts files that contain actual implementation logic (like webapp/src/router/index.ts which creates the Vue Router instance).
 
 ## .specify Directory
 Agentic workflow system for specification-driven development. Contains templates (spec, plan, tasks) and scripts for AI-assisted feature development. Used with Claude Code skills in `.claude/commands/`.
@@ -127,9 +128,9 @@ Agentic workflow system for specification-driven development. Contains templates
 - N/A (provider-hosted URLs returned directly, no platform storage layer) (003-provider-adapters)
 - TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, BullMQ, TypeORM, class-validator, class-transformer, existing SkillRunner service (004-run-engine)
 - PostgreSQL with TypeORM (new tables: runs, run_steps, step_cache); Valkey/Redis for step cache (TTL-based) (004-run-engine)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, Mustache (template rendering), Ajv (existing SchemaValidatorService), js-yaml (YAML frontmatter parsing) (005-prompt-config-registry)
+- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, f-string (template rendering), Ajv (existing SchemaValidatorService), js-yaml (YAML frontmatter parsing) (005-prompt-config-registry)
 - Filesystem at startup (no database for templates); PostgreSQL for run_steps.debug storage (existing) (005-prompt-config-registry)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (existing SchemaValidatorService), Mustache (existing PromptRegistryService), LiteLLMHttpClient (existing) (006-agent-layer-rules)
+- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (existing SchemaValidatorService), f-string (existing PromptRegistryService), LiteLLMHttpClient (existing) (006-agent-layer-rules)
 - PostgreSQL with TypeORM (existing Run/RunStep tables for debug storage); Filesystem for prompt templates (existing pattern) (006-agent-layer-rules)
 
 ## Recent Changes

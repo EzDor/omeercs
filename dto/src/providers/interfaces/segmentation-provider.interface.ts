@@ -1,4 +1,4 @@
-import { ProviderMetadata } from '../types';
+import { ProviderMetadata } from '../types/generation-params.interface';
 
 /**
  * Parameters specific to image segmentation.

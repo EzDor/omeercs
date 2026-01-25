@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ImageProviderAdapter, ImageGenerationParams, ImageGenerationResult, ProviderErrorCode } from '@agentic-template/dto/src/providers';
+import { ImageProviderAdapter, ImageGenerationParams, ImageGenerationResult } from '@agentic-template/dto/src/providers/interfaces/image-provider.interface';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { LiteLLMHttpClient } from '../../llm/litellm-http.client';
 import { LiteLLMClientFactory } from '../../llm/litellm-client.factory';
 import { ProviderError } from '../errors/provider.error';

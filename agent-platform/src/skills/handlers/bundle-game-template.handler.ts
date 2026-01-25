@@ -1,15 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  BundleGameTemplateInput,
-  BundleGameTemplateOutput,
-  BundleManifest,
-  BundledFileInfo,
-  SkillResult,
-  SkillArtifact,
-  skillSuccess,
-  skillFailure,
-} from '@agentic-template/dto/src/skills';
+import { BundleGameTemplateInput, BundleGameTemplateOutput, BundleManifest, BundledFileInfo } from '@agentic-template/dto/src/skills/bundle-game-template.dto';
+import { SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';

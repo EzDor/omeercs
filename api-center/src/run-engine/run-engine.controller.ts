@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, HttpCode, HttpStatus, Logger, ParseUUIDPipe } from '@nestjs/common';
 import { RunEngineApiService } from './services/run-engine-api.service';
-import { TriggerRunRequest, TriggerRunResponse, RunResponse } from '@agentic-template/dto/src/run-engine/run.dto';
-import { RunStepsResponse } from '@agentic-template/dto/src/run-engine/run-step.dto';
+import type { TriggerRunRequest, TriggerRunResponse, RunResponse } from '@agentic-template/dto/src/run-engine/run.dto';
+import type { RunStepsResponse } from '@agentic-template/dto/src/run-engine/run-step.dto';
 import { StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
 
 @Controller('runs')

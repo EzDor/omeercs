@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
-import { SkillDescriptor } from '@agentic-template/dto/src/skills';
+import type { SkillDescriptor } from '@agentic-template/dto/src/skills/skill-descriptor.interface';
 import { EnhancedSkillExecutionContext, SkillExecutionOptions } from '../interfaces/execution-context.interface';
 import { SkillPolicy, DEFAULT_SKILL_POLICY } from '../interfaces/skill-policy.interface';
 import { SecretsService } from './secrets.service';

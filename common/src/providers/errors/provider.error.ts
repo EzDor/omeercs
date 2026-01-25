@@ -1,4 +1,4 @@
-import { ProviderErrorCode } from '@agentic-template/dto/src/providers';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 
 /**
  * Error class for provider-related failures.
