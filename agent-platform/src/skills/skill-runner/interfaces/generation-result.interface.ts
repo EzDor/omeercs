@@ -42,6 +42,7 @@ export interface GenerationConfig {
   maxValidationRetries?: number;
   model?: string;
   temperature?: number;
+  maxTokens?: number;
 }
 
 export const GenerationErrorCodes = {

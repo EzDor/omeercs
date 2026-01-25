@@ -212,7 +212,7 @@ export class SkillCatalogService implements OnModuleInit {
         if (!impl.type || !['ts_function', 'http_call', 'cli_command'].includes(impl.type as string)) {
           errors.push({ skillId, field: 'implementation.type', message: 'implementation.type must be one of: ts_function, http_call, cli_command' });
         }
-        if (!impl.handler || typeof impl.handler !== 'string') {
+        if (!desc.template_type && (!impl.handler || typeof impl.handler !== 'string')) {
           errors.push({ skillId, field: 'implementation.handler', message: 'implementation.handler is required and must be a string' });
         }
       }

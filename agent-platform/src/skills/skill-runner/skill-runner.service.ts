@@ -264,6 +264,7 @@ export class SkillRunnerService {
       retryOnValidationFailure: templateConfig.retry_on_validation_failure !== false,
       model: templateConfig.model,
       temperature: templateConfig.temperature,
+      maxTokens: templateConfig.max_tokens,
     };
 
     // Execute generation

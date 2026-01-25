@@ -64,7 +64,7 @@ export class LlmGenerationService {
       // 2. Build LLM request
       const model = input.context?.model || config.model || promptResult.data.modelDefaults?.model || this.defaultModel;
       const temperature = input.context?.temperature ?? config.temperature ?? promptResult.data.modelDefaults?.temperature ?? 0.7;
-      const maxTokens = input.context?.maxTokens ?? promptResult.data.modelDefaults?.max_tokens ?? 4096;
+      const maxTokens = input.context?.maxTokens ?? config.maxTokens ?? promptResult.data.modelDefaults?.max_tokens ?? 4096;
 
       // 3. Call LLM with exponential backoff (FR-011)
       const llmCallStart = Date.now();
@@ -102,7 +102,7 @@ export class LlmGenerationService {
         const maxRetries = config.maxValidationRetries ?? 1;
 
         if (retryEnabled && maxRetries > 0) {
-          const retryResult = await this.retryWithValidationErrors<T>(input, config, validationResult.errors, model, temperature, maxTokens, timings);
+          const retryResult = await this.retryWithValidationErrors<T>(input, config, validationResult.errors, model, temperature, maxTokens, timings, startTime);
 
           if (retryResult) {
             return retryResult;
@@ -217,6 +217,7 @@ export class LlmGenerationService {
     temperature: number,
     maxTokens: number,
     timings: GenerationTimings,
+    startTime: number,
   ): Promise<GenerationResult<T> | null> {
     const retryStartTime = Date.now();
 
@@ -259,7 +260,7 @@ export class LlmGenerationService {
     const retryValidation = this.schemaValidatorService.validateOutput(config.outputSchema, retryData, config.promptId, 'generation_retry');
 
     if (!retryValidation.valid) {
-      timings.total = Date.now() - (timings.prompt_render + timings.llm_call + retryStartTime - Date.now());
+      timings.total = Date.now() - startTime;
       return {
         success: false,
         rawResponse: retryResponse,
@@ -269,6 +270,7 @@ export class LlmGenerationService {
       };
     }
 
+    timings.total = Date.now() - startTime;
     return {
       success: true,
       data: retryData,
