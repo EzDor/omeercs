@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ImageProviderAdapter, ProviderErrorCode, ProviderInfo } from '@agentic-template/dto/src/providers';
+import { ImageProviderAdapter } from '@agentic-template/dto/src/providers/interfaces/image-provider.interface';
+import { ProviderInfo } from '@agentic-template/dto/src/providers/interfaces/provider-registry.interface';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { ProviderError } from '../errors/provider.error';
 import { StabilityAdapter } from '../adapters/stability.adapter';
 

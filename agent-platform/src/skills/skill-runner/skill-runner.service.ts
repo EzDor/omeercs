@@ -2,12 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
 import { SkillResult, SkillDebugInfo, skillSuccess } from '@agentic-template/dto/src/skills/skill-result.interface';
+import type { SkillDescriptor, LlmJsonGenerationTemplateConfig } from '@agentic-template/dto/src/skills/skill-descriptor.interface';
 import { SkillCatalogService } from '../services/skill-catalog.service';
 import { WorkspaceService } from './services/workspace.service';
 import { ExecutionContextService } from './services/execution-context.service';
 import { SchemaValidatorService } from './services/schema-validator.service';
+import { LlmGenerationService } from './services/llm-generation.service';
 import { SkillExecutionOptions, EnhancedSkillExecutionContext } from './interfaces/execution-context.interface';
 import { SkillTimeoutException } from './exceptions/skill-timeout.exception';
+import type { GenerationInput, GenerationConfig } from './interfaces/generation-result.interface';
 
 /**
  * Service for executing skills with full lifecycle management.
@@ -24,6 +27,7 @@ export class SkillRunnerService {
     private readonly workspaceService: WorkspaceService,
     private readonly executionContextService: ExecutionContextService,
     private readonly schemaValidatorService: SchemaValidatorService,
+    private readonly llmGenerationService: LlmGenerationService,
   ) {}
 
   /**
@@ -56,7 +60,12 @@ export class SkillRunnerService {
         return this.createErrorResult<TOutput>(options?.version ? 'VERSION_NOT_FOUND' : 'SKILL_NOT_FOUND', errorMsg, skillId, options?.version || 'unknown', 'unknown', timings);
       }
 
-      // 2. Get skill handler
+      // 2. Check for template type routing (LLM-based skill patterns)
+      if (descriptor.template_type) {
+        return this.executeTemplateSkill<TInput, TOutput>(descriptor, input, options, timings, startTime);
+      }
+
+      // 3. Get skill handler (for non-template skills)
       const handler = this.catalogService.getHandler(skillId);
       if (!handler) {
         timings.total = Date.now() - startTime;
@@ -162,6 +171,129 @@ export class SkillRunnerService {
         await this.workspaceService.cleanupWorkspace(workspaceDir);
       }
     }
+  }
+
+  /**
+   * Execute a template-based skill (LLM_JSON_GENERATION or LLM_REVIEW).
+   */
+  private async executeTemplateSkill<TInput, TOutput>(
+    descriptor: SkillDescriptor,
+    input: TInput,
+    options: SkillExecutionOptions | undefined,
+    timings: { total: number; [step: string]: number },
+    startTime: number,
+  ): Promise<SkillResult<TOutput>> {
+    const runId = this.generateRunId();
+
+    // Validate input against skill's input schema
+    const inputValidationStart = Date.now();
+    if (descriptor.input_schema) {
+      const inputValidation = this.schemaValidatorService.validateInput(descriptor.input_schema, input, descriptor.skill_id, descriptor.version);
+
+      if (!inputValidation.valid) {
+        timings.input_validation = Date.now() - inputValidationStart;
+        timings.total = Date.now() - startTime;
+        return this.createErrorResult<TOutput>(
+          'INPUT_VALIDATION_FAILED',
+          `Input validation failed: ${inputValidation.errors.map((e) => e.message).join(', ')}`,
+          descriptor.skill_id,
+          descriptor.version,
+          runId,
+          timings,
+        );
+      }
+    }
+    timings.input_validation = Date.now() - inputValidationStart;
+
+    // Route to appropriate template handler
+    switch (descriptor.template_type) {
+      case 'LLM_JSON_GENERATION':
+        return this.executeLlmJsonGeneration<TInput, TOutput>(descriptor, input, timings, startTime, runId);
+
+      case 'LLM_REVIEW':
+        // LLM_REVIEW will be implemented in User Story 2
+        timings.total = Date.now() - startTime;
+        return this.createErrorResult<TOutput>('NOT_IMPLEMENTED', 'LLM_REVIEW template type not yet implemented', descriptor.skill_id, descriptor.version, runId, timings);
+
+      default:
+        timings.total = Date.now() - startTime;
+        return this.createErrorResult<TOutput>(
+          'UNKNOWN_TEMPLATE_TYPE',
+          `Unknown template type: ${descriptor.template_type}`,
+          descriptor.skill_id,
+          descriptor.version,
+          runId,
+          timings,
+        );
+    }
+  }
+
+  /**
+   * Execute LLM_JSON_GENERATION template skill.
+   */
+  private async executeLlmJsonGeneration<TInput, TOutput>(
+    descriptor: SkillDescriptor,
+    input: TInput,
+    timings: { total: number; [step: string]: number },
+    startTime: number,
+    runId: string,
+  ): Promise<SkillResult<TOutput>> {
+    const templateConfig = descriptor.template_config as LlmJsonGenerationTemplateConfig;
+
+    if (!templateConfig?.prompt_id) {
+      timings.total = Date.now() - startTime;
+      return this.createErrorResult<TOutput>(
+        'INVALID_TEMPLATE_CONFIG',
+        'LLM_JSON_GENERATION requires prompt_id in template_config',
+        descriptor.skill_id,
+        descriptor.version,
+        runId,
+        timings,
+      );
+    }
+
+    // Build generation input and config
+    const generationInput: GenerationInput = {
+      variables: input as Record<string, unknown>,
+    };
+
+    const generationConfig: GenerationConfig = {
+      promptId: templateConfig.prompt_id,
+      promptVersion: templateConfig.prompt_version,
+      outputSchema: descriptor.output_schema,
+      retryOnValidationFailure: templateConfig.retry_on_validation_failure !== false,
+      model: templateConfig.model,
+      temperature: templateConfig.temperature,
+      maxTokens: templateConfig.max_tokens,
+    };
+
+    // Execute generation
+    const executionStart = Date.now();
+    const generationResult = await this.llmGenerationService.generate<TOutput>(generationInput, generationConfig);
+    timings.execution = Date.now() - executionStart;
+    timings.total = Date.now() - startTime;
+
+    // Convert GenerationResult to SkillResult
+    const debug: SkillDebugInfo = {
+      timings_ms: {
+        ...timings,
+        ...generationResult.timings_ms,
+      },
+    };
+
+    if (generationResult.success) {
+      return skillSuccess<TOutput>(generationResult.data as TOutput, [], debug);
+    }
+
+    // Generation failed
+    const errorMessages = generationResult.validationErrors?.map((e) => e.message).join(', ') || 'Generation failed';
+    return {
+      ok: false,
+      error: errorMessages,
+      error_code: 'GENERATION_FAILED',
+      artifacts: [],
+      debug,
+    };
   }
 
   /**

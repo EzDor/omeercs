@@ -1,6 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ProvidersModule } from '@agentic-template/common/src/providers';
+import { ProvidersModule } from '@agentic-template/common/src/providers/providers.module';
 import { SkillCatalogService } from './services/skill-catalog.service';
 import { SkillRunnerModule } from './skill-runner/skill-runner.module';
 

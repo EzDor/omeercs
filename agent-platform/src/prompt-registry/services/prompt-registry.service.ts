@@ -1,5 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import type { PromptTemplate, RenderedPrompt, ConfigTemplate, RenderedConfig, ReviewRubric, RegistryResult, RubricCriterion } from '@agentic-template/dto/src/prompt-registry';
+import type { PromptTemplate, RenderedPrompt } from '@agentic-template/dto/src/prompt-registry/prompt-template.interface';
+import type { ConfigTemplate, RenderedConfig } from '@agentic-template/dto/src/prompt-registry/config-template.interface';
+import type { ReviewRubric, RubricCriterion } from '@agentic-template/dto/src/prompt-registry/review-rubric.interface';
+import type { RegistryResult } from '@agentic-template/dto/src/prompt-registry/registry-result.interface';
 import { TemplateLoaderService } from './template-loader.service';
 import { TemplateRendererService } from './template-renderer.service';
 import type { LoadedPromptTemplate, LoadedConfigTemplate, LoadedReviewRubric, PromptRegistryState } from '../interfaces/registry-types';

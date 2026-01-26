@@ -6,7 +6,7 @@ import { SkillCatalogService } from '../../src/skills/services/skill-catalog.ser
 import { ExecutionContextService } from '../../src/skills/skill-runner/services/execution-context.service';
 import { WorkspaceService } from '../../src/skills/skill-runner/services/workspace.service';
 import { SchemaValidatorService } from '../../src/skills/skill-runner/services/schema-validator.service';
-import { SkillDescriptor } from '@agentic-template/dto/src/skills';
+import { SkillDescriptor } from '@agentic-template/dto/src/skills/skill-descriptor.interface';
 import { EnhancedSkillExecutionContext } from '../../src/skills/skill-runner/interfaces/execution-context.interface';
 import { SkillHandler } from '../../src/skills/interfaces/skill-handler.interface';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';

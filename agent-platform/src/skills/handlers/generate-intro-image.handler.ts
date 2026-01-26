@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ImageProviderRegistry } from '@agentic-template/common/src/providers';
-import { ProviderError } from '@agentic-template/common/src/providers';
-import { GenerateIntroImageInput, GenerateIntroImageOutput, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
+import { ImageProviderRegistry } from '@agentic-template/common/src/providers/registries/image-provider.registry';
+import { ProviderError } from '@agentic-template/common/src/providers/errors/provider.error';
+import { GenerateIntroImageInput, GenerateIntroImageOutput } from '@agentic-template/dto/src/skills/generate-intro-image.dto';
+import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs/promises';
 import * as path from 'path';

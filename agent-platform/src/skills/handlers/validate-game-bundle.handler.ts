@@ -7,12 +7,9 @@ import {
   ValidationSummary,
   ValidationChecks,
   BundlePerformanceMetrics,
-  BundleManifest,
-  SkillResult,
-  SkillArtifact,
-  skillSuccess,
-  skillFailure,
-} from '@agentic-template/dto/src/skills';
+} from '@agentic-template/dto/src/skills/validate-game-bundle.dto';
+import { BundleManifest } from '@agentic-template/dto/src/skills/bundle-game-template.dto';
+import { SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';

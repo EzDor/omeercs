@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
 import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
-import { GameConfigFromTemplateInput, GameConfigOutput, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
+import { GameConfigFromTemplateInput, GameConfigOutput } from '@agentic-template/dto/src/skills/game-config.dto';
+import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 
 const GAME_CONFIG_SYSTEM_PROMPT = `You are a game configuration expert. Your task is to generate complete, schema-validated game_config.json files for interactive marketing games.

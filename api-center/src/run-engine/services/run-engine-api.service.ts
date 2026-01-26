@@ -10,8 +10,8 @@ import { Run } from '@agentic-template/dao/src/entities/run.entity';
 import { RunStep, StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
 import { Artifact } from '@agentic-template/dao/src/entities/artifact.entity';
 
-import { TriggerRunRequest, TriggerRunResponse, RunResponse, RunStatus, StepsSummary } from '@agentic-template/dto/src/run-engine/run.dto';
-import { RunStepsResponse, RunStep as RunStepDto, ArtifactsResponse, ArtifactDto } from '@agentic-template/dto/src/run-engine/run-step.dto';
+import type { TriggerRunRequest, TriggerRunResponse, RunResponse, RunStatus, StepsSummary } from '@agentic-template/dto/src/run-engine/run.dto';
+import type { RunStepsResponse, RunStep as RunStepDto, ArtifactsResponse, ArtifactDto } from '@agentic-template/dto/src/run-engine/run-step.dto';
 
 export interface RunOrchestrationJobData {
   runId: string;

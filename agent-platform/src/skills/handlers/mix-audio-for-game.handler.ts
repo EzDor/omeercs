@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MixAudioForGameInput, MixAudioForGameOutput, NormalizedAudioFile, SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills';
+import { MixAudioForGameInput, MixAudioForGameOutput, NormalizedAudioFile } from '@agentic-template/dto/src/skills/mix-audio-for-game.dto';
+import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';
