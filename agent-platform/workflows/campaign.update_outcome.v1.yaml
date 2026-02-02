@@ -1,0 +1,134 @@
+workflow_name: campaign.update_outcome
+version: "1.0.0"
+description: Update win and/or lose outcome videos for an existing campaign
+
+steps:
+  # Step 1: Win Outcome Video
+  - step_id: outcome_win
+    skill_id: generate_outcome_video_win
+    depends_on: []
+    description: Generate new win outcome video
+    input_selector:
+      style_guide:
+        operation: merge
+        inputs:
+          - source: base_run
+            step_id: plan
+            path: data.style_guide
+          - source: trigger
+            path: outcome_overrides.style_guide
+      outcome_text:
+        operation: merge
+        inputs:
+          - source: base_run
+            step_id: plan
+            path: data.win_message
+          - source: trigger
+            path: outcome_overrides.win_message
+      brand_assets:
+        source: trigger
+        path: brand_assets
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 3000
+
+  # Step 2: Lose Outcome Video
+  - step_id: outcome_lose
+    skill_id: generate_outcome_video_lose
+    depends_on: []
+    description: Generate new lose outcome video
+    input_selector:
+      style_guide:
+        operation: merge
+        inputs:
+          - source: base_run
+            step_id: plan
+            path: data.style_guide
+          - source: trigger
+            path: outcome_overrides.style_guide
+      outcome_text:
+        operation: merge
+        inputs:
+          - source: base_run
+            step_id: plan
+            path: data.lose_message
+          - source: trigger
+            path: outcome_overrides.lose_message
+      brand_assets:
+        source: trigger
+        path: brand_assets
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 3000
+
+  # Step 3: Campaign Manifest
+  - step_id: manifest
+    skill_id: assemble_campaign_manifest
+    depends_on: [outcome_win, outcome_lose]
+    description: Reassemble campaign manifest with new outcome videos
+    input_selector:
+      campaign_id:
+        source: trigger
+        path: campaign_id
+      intro_image:
+        source: base_run
+        step_id: intro_image
+        path: outputArtifactIds[0]
+      button_segmentation:
+        source: base_run
+        step_id: intro_button_segmentation
+        path: data
+      intro_video:
+        source: base_run
+        step_id: intro_video
+        path: outputArtifactIds[0]
+      game_bundle:
+        source: base_run
+        step_id: bundle_game
+        path: outputArtifactIds[0]
+      outcome_win:
+        source: step_output
+        step_id: outcome_win
+        path: outputArtifactIds[0]
+      outcome_lose:
+        source: step_output
+        step_id: outcome_lose
+        path: outputArtifactIds[0]
+      plan_data:
+        source: base_run
+        step_id: plan
+        path: data
+    cache_policy:
+      enabled: false
+      scope: run_only
+    retry_policy:
+      max_attempts: 1
+      backoff_ms: 1000
+
+  # Step 4: Smoke Review (Optional)
+  - step_id: review_smoke
+    skill_id: review_asset_quality
+    depends_on: [manifest]
+    description: Optional smoke test review of updated outcomes
+    input_selector:
+      manifest:
+        source: step_output
+        step_id: manifest
+        path: data
+      review_criteria:
+        source: constants
+        value:
+          check_brand_consistency: true
+          check_technical_quality: true
+    cache_policy:
+      enabled: false
+      scope: run_only
+    retry_policy:
+      max_attempts: 1
+      backoff_ms: 1000
