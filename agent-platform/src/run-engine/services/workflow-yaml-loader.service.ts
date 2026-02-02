@@ -11,6 +11,7 @@ import type { WorkflowSpec } from '../interfaces/workflow-spec.interface';
 import type { StepSpec, CachePolicy, RetryPolicy } from '../interfaces/step-spec.interface';
 import { WorkflowRegistryService } from './workflow-registry.service';
 import { InputSelectorInterpreterService } from './input-selector-interpreter.service';
+import { DependencyGraphService } from './dependency-graph.service';
 import { SkillCatalogService } from '../../skills/services/skill-catalog.service';
 import * as workflowYamlSchema from '../schemas/workflow-yaml.schema.json';
 import * as workflowIndexSchema from '../schemas/workflow-index.schema.json';
@@ -37,6 +38,7 @@ export class WorkflowYamlLoaderService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly workflowRegistryService: WorkflowRegistryService,
     private readonly inputSelectorInterpreterService: InputSelectorInterpreterService,
+    private readonly dependencyGraphService: DependencyGraphService,
     private readonly skillCatalogService: SkillCatalogService,
   ) {
     this.workflowsPath = this.resolveWorkflowsPath();
@@ -102,7 +104,7 @@ export class WorkflowYamlLoaderService implements OnModuleInit {
 
     try {
       const content = fs.readFileSync(indexPath, 'utf-8');
-      const indexYaml = yaml.load(content) as WorkflowIndexYaml;
+      const indexYaml = yaml.load(content, { schema: yaml.JSON_SCHEMA }) as WorkflowIndexYaml;
 
       const validation = this.validateAgainstSchema(indexYaml, workflowIndexSchema as Record<string, unknown>);
       if (!validation.valid) {
@@ -128,6 +130,16 @@ export class WorkflowYamlLoaderService implements OnModuleInit {
     const filename = entry.file || `${entry.workflow_name}.v${this.extractMajorVersion(entry.version)}.yaml`;
     const filePath = path.join(this.workflowsPath, filename);
 
+    const resolvedPath = path.resolve(filePath);
+    const resolvedBase = path.resolve(this.workflowsPath);
+    if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
+      this.loadErrors.push({
+        workflowName: entry.workflow_name,
+        message: `Path traversal detected: ${filename}`,
+      });
+      return null;
+    }
+
     if (!fs.existsSync(filePath)) {
       this.loadErrors.push({
         workflowName: entry.workflow_name,
@@ -138,7 +150,7 @@ export class WorkflowYamlLoaderService implements OnModuleInit {
 
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
-      const workflowYaml = yaml.load(content) as WorkflowYaml;
+      const workflowYaml = yaml.load(content, { schema: yaml.JSON_SCHEMA }) as WorkflowYaml;
       return workflowYaml;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -237,6 +249,22 @@ export class WorkflowYamlLoaderService implements OnModuleInit {
       return false;
     }
 
+    if (workflowYaml.workflow_name !== entry.workflow_name) {
+      this.loadErrors.push({
+        workflowName: entry.workflow_name,
+        message: `Name mismatch: index='${entry.workflow_name}', file='${workflowYaml.workflow_name}'`,
+      });
+      return false;
+    }
+
+    if (workflowYaml.version !== entry.version) {
+      this.loadErrors.push({
+        workflowName: entry.workflow_name,
+        message: `Version mismatch: index='${entry.version}', file='${workflowYaml.version}'`,
+      });
+      return false;
+    }
+
     const schemaValidation = this.validateAgainstSchema(workflowYaml, workflowYamlSchema as Record<string, unknown>);
     if (!schemaValidation.valid) {
       for (const error of schemaValidation.errors) {
@@ -262,6 +290,16 @@ export class WorkflowYamlLoaderService implements OnModuleInit {
 
     try {
       const workflowSpec = this.compileToWorkflowSpec(workflowYaml);
+
+      const cycleValidation = this.dependencyGraphService.validateNoCycles(workflowSpec.steps);
+      if (!cycleValidation.valid) {
+        this.loadErrors.push({
+          workflowName: entry.workflow_name,
+          message: `Cyclic dependency: ${cycleValidation.error}`,
+        });
+        return false;
+      }
+
       this.workflowRegistryService.register(workflowSpec);
       this.logger.log(`Registered workflow: ${entry.workflow_name} v${entry.version} with ${workflowYaml.steps.length} steps`);
       return true;

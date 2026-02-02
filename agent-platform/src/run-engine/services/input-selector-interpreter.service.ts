@@ -17,6 +17,7 @@ import { PromptRegistryService } from '../../prompt-registry/services/prompt-reg
 @Injectable()
 export class InputSelectorInterpreterService {
   private readonly logger = new Logger(InputSelectorInterpreterService.name);
+  private readonly DANGEROUS_PROPERTIES = new Set(['__proto__', 'constructor', 'prototype']);
 
   constructor(private readonly promptRegistryService: PromptRegistryService) {}
 
@@ -139,10 +140,21 @@ export class InputSelectorInterpreterService {
 
     return (ctx: RunContext) => {
       const result: Record<string, unknown> = {};
+      const seen = new WeakSet<object>();
+
       for (const resolver of compiledInputs) {
         const value = resolver(ctx);
         if (value && typeof value === 'object' && !Array.isArray(value)) {
-          Object.assign(result, value);
+          if (seen.has(value as object)) {
+            throw new Error('Circular reference detected in merge operation');
+          }
+          seen.add(value as object);
+
+          for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+            if (!this.DANGEROUS_PROPERTIES.has(key)) {
+              result[key] = val;
+            }
+          }
         } else {
           throw new Error('Merge operation requires all inputs to be objects');
         }
@@ -186,11 +198,14 @@ export class InputSelectorInterpreterService {
 
       if (Array.isArray(current)) {
         const index = parseInt(part, 10);
-        if (isNaN(index)) {
+        if (isNaN(index) || index < 0 || index >= current.length) {
           return undefined;
         }
         current = current[index];
       } else if (typeof current === 'object') {
+        if (this.DANGEROUS_PROPERTIES.has(part)) {
+          return undefined;
+        }
         current = (current as Record<string, unknown>)[part];
       } else {
         return undefined;
@@ -200,25 +215,28 @@ export class InputSelectorInterpreterService {
     return current;
   }
 
-  private parsePath(path: string): string[] {
+  private parsePath(pathStr: string): string[] {
     const result: string[] = [];
     let current = '';
-    let inBracket = false;
+    let bracketDepth = 0;
 
-    for (const char of path) {
+    for (const char of pathStr) {
       if (char === '[') {
         if (current) {
           result.push(current);
           current = '';
         }
-        inBracket = true;
+        bracketDepth++;
       } else if (char === ']') {
+        bracketDepth--;
+        if (bracketDepth < 0) {
+          throw new Error(`Malformed path: unbalanced brackets in '${pathStr}'`);
+        }
         if (current) {
           result.push(current);
           current = '';
         }
-        inBracket = false;
-      } else if (char === '.' && !inBracket) {
+      } else if (char === '.' && bracketDepth === 0) {
         if (current) {
           result.push(current);
           current = '';
@@ -226,6 +244,10 @@ export class InputSelectorInterpreterService {
       } else {
         current += char;
       }
+    }
+
+    if (bracketDepth !== 0) {
+      throw new Error(`Malformed path: unclosed bracket in '${pathStr}'`);
     }
 
     if (current) {
