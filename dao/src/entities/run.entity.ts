@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import type { RunStep } from './run-step.entity';
+import type { CampaignContext } from '@agentic-template/dto/src/campaign-context/campaign-context.interface';
 
 /**
  * Run status enum type
@@ -53,6 +54,9 @@ export class Run extends BaseEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   error?: RunErrorJson;
+
+  @Column({ type: 'jsonb', nullable: true })
+  context?: CampaignContext;
 
   @Column({ name: 'started_at', type: 'timestamp with time zone', nullable: true })
   startedAt?: Date;
