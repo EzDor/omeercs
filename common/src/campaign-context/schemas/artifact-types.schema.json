@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "artifact-types.schema.json",
+  "title": "Artifact Types Configuration",
+  "description": "Schema for registering custom artifact reference types",
+  "type": "object",
+  "properties": {
+    "customTypes": {
+      "type": "array",
+      "description": "List of custom artifact types to register",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique identifier for the artifact type (snake_case)",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "minLength": 2,
+            "maxLength": 50
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of this artifact type",
+            "maxLength": 500
+          }
+        },
+        "required": ["name", "description"],
+        "additionalProperties": false
+      },
+      "maxItems": 38,
+      "uniqueItems": true
+    }
+  },
+  "required": ["customTypes"],
+  "additionalProperties": false
+}
