@@ -145,10 +145,10 @@ export class InputSelectorInterpreterService {
       for (const resolver of compiledInputs) {
         const value = resolver(ctx);
         if (value && typeof value === 'object' && !Array.isArray(value)) {
-          if (seen.has(value as object)) {
+          if (seen.has(value)) {
             throw new Error('Circular reference detected in merge operation');
           }
-          seen.add(value as object);
+          seen.add(value);
 
           for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
             if (!this.DANGEROUS_PROPERTIES.has(key)) {
