@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Run } from '@agentic-template/dao/src/entities/run.entity';
+import { QueryRunner, Repository } from 'typeorm';
+import { Run, type RunTriggerType } from '@agentic-template/dao/src/entities/run.entity';
 import { Artifact } from '@agentic-template/dao/src/entities/artifact.entity';
 import { RunStep } from '@agentic-template/dao/src/entities/run-step.entity';
 import { ReferenceTypeRegistryService } from './reference-type-registry.service';
@@ -17,6 +17,7 @@ import type { ArtifactData } from '@agentic-template/dto/src/campaign-context/ar
 import type { ArtifactReferences } from '@agentic-template/dto/src/campaign-context/artifact-references.interface';
 import type { ComputedData } from '@agentic-template/dto/src/campaign-context/computed-data.interface';
 import { ContextErrorCodes, type ContextOperationResult } from '@agentic-template/dto/src/campaign-context/context-error.interface';
+import type { TriggerType } from '@agentic-template/dto/src/campaign-context/trigger-info.interface';
 import { randomUUID } from 'crypto';
 
 const MAX_ARTIFACTS = 50;
@@ -35,6 +36,22 @@ export class CampaignContextService {
     private readonly referenceTypeRegistry: ReferenceTypeRegistryService,
   ) {}
 
+  private mapTriggerType(runTriggerType: RunTriggerType): TriggerType {
+    const mapping: Record<RunTriggerType, TriggerType> = {
+      initial: 'api',
+      update: 'continuation',
+    };
+    return mapping[runTriggerType] ?? 'api';
+  }
+
+  private isValidUri(uri: string): boolean {
+    return /^(s3|https?|file|gs):\/\/.+/.test(uri);
+  }
+
+  private isValidHash(hash: string): boolean {
+    return /^[a-z0-9]+:[a-f0-9]{16,}$/i.test(hash);
+  }
+
   create(params: CreateContextParams): CampaignContext {
     const context: CampaignContext = {
       campaignId: params.campaignId,
@@ -50,98 +67,112 @@ export class CampaignContextService {
   }
 
   async loadFromRun(baseRunId: string, tenantId: string): Promise<ContextOperationResult<CampaignContext>> {
-    const baseRun = await this.runRepository.findOne({
-      where: { id: baseRunId },
-    });
+    try {
+      const baseRun = await this.runRepository.findOne({
+        where: { id: baseRunId },
+      });
 
-    if (!baseRun) {
+      if (!baseRun) {
+        return {
+          ok: false,
+          error: {
+            code: ContextErrorCodes.BASE_RUN_NOT_FOUND,
+            message: `Base run not found: ${baseRunId}`,
+            details: { baseRunId },
+          },
+        };
+      }
+
+      if (baseRun.tenantId !== tenantId) {
+        return {
+          ok: false,
+          error: {
+            code: ContextErrorCodes.UNAUTHORIZED,
+            message: `Unauthorized access to run: ${baseRunId}`,
+            details: { baseRunId, requestedTenantId: tenantId },
+          },
+        };
+      }
+
+      if (baseRun.status !== 'completed') {
+        return {
+          ok: false,
+          error: {
+            code: ContextErrorCodes.INCOMPLETE_BASE_RUN,
+            message: `Base run is not completed: ${baseRunId} (status: ${baseRun.status})`,
+            details: { baseRunId, status: baseRun.status },
+          },
+        };
+      }
+
+      const artifacts = await this.artifactRepository.find({
+        where: { runId: baseRunId, tenantId },
+      });
+
+      const runSteps = await this.runStepRepository.find({
+        where: { runId: baseRunId },
+      });
+
+      const stepIdBySkillId = new Map<string, string>();
+      const inputHashesByStep: Record<string, string> = {};
+      for (const step of runSteps) {
+        stepIdBySkillId.set(step.skillId, step.stepId);
+        if (step.inputHash) {
+          inputHashesByStep[step.stepId] = step.inputHash;
+        }
+      }
+
+      const artifactMap: ArtifactMap = {};
+      const refs: ArtifactReferences = {} as ArtifactReferences;
+
+      for (const artifact of artifacts) {
+        const artifactData: ArtifactData = {
+          type: artifact.type,
+          uri: artifact.uri,
+          hash: artifact.contentHash,
+          metadata: artifact.metadata,
+          createdAt: artifact.createdAt.toISOString(),
+          stepId: stepIdBySkillId.get(artifact.skillId) ?? artifact.skillId,
+        };
+
+        artifactMap[artifact.id] = artifactData;
+
+        if (this.referenceTypeRegistry.isValidType(artifact.type)) {
+          const refName = this.referenceTypeRegistry.getRefName(artifact.type);
+          refs[refName] = artifact.id;
+        }
+      }
+
+      const context: CampaignContext = {
+        campaignId: (baseRun.triggerPayload?.campaignId as string) ?? '',
+        runId: baseRunId,
+        workflowName: baseRun.workflowName,
+        trigger: {
+          type: this.mapTriggerType(baseRun.triggerType),
+          timestamp: baseRun.createdAt.toISOString(),
+          payload: baseRun.triggerPayload,
+        },
+        refs,
+        artifacts: artifactMap,
+        computed: {
+          inputHashesByStep,
+          qualityChecks: [],
+        },
+      };
+
+      this.logger.debug(`Loaded context from run ${baseRunId} with ${artifacts.length} artifacts`);
+      return { ok: true, data: context };
+    } catch (error) {
+      this.logger.error(`Failed to load context from run ${baseRunId}: ${String(error)}`);
       return {
         ok: false,
         error: {
-          code: ContextErrorCodes.BASE_RUN_NOT_FOUND,
-          message: `Base run not found: ${baseRunId}`,
+          code: ContextErrorCodes.DATABASE_ERROR,
+          message: `Failed to load context: ${String(error)}`,
           details: { baseRunId },
         },
       };
     }
-
-    if (baseRun.tenantId !== tenantId) {
-      return {
-        ok: false,
-        error: {
-          code: ContextErrorCodes.UNAUTHORIZED,
-          message: `Unauthorized access to run: ${baseRunId}`,
-          details: { baseRunId, requestedTenantId: tenantId },
-        },
-      };
-    }
-
-    if (baseRun.status !== 'completed') {
-      return {
-        ok: false,
-        error: {
-          code: ContextErrorCodes.INCOMPLETE_BASE_RUN,
-          message: `Base run is not completed: ${baseRunId} (status: ${baseRun.status})`,
-          details: { baseRunId, status: baseRun.status },
-        },
-      };
-    }
-
-    const artifacts = await this.artifactRepository.find({
-      where: { runId: baseRunId, tenantId },
-    });
-
-    const artifactMap: ArtifactMap = {};
-    const refs: ArtifactReferences = {} as ArtifactReferences;
-
-    for (const artifact of artifacts) {
-      const artifactData: ArtifactData = {
-        type: artifact.type,
-        uri: artifact.uri,
-        hash: artifact.contentHash,
-        metadata: artifact.metadata,
-        createdAt: artifact.createdAt.toISOString(),
-        stepId: artifact.skillId,
-      };
-
-      artifactMap[artifact.id] = artifactData;
-
-      if (this.referenceTypeRegistry.isValidType(artifact.type)) {
-        const refName = this.referenceTypeRegistry.getRefName(artifact.type);
-        refs[refName] = artifact.id;
-      }
-    }
-
-    const runSteps = await this.runStepRepository.find({
-      where: { runId: baseRunId },
-    });
-
-    const inputHashesByStep: Record<string, string> = {};
-    for (const step of runSteps) {
-      if (step.inputHash) {
-        inputHashesByStep[step.stepId] = step.inputHash;
-      }
-    }
-
-    const context: CampaignContext = {
-      campaignId: (baseRun.triggerPayload?.campaignId as string) ?? '',
-      runId: baseRunId,
-      workflowName: baseRun.workflowName,
-      trigger: {
-        type: baseRun.triggerType === 'initial' ? 'api' : 'api',
-        timestamp: baseRun.createdAt.toISOString(),
-        payload: baseRun.triggerPayload,
-      },
-      refs,
-      artifacts: artifactMap,
-      computed: {
-        inputHashesByStep,
-        qualityChecks: [],
-      },
-    };
-
-    this.logger.debug(`Loaded context from run ${baseRunId} with ${artifacts.length} artifacts`);
-    return { ok: true, data: context };
   }
 
   attachStepResult(context: CampaignContext, params: AttachStepResultParams): ContextOperationResult<CampaignContext> {
@@ -159,9 +190,6 @@ export class CampaignContextService {
       };
     }
 
-    const updatedArtifacts = { ...context.artifacts };
-    const updatedRefs = { ...context.refs };
-
     for (const artifact of params.artifacts) {
       if (!this.referenceTypeRegistry.isValidType(artifact.type)) {
         return {
@@ -174,18 +202,34 @@ export class CampaignContextService {
         };
       }
 
-      const artifactId = randomUUID();
-
-      if (updatedArtifacts[artifactId]) {
+      if (!this.isValidUri(artifact.uri)) {
         return {
           ok: false,
           error: {
-            code: ContextErrorCodes.DUPLICATE_ARTIFACT_ID,
-            message: `Artifact ID collision detected: ${artifactId}`,
-            details: { artifactId },
+            code: ContextErrorCodes.INVALID_ARTIFACT_URI,
+            message: `Invalid artifact URI: ${artifact.uri}`,
+            details: { uri: artifact.uri, expectedSchemes: ['s3', 'https', 'http', 'file', 'gs'] },
           },
         };
       }
+
+      if (!this.isValidHash(artifact.hash)) {
+        return {
+          ok: false,
+          error: {
+            code: ContextErrorCodes.INVALID_ARTIFACT_HASH,
+            message: `Invalid artifact hash format: ${artifact.hash}`,
+            details: { hash: artifact.hash, expectedFormat: 'algorithm:hexdigest (e.g., sha256:abc123...)' },
+          },
+        };
+      }
+    }
+
+    const updatedArtifacts = { ...context.artifacts };
+    const updatedRefs = { ...context.refs };
+
+    for (const artifact of params.artifacts) {
+      const artifactId = randomUUID();
 
       const artifactData: ArtifactData = {
         type: artifact.type,
@@ -255,14 +299,44 @@ export class CampaignContextService {
     };
   }
 
-  async persist(context: CampaignContext): Promise<void> {
-    await this.runRepository
-      .createQueryBuilder()
-      .update(Run)
-      .set({ context: () => `:context` })
-      .setParameter('context', JSON.stringify(context))
-      .where('id = :id', { id: context.runId })
-      .execute();
-    this.logger.debug(`Persisted context for run ${context.runId}`);
+  async persist(context: CampaignContext, tenantId: string, queryRunner?: QueryRunner): Promise<ContextOperationResult<void>> {
+    try {
+      const repo = queryRunner ? queryRunner.manager.getRepository(Run) : this.runRepository;
+
+      const result = await repo
+        .createQueryBuilder()
+        .update(Run)
+        .set({ context: () => `:context` })
+        .setParameter('context', JSON.stringify(context))
+        .where('id = :id AND tenant_id = :tenantId', {
+          id: context.runId,
+          tenantId,
+        })
+        .execute();
+
+      if (result.affected === 0) {
+        return {
+          ok: false,
+          error: {
+            code: ContextErrorCodes.UNAUTHORIZED,
+            message: `Run not found or unauthorized: ${context.runId}`,
+            details: { runId: context.runId },
+          },
+        };
+      }
+
+      this.logger.debug(`Persisted context for run ${context.runId}`);
+      return { ok: true, data: undefined };
+    } catch (error) {
+      this.logger.error(`Failed to persist context: ${String(error)}`);
+      return {
+        ok: false,
+        error: {
+          code: ContextErrorCodes.DATABASE_ERROR,
+          message: `Failed to persist context: ${String(error)}`,
+          details: { runId: context.runId },
+        },
+      };
+    }
   }
 }

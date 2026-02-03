@@ -46,6 +46,7 @@
   "dependencies": {
     "@agentic-template/dao": "workspace:*",
     "@agentic-template/dto": "workspace:*",
+    "ajv": "^8.17.1",
     "@clerk/backend": "^2.17.1",
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/common": "^11.0.1",

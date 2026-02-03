@@ -2,6 +2,8 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { StandardArtifactTypes } from '@agentic-template/dto/src/campaign-context/standard-artifact-types.enum';
 import * as fs from 'fs';
 import * as path from 'path';
+import Ajv, { type ValidateFunction } from 'ajv';
+import artifactTypesSchema from './schemas/artifact-types.schema.json';
 
 interface CustomTypeConfig {
   name: string;
@@ -18,17 +20,21 @@ export class ReferenceTypeRegistryService implements OnModuleInit {
   private readonly standardTypes: Set<string>;
   private readonly customTypes: Set<string> = new Set();
   private readonly allTypes: Set<string>;
+  private readonly schemaValidator: ValidateFunction<ArtifactTypesConfig>;
 
   constructor() {
     this.standardTypes = new Set(Object.values(StandardArtifactTypes));
     this.allTypes = new Set(this.standardTypes);
+
+    const ajv = new Ajv();
+    this.schemaValidator = ajv.compile<ArtifactTypesConfig>(artifactTypesSchema);
   }
 
-  onModuleInit(): void {
-    this.loadCustomTypesFromConfig();
+  async onModuleInit(): Promise<void> {
+    await this.loadCustomTypesFromConfig();
   }
 
-  private loadCustomTypesFromConfig(): void {
+  private async loadCustomTypesFromConfig(): Promise<void> {
     const configPath = process.env.ARTIFACT_TYPES_CONFIG_PATH;
     if (!configPath) {
       this.logger.debug('No ARTIFACT_TYPES_CONFIG_PATH set, using only standard types');
@@ -37,16 +43,19 @@ export class ReferenceTypeRegistryService implements OnModuleInit {
 
     try {
       const resolvedPath = path.resolve(configPath);
-      if (!fs.existsSync(resolvedPath)) {
+
+      try {
+        await fs.promises.access(resolvedPath, fs.constants.R_OK);
+      } catch {
         this.logger.warn(`Artifact types config not found at: ${resolvedPath}`);
         return;
       }
 
-      const content = fs.readFileSync(resolvedPath, 'utf-8');
-      const config = JSON.parse(content) as ArtifactTypesConfig;
+      const content = await fs.promises.readFile(resolvedPath, 'utf-8');
+      const config = JSON.parse(content) as unknown;
 
-      if (!config.customTypes || !Array.isArray(config.customTypes)) {
-        this.logger.warn('Invalid artifact types config: missing or invalid customTypes array');
+      if (!this.schemaValidator(config)) {
+        this.logger.error('Invalid artifact types config schema:', this.schemaValidator.errors);
         return;
       }
 

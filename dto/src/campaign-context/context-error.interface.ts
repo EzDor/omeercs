@@ -7,6 +7,9 @@ export const ContextErrorCodes = {
   CONTEXT_CAPACITY_EXCEEDED: 'CONTEXT_CAPACITY_EXCEEDED',
   ARTIFACT_NOT_FOUND: 'ARTIFACT_NOT_FOUND',
   REF_NOT_FOUND: 'REF_NOT_FOUND',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+  INVALID_ARTIFACT_URI: 'INVALID_ARTIFACT_URI',
+  INVALID_ARTIFACT_HASH: 'INVALID_ARTIFACT_HASH',
 } as const;
 
 export type ContextErrorCode = (typeof ContextErrorCodes)[keyof typeof ContextErrorCodes];

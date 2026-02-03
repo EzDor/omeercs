@@ -1,4 +1,4 @@
-export type TriggerType = 'manual' | 'scheduled' | 'api';
+export type TriggerType = 'manual' | 'scheduled' | 'api' | 'continuation';
 
 export interface TriggerInfo {
   type: TriggerType;
