@@ -18,6 +18,13 @@ import { PromptRegistryService } from '../../prompt-registry/services/prompt-reg
 export class InputSelectorInterpreterService {
   private readonly logger = new Logger(InputSelectorInterpreterService.name);
   private readonly DANGEROUS_PROPERTIES = new Set(['__proto__', 'constructor', 'prototype']);
+  private readonly STEP_OUTPUT_PROPERTY_MAP: Record<string, keyof StepOutput> = {
+    data: 'data',
+    artifacts: 'outputArtifactIds',
+    outputArtifactIds: 'outputArtifactIds',
+    status: 'status',
+    stepId: 'stepId',
+  };
 
   constructor(private readonly promptRegistryService: PromptRegistryService) {}
 
@@ -103,31 +110,30 @@ export class InputSelectorInterpreterService {
 
     return () => {
       switch (type) {
-        case 'prompt': {
-          const result = this.promptRegistryService.getPrompt(id, version);
-          if (!result.ok) {
-            throw new Error(`Registry prompt not found: ${id} (version: ${version || 'latest'})`);
-          }
-          return result.data;
-        }
-        case 'config': {
-          const result = this.promptRegistryService.getConfig(id, version);
-          if (!result.ok) {
-            throw new Error(`Registry config not found: ${id} (version: ${version || 'latest'})`);
-          }
-          return result.data;
-        }
-        case 'rubric': {
-          const result = this.promptRegistryService.getRubric(id, version);
-          if (!result.ok) {
-            throw new Error(`Registry rubric not found: ${id} (version: ${version || 'latest'})`);
-          }
-          return result.data;
-        }
+        case 'prompt':
+          return this.fetchRegistryItem('prompt', id, version);
+        case 'config':
+          return this.fetchRegistryItem('config', id, version);
+        case 'rubric':
+          return this.fetchRegistryItem('rubric', id, version);
         default:
           throw new Error(`Unknown registry type: ${String(type)}`);
       }
     };
+  }
+
+  private fetchRegistryItem(type: 'prompt' | 'config' | 'rubric', id: string, version?: string): unknown {
+    const fetchers = {
+      prompt: () => this.promptRegistryService.getPrompt(id, version),
+      config: () => this.promptRegistryService.getConfig(id, version),
+      rubric: () => this.promptRegistryService.getRubric(id, version),
+    };
+
+    const result = fetchers[type]();
+    if (!result.ok) {
+      throw new Error(`Registry ${type} not found: ${id} (version: ${version || 'latest'})`);
+    }
+    return result.data;
   }
 
   private compileConstantsSelector(selector: ConstantsSourceSelector): (ctx: RunContext) => unknown {
@@ -144,20 +150,10 @@ export class InputSelectorInterpreterService {
 
       for (const resolver of compiledInputs) {
         const value = resolver(ctx);
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-          if (seen.has(value)) {
-            throw new Error('Circular reference detected in merge operation');
-          }
-          seen.add(value);
-
-          for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-            if (!this.DANGEROUS_PROPERTIES.has(key)) {
-              result[key] = val;
-            }
-          }
-        } else {
-          throw new Error('Merge operation requires all inputs to be objects');
-        }
+        this.validateMergeableObject(value);
+        this.detectCircularReference(value, seen);
+        seen.add(value);
+        this.mergeObjectProperties(value, result);
       }
       return result;
     };
@@ -169,14 +165,12 @@ export class InputSelectorInterpreterService {
 
     return (ctx: RunContext) => {
       const value = compiledInput(ctx);
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error('Pick operation requires input to be an object');
-      }
+      this.validatePickableObject(value);
 
       const result: Record<string, unknown> = {};
       for (const key of keys) {
-        if (key in (value as Record<string, unknown>)) {
-          result[key] = (value as Record<string, unknown>)[key];
+        if (key in value) {
+          result[key] = value[key];
         }
       }
       return result;
@@ -184,7 +178,7 @@ export class InputSelectorInterpreterService {
   }
 
   private getNestedValue(obj: unknown, path: string): unknown {
-    if (path === '' || path === '.') {
+    if (this.isRootPath(path)) {
       return obj;
     }
 
@@ -192,13 +186,13 @@ export class InputSelectorInterpreterService {
     let current: unknown = obj;
 
     for (const part of parts) {
-      if (current === null || current === undefined) {
+      if (this.isNullish(current)) {
         return undefined;
       }
 
       if (Array.isArray(current)) {
-        const index = parseInt(part, 10);
-        if (isNaN(index) || index < 0 || index >= current.length) {
+        const index = this.parseArrayIndex(part);
+        if (!this.isValidArrayIndex(index, current.length)) {
           return undefined;
         }
         current = current[index];
@@ -263,29 +257,75 @@ export class InputSelectorInterpreterService {
       return stepOutput;
     }
 
+    const { rootValue, remainingParts } = this.resolveStepOutputRoot(stepOutput, parts);
+
+    if (remainingParts.length === 0) {
+      return rootValue;
+    }
+
+    return this.getNestedValue(rootValue, remainingParts.join('.'));
+  }
+
+  private resolveStepOutputRoot(stepOutput: StepOutput, parts: string[]): { rootValue: unknown; remainingParts: string[] } {
     const firstPart = parts[0];
-    let current: unknown;
+    const mappedProperty = this.STEP_OUTPUT_PROPERTY_MAP[firstPart];
 
-    if (firstPart === 'data') {
-      current = stepOutput.data;
-      parts.shift();
-    } else if (firstPart === 'artifacts' || firstPart === 'outputArtifactIds') {
-      current = stepOutput.outputArtifactIds;
-      parts.shift();
-    } else if (firstPart === 'status') {
-      current = stepOutput.status;
-      parts.shift();
-    } else if (firstPart === 'stepId') {
-      current = stepOutput.stepId;
-      parts.shift();
-    } else {
-      current = stepOutput.data;
+    if (mappedProperty) {
+      return {
+        rootValue: stepOutput[mappedProperty],
+        remainingParts: parts.slice(1),
+      };
     }
 
-    if (parts.length === 0) {
-      return current;
-    }
+    return {
+      rootValue: stepOutput.data,
+      remainingParts: parts,
+    };
+  }
 
-    return this.getNestedValue(current, parts.join('.'));
+  private isMergeableObject(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private isValidArrayIndex(index: number, arrayLength: number): boolean {
+    return !isNaN(index) && index >= 0 && index < arrayLength;
+  }
+
+  private parseArrayIndex(part: string): number {
+    return parseInt(part, 10);
+  }
+
+  private isRootPath(path: string): boolean {
+    return path === '' || path === '.';
+  }
+
+  private isNullish(value: unknown): value is null | undefined {
+    return value === null || value === undefined;
+  }
+
+  private validateMergeableObject(value: unknown): asserts value is Record<string, unknown> {
+    if (!this.isMergeableObject(value)) {
+      throw new Error('Merge operation requires all inputs to be objects');
+    }
+  }
+
+  private detectCircularReference(value: object, seen: WeakSet<object>): void {
+    if (seen.has(value)) {
+      throw new Error('Circular reference detected in merge operation');
+    }
+  }
+
+  private mergeObjectProperties(source: Record<string, unknown>, target: Record<string, unknown>): void {
+    for (const [key, val] of Object.entries(source)) {
+      if (!this.DANGEROUS_PROPERTIES.has(key)) {
+        target[key] = val;
+      }
+    }
+  }
+
+  private validatePickableObject(value: unknown): asserts value is Record<string, unknown> {
+    if (!this.isMergeableObject(value)) {
+      throw new Error('Pick operation requires input to be an object');
+    }
   }
 }
