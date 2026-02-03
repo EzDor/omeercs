@@ -12,4 +12,8 @@ export interface RunContext {
   triggerPayload: Record<string, unknown>;
   stepOutputs: Map<string, StepOutput>;
   artifacts: Map<string, string[]>;
+
+  baseRunId?: string;
+  baseRunOutputs?: Map<string, StepOutput>;
+  baseRunArtifacts?: Map<string, string[]>;
 }

@@ -1,0 +1,129 @@
+workflow_name: campaign.update_game_config
+version: "1.0.0"
+description: Update game parameters (difficulty, speed, target score, theme) without regenerating media assets
+
+steps:
+  # Step 1: Game Configuration
+  - step_id: game_config
+    skill_id: game_config_from_template
+    depends_on: []
+    description: Generate new game configuration with parameter overrides
+    input_selector:
+      game_type:
+        source: base_run
+        step_id: plan
+        path: data.game_type
+      difficulty:
+        operation: merge
+        inputs:
+          - source: base_run
+            step_id: game_config
+            path: data.difficulty
+          - source: trigger
+            path: game_overrides.difficulty
+      parameters:
+        operation: merge
+        inputs:
+          - source: base_run
+            step_id: plan
+            path: data.game_parameters
+          - source: trigger
+            path: game_overrides.parameters
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 1000
+
+  # Step 2: Game Bundle
+  - step_id: bundle_game
+    skill_id: bundle_game_template
+    depends_on: [game_config]
+    description: Rebundle game with new configuration
+    input_selector:
+      game_config:
+        source: step_output
+        step_id: game_config
+        path: data
+      audio_assets:
+        source: base_run
+        step_id: audio_mix
+        path: outputArtifactIds
+      template_id:
+        source: base_run
+        step_id: plan
+        path: data.template_id
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 2000
+
+  # Step 3: Campaign Manifest
+  - step_id: manifest
+    skill_id: assemble_campaign_manifest
+    depends_on: [bundle_game]
+    description: Reassemble campaign manifest with new game bundle
+    input_selector:
+      campaign_id:
+        source: trigger
+        path: campaign_id
+      intro_image:
+        source: base_run
+        step_id: intro_image
+        path: outputArtifactIds[0]
+      button_segmentation:
+        source: base_run
+        step_id: intro_button_segmentation
+        path: data
+      intro_video:
+        source: base_run
+        step_id: intro_video
+        path: outputArtifactIds[0]
+      game_bundle:
+        source: step_output
+        step_id: bundle_game
+        path: outputArtifactIds[0]
+      outcome_win:
+        source: base_run
+        step_id: outcome_win
+        path: outputArtifactIds[0]
+      outcome_lose:
+        source: base_run
+        step_id: outcome_lose
+        path: outputArtifactIds[0]
+      plan_data:
+        source: base_run
+        step_id: plan
+        path: data
+    cache_policy:
+      enabled: false
+      scope: run_only
+    retry_policy:
+      max_attempts: 1
+      backoff_ms: 1000
+
+  # Step 4: QA Validation
+  - step_id: qa_bundle
+    skill_id: validate_game_bundle
+    depends_on: [bundle_game]
+    description: Validate updated game bundle
+    input_selector:
+      bundle_url:
+        source: step_output
+        step_id: bundle_game
+        path: outputArtifactIds[0]
+      validation_rules:
+        source: constants
+        value:
+          check_audio: true
+          check_textures: true
+          max_bundle_size_mb: 50
+    cache_policy:
+      enabled: false
+      scope: run_only
+    retry_policy:
+      max_attempts: 1
+      backoff_ms: 1000

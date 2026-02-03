@@ -132,6 +132,8 @@ Agentic workflow system for specification-driven development. Contains templates
 - Filesystem at startup (no database for templates); PostgreSQL for run_steps.debug storage (existing) (005-prompt-config-registry)
 - TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (existing SchemaValidatorService), f-string (existing PromptRegistryService), LiteLLMHttpClient (existing) (006-agent-layer-rules)
 - PostgreSQL with TypeORM (existing Run/RunStep tables for debug storage); Filesystem for prompt templates (existing pattern) (006-agent-layer-rules)
+- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, js-yaml, Ajv (existing SchemaValidatorService), semver (existing pattern) (007-default-workflow-pack)
+- Filesystem for workflow YAML files; PostgreSQL for run data (existing Run, RunStep, StepCache, Artifact tables) (007-default-workflow-pack)
 
 ## Recent Changes
 - 001-skill-runner: Added TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation)
