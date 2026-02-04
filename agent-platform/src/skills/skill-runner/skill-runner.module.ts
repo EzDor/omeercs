@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ProvidersModule } from '@agentic-template/common/src/providers/providers.module';
 import { SkillRunnerService } from './skill-runner.service';
 import { WorkspaceService } from './services/workspace.service';
 import { SecretsService } from './services/secrets.service';
@@ -9,14 +10,8 @@ import { LlmGenerationService } from './services/llm-generation.service';
 import { SkillCatalogService } from '../services/skill-catalog.service';
 import { PromptRegistryModule } from '../../prompt-registry/prompt-registry.module';
 
-/**
- * Module for skill execution services.
- * Provides the SkillRunnerService and supporting services for skill lifecycle management.
- *
- * Note: TenantClsService is available globally via TenantClsModule (@Global).
- */
 @Module({
-  imports: [ConfigModule, PromptRegistryModule],
+  imports: [ConfigModule, PromptRegistryModule, ProvidersModule],
   providers: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService, SkillCatalogService],
   exports: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService],
 })

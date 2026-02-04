@@ -6,6 +6,11 @@ export interface DatabaseSslConfig {
 
 export class ConfigUtil {
   static getDatabaseUrl(configService: ConfigService): string {
+    const databaseUrl = configService.get<string>('DATABASE_URL');
+    if (databaseUrl) {
+      return databaseUrl;
+    }
+
     const host = configService.get<string>('DB_HOST');
     const port = configService.get<string>('DB_PORT');
     const database = configService.get<string>('DB_NAME');
@@ -20,7 +25,7 @@ export class ConfigUtil {
     if (!password) missingVars.push('DB_PASSWORD');
 
     if (missingVars.length > 0) {
-      throw new Error(`Missing required database environment variables: ${missingVars.join(', ')}`);
+      throw new Error(`Missing required database environment variables: ${missingVars.join(', ')}. Alternatively, set DATABASE_URL.`);
     }
 
     return `postgresql://${user}:${encodeURIComponent(password as string)}@${host}:${port}/${database}`;

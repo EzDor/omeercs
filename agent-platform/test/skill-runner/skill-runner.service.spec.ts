@@ -6,6 +6,7 @@ import { SkillCatalogService } from '../../src/skills/services/skill-catalog.ser
 import { ExecutionContextService } from '../../src/skills/skill-runner/services/execution-context.service';
 import { WorkspaceService } from '../../src/skills/skill-runner/services/workspace.service';
 import { SchemaValidatorService } from '../../src/skills/skill-runner/services/schema-validator.service';
+import { LlmGenerationService } from '../../src/skills/skill-runner/services/llm-generation.service';
 import { SkillDescriptor } from '@agentic-template/dto/src/skills/skill-descriptor.interface';
 import { EnhancedSkillExecutionContext } from '../../src/skills/skill-runner/interfaces/execution-context.interface';
 import { SkillHandler } from '../../src/skills/interfaces/skill-handler.interface';
@@ -133,6 +134,17 @@ describe('SkillRunnerService', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn(),
+          },
+        },
+        {
+          provide: LlmGenerationService,
+          useValue: {
+            generate: jest.fn().mockResolvedValue({
+              success: true,
+              data: {},
+              attempts: 1,
+              timings_ms: { total: 100 },
+            }),
           },
         },
       ],

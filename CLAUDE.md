@@ -31,7 +31,6 @@ pnpm --filter dao build                       # Build DAO package
 pnpm test                             # Run all tests
 pnpm --filter webapp test:unit        # Frontend unit tests (Vitest)
 pnpm --filter webapp test:e2e         # Frontend e2e tests (Playwright)
-pnpm test:rls                         # Row-level security tests
 ```
 
 ### Linting & Formatting
