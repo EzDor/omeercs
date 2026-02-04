@@ -8,6 +8,7 @@ import { SkillDescriptor } from '@agentic-template/dto/src/skills/skill-descript
 import { SkillResult } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import { ImageProviderRegistry } from '@agentic-template/common/src/providers/registries/image-provider.registry';
+import { AudioProviderRegistry } from '@agentic-template/common/src/providers/registries/audio-provider.registry';
 import { CampaignPlanFromBriefHandler } from '../handlers/campaign-plan-from-brief.handler';
 import { GameConfigFromTemplateHandler } from '../handlers/game-config-from-template.handler';
 import { ReviewAssetQualityHandler } from '../handlers/review-asset-quality.handler';
@@ -62,6 +63,7 @@ export class SkillCatalogService implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly imageProviderRegistry: ImageProviderRegistry,
+    private readonly audioProviderRegistry: AudioProviderRegistry,
   ) {
     this.catalogPath = this.resolveCatalogPath();
   }
@@ -381,7 +383,7 @@ export class SkillCatalogService implements OnModuleInit {
       { skillId: 'generate_intro_video_loop', create: () => new GenerateIntroVideoLoopHandler(this.configService) },
       { skillId: 'generate_outcome_video_win', create: () => new GenerateOutcomeVideoWinHandler(this.configService) },
       { skillId: 'generate_outcome_video_lose', create: () => new GenerateOutcomeVideoLoseHandler(this.configService) },
-      { skillId: 'generate_bgm_track', create: () => new GenerateBgmTrackHandler(this.configService) },
+      { skillId: 'generate_bgm_track', create: () => new GenerateBgmTrackHandler(this.configService, this.audioProviderRegistry) },
       { skillId: 'generate_sfx_pack', create: () => new GenerateSfxPackHandler(this.configService) },
       { skillId: 'mix_audio_for_game', create: () => new MixAudioForGameHandler(this.configService) },
       { skillId: 'generate_3d_asset', create: () => new Generate3DAssetHandler(this.configService) },

@@ -1,0 +1,416 @@
+# Skill Execution Contract
+# Defines the interface contracts for the 3 reference skills
+
+openapi: 3.1.0
+info:
+  title: Reference Skills API
+  version: 1.0.0
+  description: Contracts for the 3 reference skill implementations
+
+components:
+  schemas:
+    # ====================
+    # Skill A: assemble_campaign_manifest (deterministic)
+    # ====================
+    AssembleCampaignManifestInput:
+      type: object
+      required:
+        - campaign_id
+        - campaign_name
+        - intro_video_uri
+        - outcome_videos
+        - game_bundle_uri
+        - button_config
+      properties:
+        campaign_id:
+          type: string
+          description: Unique campaign identifier
+        campaign_name:
+          type: string
+          description: Human-readable campaign name
+        version:
+          type: string
+          default: "1.0.0"
+        intro_video_uri:
+          type: string
+          format: uri
+          description: URI to intro video (placeholder for reference impl)
+        outcome_videos:
+          type: object
+          required:
+            - win_video_uri
+            - lose_video_uri
+          properties:
+            win_video_uri:
+              type: string
+              format: uri
+            lose_video_uri:
+              type: string
+              format: uri
+            win_redirect_url:
+              type: string
+              format: uri
+            lose_redirect_url:
+              type: string
+              format: uri
+            auto_redirect_delay_ms:
+              type: number
+        game_bundle_uri:
+          type: string
+          format: uri
+          description: URI to bundled game package
+        button_config:
+          type: object
+          required:
+            - bounds
+          properties:
+            bounds:
+              type: object
+              properties:
+                x: { type: number }
+                y: { type: number }
+                width: { type: number }
+                height: { type: number }
+            mask_polygon:
+              type: array
+              items:
+                type: array
+                items:
+                  type: number
+            hover_effect:
+              type: string
+            click_sound_uri:
+              type: string
+              format: uri
+        rules:
+          type: object
+          properties:
+            start_date: { type: string, format: date-time }
+            end_date: { type: string, format: date-time }
+            max_plays_per_user: { type: number }
+            global_win_rate: { type: number }
+            require_login: { type: boolean }
+            allowed_regions: { type: array, items: { type: string } }
+            excluded_regions: { type: array, items: { type: string } }
+        analytics:
+          type: object
+          properties:
+            tracking_id: { type: string }
+            track_impressions: { type: boolean }
+            track_interactions: { type: boolean }
+            track_completions: { type: boolean }
+            custom_events: { type: array, items: { type: string } }
+        branding:
+          type: object
+          properties:
+            brand_name: { type: string }
+            logo_uri: { type: string, format: uri }
+            primary_color: { type: string }
+            secondary_color: { type: string }
+            font_family: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+
+    AssembleCampaignManifestOutput:
+      type: object
+      properties:
+        manifest_uri:
+          type: string
+          format: uri
+          description: Path to generated manifest JSON
+        manifest:
+          $ref: '#/components/schemas/CampaignManifest'
+        validation:
+          type: object
+          properties:
+            all_assets_valid:
+              type: boolean
+            missing_assets:
+              type: array
+              items: { type: string }
+            warnings:
+              type: array
+              items: { type: string }
+        deployment_ready:
+          type: boolean
+          description: True if all validations passed
+
+    CampaignManifest:
+      type: object
+      description: Full campaign manifest structure (see data-model.md)
+
+    # ====================
+    # Skill B: generate_bgm_track (provider stub)
+    # ====================
+    GenerateBgmTrackInput:
+      type: object
+      required:
+        - style
+        - duration_sec
+      properties:
+        style:
+          type: object
+          required:
+            - genre
+          properties:
+            genre:
+              type: string
+              description: Music genre
+              example: "electronic"
+            mood:
+              type: string
+              enum: [happy, sad, tense, relaxed, epic, playful, dramatic, neutral]
+            energy_level:
+              type: number
+              minimum: 0
+              maximum: 1
+            instruments:
+              type: string
+              description: Preferred instruments
+        duration_sec:
+          type: number
+          minimum: 10
+          maximum: 300
+          description: Target audio duration
+        bpm:
+          type: number
+          minimum: 60
+          maximum: 200
+        loopable:
+          type: boolean
+          default: true
+          description: Whether audio should loop seamlessly
+        custom_prompt:
+          type: string
+          description: Custom prompt override
+        provider:
+          type: string
+          description: Provider ID (use "stub" for testing)
+        seed:
+          type: number
+          description: Random seed for reproducibility
+        specs:
+          type: object
+          properties:
+            format:
+              type: string
+              enum: [mp3, wav]
+              default: mp3
+            bitrate_kbps:
+              type: number
+              default: 192
+            sample_rate:
+              type: number
+              default: 44100
+            channels:
+              type: number
+              default: 2
+
+    GenerateBgmTrackOutput:
+      type: object
+      properties:
+        audio_uri:
+          type: string
+          format: uri
+          description: Path to generated audio file
+        duration_sec:
+          type: number
+          description: Actual audio duration
+        bpm:
+          type: number
+        format:
+          type: string
+        sample_rate:
+          type: number
+        bitrate_kbps:
+          type: number
+        channels:
+          type: number
+        file_size_bytes:
+          type: number
+        is_loopable:
+          type: boolean
+        generation_params:
+          type: object
+          properties:
+            style: { type: string }
+            mood: { type: string }
+            bpm: { type: number }
+            custom_prompt: { type: string }
+            seed: { type: number }
+            model: { type: string }
+
+    # ====================
+    # Skill C: game_config_from_template (Claude JSON generation)
+    # ====================
+    GameConfigFromTemplateInput:
+      type: object
+      required:
+        - template_id
+        - theme
+        - difficulty
+      properties:
+        template_id:
+          type: string
+          description: Game template identifier
+          example: "spin_wheel_v1"
+        theme:
+          type: string
+          description: Visual theme
+          example: "neon_arcade"
+        difficulty:
+          type: object
+          required:
+            - level
+            - win_probability
+          properties:
+            level:
+              type: string
+              enum: [easy, medium, hard]
+            win_probability:
+              type: number
+              minimum: 0
+              maximum: 1
+        color_scheme:
+          type: object
+          properties:
+            primary: { type: string }
+            secondary: { type: string }
+            accent: { type: string }
+            background: { type: string }
+        asset_refs:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string }
+              uri: { type: string, format: uri }
+              slot: { type: string }
+        copy:
+          type: object
+          properties:
+            title: { type: string }
+            instructions: { type: string }
+            win_message: { type: string }
+            lose_message: { type: string }
+        provider:
+          type: string
+          description: LLM model to use
+          default: "claude-sonnet"
+
+    GameConfigOutput:
+      type: object
+      description: Generated game configuration (see data-model.md GameConfig schema)
+      required:
+        - template_id
+        - version
+        - settings
+        - visuals
+        - audio
+        - mechanics
+        - copy
+      properties:
+        template_id:
+          type: string
+        version:
+          type: string
+        settings:
+          type: object
+          properties:
+            duration_sec: { type: number }
+            difficulty:
+              type: object
+              properties:
+                level: { type: string }
+                win_probability: { type: number }
+                parameters: { type: object }
+            locale: { type: string }
+        visuals:
+          type: object
+          properties:
+            theme: { type: string }
+            colors: { type: object }
+            assets: { type: object }
+            animations: { type: object }
+        audio:
+          type: object
+          properties:
+            bgm: { type: object }
+            sfx: { type: object }
+        mechanics:
+          type: object
+          description: Template-specific game mechanics
+        copy:
+          type: object
+          properties:
+            title: { type: string }
+            instructions: { type: string }
+            win_message: { type: string }
+            lose_message: { type: string }
+
+    # ====================
+    # Common Skill Result Structure
+    # ====================
+    SkillResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        data:
+          type: object
+          description: Skill-specific output
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillArtifact'
+        error:
+          type: string
+        errorCode:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - EXECUTION_ERROR
+            - GENERATION_FAILED
+            - TIMEOUT
+            - EMPTY_RESPONSE
+            - NO_AUDIO_URL
+        diagnostics:
+          type: object
+          properties:
+            timings_ms:
+              type: object
+              properties:
+                total: { type: number }
+                prompt_build: { type: number }
+                llm_call: { type: number }
+                validation: { type: number }
+                retry_llm_call: { type: number }
+            provider_calls:
+              type: array
+              items:
+                type: object
+                properties:
+                  provider: { type: string }
+                  model: { type: string }
+                  duration_ms: { type: number }
+                  tokens:
+                    type: object
+                    properties:
+                      input: { type: number }
+                      output: { type: number }
+
+    SkillArtifact:
+      type: object
+      properties:
+        artifact_type:
+          type: string
+          description: Artifact type identifier
+          example: "json/game-config"
+        uri:
+          type: string
+          format: uri
+          description: Location of the artifact
+        metadata:
+          type: object
+          additionalProperties: true

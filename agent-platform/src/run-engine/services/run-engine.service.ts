@@ -151,6 +151,9 @@ export class RunEngineService {
 
     if (status === 'completed' || status === 'failed' || status === 'cancelled') {
       run.completedAt = new Date();
+      if (run.startedAt) {
+        run.durationMs = run.completedAt.getTime() - run.startedAt.getTime();
+      }
     }
 
     if (error) {

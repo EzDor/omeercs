@@ -1,0 +1,47 @@
+{
+  "campaign_id": "test-campaign-fixture-001",
+  "campaign_name": "Test Campaign from Fixture",
+  "intro_video_uri": "placeholder",
+  "outcome_videos": {
+    "win_video_uri": "placeholder",
+    "lose_video_uri": "placeholder",
+    "win_redirect_url": "https://example.com/winner",
+    "lose_redirect_url": "https://example.com/loser",
+    "auto_redirect_delay_ms": 5000
+  },
+  "game_bundle_uri": "placeholder",
+  "button_config": {
+    "bounds": {
+      "x": 120,
+      "y": 300,
+      "width": 200,
+      "height": 60
+    },
+    "hover_effect": "glow"
+  },
+  "rules": {
+    "require_login": false,
+    "max_plays_per_user": 3,
+    "global_win_rate": 0.25,
+    "start_date": "2026-01-01T00:00:00Z",
+    "end_date": "2026-12-31T23:59:59Z"
+  },
+  "analytics": {
+    "track_impressions": true,
+    "track_interactions": true,
+    "track_completions": true,
+    "tracking_id": "GA-FIXTURE-123",
+    "custom_events": ["game_started", "prize_claimed"]
+  },
+  "branding": {
+    "brand_name": "Fixture Brand",
+    "primary_color": "#3366cc",
+    "secondary_color": "#99ccff",
+    "font_family": "Arial, sans-serif"
+  },
+  "version": "1.0.0",
+  "metadata": {
+    "source": "test-fixture",
+    "created_by": "test-suite"
+  }
+}

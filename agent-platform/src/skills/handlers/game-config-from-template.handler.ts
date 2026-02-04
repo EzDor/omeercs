@@ -16,6 +16,7 @@ Given a game template, theme, difficulty settings, and optional assets, generate
 5. Copy/text content
 
 IMPORTANT: Generate ONLY configuration, NOT code. All values must be concrete and usable.
+IMPORTANT: Keep the JSON compact and concise. Do not include lengthy descriptions or comments.
 
 Template-specific mechanics guidelines:
 - spin_wheel: segments array with prizes, probabilities, colors
@@ -28,7 +29,7 @@ Template-specific mechanics guidelines:
 const GAME_CONFIG_OUTPUT_SCHEMA = {
   name: 'game_config',
   description: 'Complete game configuration',
-  strict: true,
+  strict: false,
   schema: {
     type: 'object',
     required: ['template_id', 'version', 'settings', 'visuals', 'audio', 'mechanics', 'copy'],
@@ -42,21 +43,18 @@ const GAME_CONFIG_OUTPUT_SCHEMA = {
           duration_sec: { type: 'number' },
           difficulty: {
             type: 'object',
-            required: ['level', 'win_probability', 'parameters'],
+            required: ['level', 'win_probability'],
             properties: {
               level: { type: 'string', enum: ['easy', 'medium', 'hard'] },
               win_probability: { type: 'number' },
-              parameters: { type: 'object' },
             },
-            additionalProperties: false,
           },
           locale: { type: 'string' },
         },
-        additionalProperties: false,
       },
       visuals: {
         type: 'object',
-        required: ['theme', 'colors', 'assets', 'animations'],
+        required: ['theme', 'colors'],
         properties: {
           theme: { type: 'string' },
           colors: {
@@ -68,16 +66,12 @@ const GAME_CONFIG_OUTPUT_SCHEMA = {
               accent: { type: 'string' },
               background: { type: 'string' },
             },
-            additionalProperties: false,
           },
-          assets: { type: 'object' },
-          animations: { type: 'object' },
         },
-        additionalProperties: false,
       },
       audio: {
         type: 'object',
-        required: ['bgm', 'sfx'],
+        required: ['bgm'],
         properties: {
           bgm: {
             type: 'object',
@@ -87,13 +81,15 @@ const GAME_CONFIG_OUTPUT_SCHEMA = {
               volume: { type: 'number' },
               loop: { type: 'boolean' },
             },
-            additionalProperties: false,
           },
-          sfx: { type: 'object' },
         },
-        additionalProperties: false,
       },
-      mechanics: { type: 'object' },
+      mechanics: {
+        type: 'object',
+        properties: {
+          type: { type: 'string' },
+        },
+      },
       copy: {
         type: 'object',
         required: ['title', 'instructions', 'win_message', 'lose_message'],
@@ -103,10 +99,8 @@ const GAME_CONFIG_OUTPUT_SCHEMA = {
           win_message: { type: 'string' },
           lose_message: { type: 'string' },
         },
-        additionalProperties: false,
       },
     },
-    additionalProperties: false,
   },
 };
 
@@ -141,7 +135,7 @@ export class GameConfigFromTemplateHandler implements SkillHandler<GameConfigFro
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.5,
-        max_tokens: 3000,
+        max_tokens: 8000,
         response_format: {
           type: 'json_schema',
           json_schema: GAME_CONFIG_OUTPUT_SCHEMA,

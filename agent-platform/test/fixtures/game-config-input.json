@@ -1,0 +1,31 @@
+{
+  "template_id": "spin_wheel",
+  "theme": "neon_arcade",
+  "difficulty": {
+    "level": "medium",
+    "win_probability": 0.3
+  },
+  "color_scheme": {
+    "primary": "#00ff00",
+    "secondary": "#0000ff",
+    "accent": "#ff0000",
+    "background": "#000000"
+  },
+  "copy": {
+    "title": "Spin to Win!",
+    "instructions": "Tap to spin the wheel",
+    "win_message": "Congratulations!",
+    "lose_message": "Better luck next time!"
+  },
+  "asset_refs": [
+    {
+      "uri": "file:///fixtures/images/wheel-background.png",
+      "type": "background"
+    },
+    {
+      "uri": "file:///fixtures/audio/spin-sound.mp3",
+      "type": "audio",
+      "slot": "spin_sfx"
+    }
+  ]
+}

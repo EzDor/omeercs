@@ -1,7 +1,10 @@
 version: "1.0.0"
-updated_at: "2026-02-02T00:00:00Z"
+updated_at: "2026-02-03T00:00:00Z"
 workflows:
   - workflow_name: campaign.build
+    version: "1.0.0"
+    status: active
+  - workflow_name: campaign.build.minimal
     version: "1.0.0"
     status: active
   - workflow_name: campaign.update_audio

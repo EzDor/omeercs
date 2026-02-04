@@ -44,3 +44,21 @@ export class ArtifactsResponse {
   runId: string;
   artifacts: ArtifactDto[];
 }
+
+export interface CacheAnalysisStep {
+  stepId: string;
+  skillId: string;
+  status: StepStatus;
+  cacheHit: boolean;
+  inputHash: string;
+  executedFrom: 'cache' | 'fresh';
+}
+
+export class CacheAnalysisResponse {
+  runId: string;
+  totalSteps: number;
+  cacheHits: number;
+  cacheMisses: number;
+  cacheHitRate: number;
+  steps: CacheAnalysisStep[];
+}

@@ -1,0 +1,19 @@
+{
+  "campaign_id": "existing-campaign-001",
+  "base_run_id": "uuid-of-initial-build-run",
+  "audio_overrides": {
+    "style": {
+      "genre": "orchestral",
+      "mood": "dramatic",
+      "instruments": "strings, brass, timpani"
+    },
+    "mood": "dramatic",
+    "sfx_list": ["victory_fanfare", "button_hover", "wheel_spin"]
+  },
+  "update_reason": "Client requested more dramatic audio for holiday campaign",
+  "metadata": {
+    "requested_by": "marketing-team",
+    "priority": "high",
+    "deadline": "2026-02-15T00:00:00Z"
+  }
+}

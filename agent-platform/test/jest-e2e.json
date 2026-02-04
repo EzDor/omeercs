@@ -1,0 +1,18 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$|.skill-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(p-queue|eventemitter3|@langchain)/)"
+  ],
+  "moduleNameMapper": {
+    "^@agentic-template/common/src/(.*)$": "<rootDir>/../../common/src/$1",
+    "^@agentic-template/dao/src/(.*)$": "<rootDir>/../../dao/src/$1",
+    "^@agentic-template/dto/src/(.*)$": "<rootDir>/../../dto/src/$1"
+  },
+  "testTimeout": 60000
+}

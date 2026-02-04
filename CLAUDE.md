@@ -136,6 +136,8 @@ Agentic workflow system for specification-driven development. Contains templates
 - Filesystem for workflow YAML files; PostgreSQL for run data (existing Run, RunStep, StepCache, Artifact tables) (007-default-workflow-pack)
 - TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, TypeORM, class-validator, class-transformer (008-campaign-context)
 - PostgreSQL with TypeORM (CampaignContext as JSONB in Run entity or separate table) (008-campaign-context)
+- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation), LiteLLMHttpClient (existing) (009-reference-impl)
+- PostgreSQL with TypeORM (Run, RunStep, Artifact, StepCache entities); filesystem for workflow YAML and skill catalogs (009-reference-impl)
 
 ## Recent Changes
 - 001-skill-runner: Added TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation)

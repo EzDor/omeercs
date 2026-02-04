@@ -1,0 +1,18 @@
+{
+  "style": {
+    "genre": "electronic",
+    "mood": "epic",
+    "instruments": "synths, drums, bass",
+    "energy_level": 0.8
+  },
+  "bpm": 120,
+  "duration_sec": 30,
+  "loopable": true,
+  "specs": {
+    "format": "wav",
+    "bitrate_kbps": 192,
+    "sample_rate": 44100,
+    "channels": 2
+  },
+  "custom_prompt": "upbeat electronic game music with pulsing bass and energetic synth leads"
+}
