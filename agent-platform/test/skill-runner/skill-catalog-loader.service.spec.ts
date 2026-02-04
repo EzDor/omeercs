@@ -6,6 +6,8 @@ import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { SkillCatalogService } from '../../src/skills/services/skill-catalog.service';
 import { SkillDescriptor } from '@agentic-template/dto/src/skills/skill-descriptor.interface';
+import { ImageProviderRegistry } from '@agentic-template/common/src/providers/registries/image-provider.registry';
+import { AudioProviderRegistry } from '@agentic-template/common/src/providers/registries/audio-provider.registry';
 
 describe('SkillCatalogService - Catalog Loading', () => {
   let service: SkillCatalogService;
@@ -86,8 +88,26 @@ describe('SkillCatalogService - Catalog Loading', () => {
           useValue: {
             get: jest.fn((key: string) => {
               if (key === 'SKILLS_CATALOG_PATH') return tempDir;
+              if (key === 'LITELLM_BASE_URL') return 'http://localhost:4000';
+              if (key === 'LITELLM_API_KEY') return 'test-api-key';
               return undefined;
             }),
+          },
+        },
+        {
+          provide: ImageProviderRegistry,
+          useValue: {
+            getProvider: jest.fn(),
+            getDefaultProvider: jest.fn(),
+            hasProvider: jest.fn(),
+          },
+        },
+        {
+          provide: AudioProviderRegistry,
+          useValue: {
+            getProvider: jest.fn(),
+            getDefaultProvider: jest.fn(),
+            hasProvider: jest.fn(),
           },
         },
       ],
@@ -293,9 +313,7 @@ describe('SkillCatalogService - Catalog Loading', () => {
 
       await createModule();
 
-      // After validation enhancements, this should either load with warning or reject
-      // Current behavior: loads without schema validation (to be enhanced)
-      expect(service.getDescriptor('bad_schema')).toBeDefined();
+      expect(service.getDescriptor('bad_schema')).toBeUndefined();
     });
   });
 });
