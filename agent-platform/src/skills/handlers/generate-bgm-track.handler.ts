@@ -15,6 +15,29 @@ const DEFAULT_SAMPLE_RATE = 44100;
 const DEFAULT_BITRATE = 192;
 const DEFAULT_CHANNELS = 2;
 
+const LOW_ENERGY_THRESHOLD = 0.3;
+const HIGH_ENERGY_THRESHOLD = 0.7;
+
+const BGM_ARTIFACT_TYPE = 'audio/bgm';
+
+const MOOD_DESCRIPTIONS: Record<string, string> = {
+  happy: 'with a happy, uplifting feel',
+  sad: 'with a melancholic, emotional tone',
+  tense: 'with building tension and suspense',
+  relaxed: 'with a calm, relaxing atmosphere',
+  epic: 'with epic, cinematic grandeur',
+  playful: 'with a fun, playful character',
+  dramatic: 'with dramatic intensity',
+  neutral: 'with a balanced, versatile feel',
+};
+
+interface NormalizedSpecs {
+  format: string;
+  bitrate_kbps: number;
+  sample_rate: number;
+  channels: number;
+}
+
 @Injectable()
 export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInput, GenerateBgmTrackOutput> {
   private readonly logger = new Logger(GenerateBgmTrackHandler.name);
@@ -35,6 +58,79 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
     this.useStubProvider = configService.get<string>('AUDIO_PROVIDER_STUB') === 'true';
   }
 
+  private isAsyncGenerationInProgress(status: string | undefined): boolean {
+    return status === 'pending' || status === 'processing';
+  }
+
+  private getEnergyLevelDescription(energyLevel: number): string {
+    if (energyLevel < LOW_ENERGY_THRESHOLD) return 'low energy';
+    if (energyLevel < HIGH_ENERGY_THRESHOLD) return 'medium energy';
+    return 'high energy';
+  }
+
+  private buildOutput(
+    audioUri: string,
+    durationSec: number,
+    bpm: number,
+    specs: NormalizedSpecs,
+    fileSizeBytes: number,
+    isLoopable: boolean,
+    generationParams: GenerateBgmTrackOutput['generation_params'],
+  ): GenerateBgmTrackOutput {
+    return {
+      audio_uri: audioUri,
+      duration_sec: durationSec,
+      bpm,
+      format: specs.format,
+      sample_rate: specs.sample_rate,
+      bitrate_kbps: specs.bitrate_kbps,
+      channels: specs.channels,
+      file_size_bytes: fileSizeBytes,
+      is_loopable: isLoopable,
+      generation_params: generationParams,
+    };
+  }
+
+  private buildSuccessResult(
+    output: GenerateBgmTrackOutput,
+    artifactUri: string,
+    totalTime: number,
+    timings: Record<string, number>,
+    provider: string,
+    model: string,
+  ): SkillResult<GenerateBgmTrackOutput> {
+    return skillSuccess(
+      output,
+      [
+        {
+          artifact_type: BGM_ARTIFACT_TYPE,
+          uri: artifactUri,
+          metadata: {
+            duration_sec: output.duration_sec,
+            bpm: output.bpm,
+            format: output.format,
+            sample_rate: output.sample_rate,
+            is_loopable: output.is_loopable,
+            provider,
+          },
+        },
+      ],
+      {
+        timings_ms: { total: totalTime, ...timings },
+        provider_calls: [{ provider, model, duration_ms: timings['generation'] }],
+      },
+    );
+  }
+
+  private handleExecutionError(error: unknown, startTime: number, timings: Record<string, number>, logPrefix: string): SkillResult<GenerateBgmTrackOutput> {
+    const totalTime = Date.now() - startTime;
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    this.logger.error(`${logPrefix}: ${message}`);
+    return skillFailure(message, 'EXECUTION_ERROR', {
+      timings_ms: { total: totalTime, ...timings },
+    });
+  }
+
   async execute(input: GenerateBgmTrackInput, context: SkillExecutionContext): Promise<SkillResult<GenerateBgmTrackOutput>> {
     const startTime = Date.now();
     const timings: Record<string, number> = {};
@@ -50,7 +146,7 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       const bpm = input.bpm || DEFAULT_BPM;
 
       if (this.useStubProvider) {
-        return this.executeWithStubProvider(input, context, specs, bpm, musicPrompt, startTime, timings);
+        return this.executeWithStubProvider(input, specs, bpm, musicPrompt, startTime, timings);
       }
 
       const generationStart = Date.now();
@@ -74,7 +170,7 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
 
       let audioData = response.data?.[0];
 
-      if (response.status === 'pending' || response.status === 'processing') {
+      if (this.isAsyncGenerationInProgress(response.status)) {
         this.logger.log(`Audio generation is async, waiting for completion (ID: ${response.id})`);
         const statusResult = await this.llmClient.waitForAudioGeneration(response.id!, this.audioGenerationTimeout);
 
@@ -105,17 +201,14 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       const totalTime = Date.now() - startTime;
       this.logger.log(`BGM track generated successfully in ${totalTime}ms`);
 
-      const output: GenerateBgmTrackOutput = {
-        audio_uri: savedAudioInfo.uri,
-        duration_sec: audioData?.duration_sec || input.duration_sec,
-        bpm: audioData?.bpm || bpm,
-        format: specs.format,
-        sample_rate: audioData?.sample_rate || specs.sample_rate,
-        bitrate_kbps: audioData?.bitrate_kbps || specs.bitrate_kbps,
-        channels: specs.channels,
-        file_size_bytes: savedAudioInfo.fileSize,
-        is_loopable: input.loopable ?? true,
-        generation_params: {
+      const output = this.buildOutput(
+        savedAudioInfo.uri,
+        audioData?.duration_sec || input.duration_sec,
+        audioData?.bpm || bpm,
+        { ...specs, sample_rate: audioData?.sample_rate || specs.sample_rate, bitrate_kbps: audioData?.bitrate_kbps || specs.bitrate_kbps },
+        savedAudioInfo.fileSize,
+        input.loopable ?? true,
+        {
           style: input.style.genre,
           mood: input.style.mood,
           bpm,
@@ -123,41 +216,11 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
           seed: input.seed,
           model,
         },
-      };
-
-      return skillSuccess(
-        output,
-        [
-          {
-            artifact_type: 'audio/bgm',
-            uri: savedAudioInfo.uri,
-            metadata: {
-              duration_sec: output.duration_sec,
-              bpm: output.bpm,
-              format: output.format,
-              sample_rate: output.sample_rate,
-              is_loopable: output.is_loopable,
-            },
-          },
-        ],
-        {
-          timings_ms: { total: totalTime, ...timings },
-          provider_calls: [
-            {
-              provider: 'litellm',
-              model,
-              duration_ms: timings['generation'],
-            },
-          ],
-        },
       );
-    } catch (error) {
-      const totalTime = Date.now() - startTime;
-      this.logger.error(`Failed to generate BGM track: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(error instanceof Error ? error.message : 'Unknown error during audio generation', 'EXECUTION_ERROR', {
-        timings_ms: { total: totalTime, ...timings },
-      });
+      return this.buildSuccessResult(output, savedAudioInfo.uri, totalTime, timings, 'litellm', model);
+    } catch (error) {
+      return this.handleExecutionError(error, startTime, timings, 'Failed to generate BGM track');
     }
   }
 
@@ -171,22 +234,11 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
     }
 
     if (input.style.mood) {
-      const moodDescriptions: Record<string, string> = {
-        happy: 'with a happy, uplifting feel',
-        sad: 'with a melancholic, emotional tone',
-        tense: 'with building tension and suspense',
-        relaxed: 'with a calm, relaxing atmosphere',
-        epic: 'with epic, cinematic grandeur',
-        playful: 'with a fun, playful character',
-        dramatic: 'with dramatic intensity',
-        neutral: 'with a balanced, versatile feel',
-      };
-      parts.push(moodDescriptions[input.style.mood] || input.style.mood);
+      parts.push(MOOD_DESCRIPTIONS[input.style.mood] || input.style.mood);
     }
 
     if (input.style.energy_level !== undefined) {
-      const energyDesc = input.style.energy_level < 0.3 ? 'low energy' : input.style.energy_level < 0.7 ? 'medium energy' : 'high energy';
-      parts.push(`with ${energyDesc}`);
+      parts.push(`with ${this.getEnergyLevelDescription(input.style.energy_level)}`);
     }
 
     if (input.style.instruments) {
@@ -204,12 +256,7 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
     return parts.join(', ');
   }
 
-  private normalizeSpecs(specs?: GenerateBgmTrackInput['specs']): {
-    format: string;
-    bitrate_kbps: number;
-    sample_rate: number;
-    channels: number;
-  } {
+  private normalizeSpecs(specs?: GenerateBgmTrackInput['specs']): NormalizedSpecs {
     return {
       format: specs?.format || DEFAULT_FORMAT,
       bitrate_kbps: specs?.bitrate_kbps || DEFAULT_BITRATE,
@@ -245,8 +292,7 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
 
   private async executeWithStubProvider(
     input: GenerateBgmTrackInput,
-    context: SkillExecutionContext,
-    specs: { format: string; bitrate_kbps: number; sample_rate: number; channels: number },
+    specs: NormalizedSpecs,
     bpm: number,
     musicPrompt: string,
     startTime: number,
@@ -270,17 +316,16 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
 
       this.logger.log(`Stub BGM track generated successfully in ${totalTime}ms at ${result.uri}`);
 
-      const output: GenerateBgmTrackOutput = {
-        audio_uri: result.uri,
-        duration_sec: result.metadata.durationSec,
+      const fileSizeBytes = fs.existsSync(result.uri) ? fs.statSync(result.uri).size : 0;
+
+      const output = this.buildOutput(
+        result.uri,
+        result.metadata.durationSec,
         bpm,
-        format: result.metadata.format,
-        sample_rate: result.metadata.sampleRate,
-        bitrate_kbps: specs.bitrate_kbps,
-        channels: result.metadata.channels,
-        file_size_bytes: fs.existsSync(result.uri) ? fs.statSync(result.uri).size : 0,
-        is_loopable: input.loopable ?? true,
-        generation_params: {
+        { ...specs, format: result.metadata.format, sample_rate: result.metadata.sampleRate, channels: result.metadata.channels },
+        fileSizeBytes,
+        input.loopable ?? true,
+        {
           style: input.style.genre,
           mood: input.style.mood,
           bpm,
@@ -288,41 +333,11 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
           seed: input.seed,
           model: 'stub-generator',
         },
-      };
-
-      return skillSuccess(
-        output,
-        [
-          {
-            artifact_type: 'audio/bgm',
-            uri: result.uri,
-            metadata: {
-              duration_sec: output.duration_sec,
-              bpm: output.bpm,
-              format: output.format,
-              sample_rate: output.sample_rate,
-              is_loopable: output.is_loopable,
-              provider: 'stub',
-            },
-          },
-        ],
-        {
-          timings_ms: { total: totalTime, ...timings },
-          provider_calls: [
-            {
-              provider: 'stub',
-              model: 'stub-generator',
-              duration_ms: timings['generation'],
-            },
-          ],
-        },
       );
+
+      return this.buildSuccessResult(output, result.uri, totalTime, timings, 'stub', 'stub-generator');
     } catch (error) {
-      const totalTime = Date.now() - startTime;
-      this.logger.error(`Stub provider failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return skillFailure(error instanceof Error ? error.message : 'Stub provider error', 'EXECUTION_ERROR', {
-        timings_ms: { total: totalTime, ...timings },
-      });
+      return this.handleExecutionError(error, startTime, timings, 'Stub provider failed');
     }
   }
 }
