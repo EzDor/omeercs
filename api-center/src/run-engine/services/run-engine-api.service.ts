@@ -11,7 +11,14 @@ import { RunStep, StepStatusType } from '@agentic-template/dao/src/entities/run-
 import { Artifact } from '@agentic-template/dao/src/entities/artifact.entity';
 
 import type { TriggerRunRequest, TriggerRunResponse, RunResponse, RunStatus, StepsSummary } from '@agentic-template/dto/src/run-engine/run.dto';
-import type { RunStepsResponse, RunStep as RunStepDto, ArtifactsResponse, ArtifactDto } from '@agentic-template/dto/src/run-engine/run-step.dto';
+import type {
+  RunStepsResponse,
+  RunStep as RunStepDto,
+  ArtifactsResponse,
+  ArtifactDto,
+  CacheAnalysisResponse,
+  CacheAnalysisStep,
+} from '@agentic-template/dto/src/run-engine/run-step.dto';
 
 export interface RunOrchestrationJobData {
   runId: string;
@@ -118,6 +125,7 @@ export class RunEngineApiService {
       stepsSummary,
       startedAt: run.startedAt || undefined,
       completedAt: run.completedAt || undefined,
+      durationMs: run.durationMs || undefined,
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
     };
@@ -239,6 +247,48 @@ export class RunEngineApiService {
     return {
       runId,
       artifacts: artifactDtos,
+    };
+  }
+
+  async getCacheAnalysis(runId: string): Promise<CacheAnalysisResponse> {
+    const tenantId = this.tenantClsService.getTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    const run = await this.runRepository.findOne({
+      where: { id: runId, tenantId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Run ${runId} not found`);
+    }
+
+    const steps = await this.runStepRepository.find({
+      where: { runId, tenantId },
+      order: { createdAt: 'ASC' },
+    });
+
+    const cacheHits = steps.filter((s) => s.cacheHit).length;
+    const cacheMisses = steps.filter((s) => !s.cacheHit && s.status !== 'pending').length;
+    const totalExecuted = cacheHits + cacheMisses;
+
+    const cacheSteps: CacheAnalysisStep[] = steps.map((step) => ({
+      stepId: step.stepId,
+      skillId: step.skillId,
+      status: step.status,
+      cacheHit: step.cacheHit,
+      inputHash: step.inputHash,
+      executedFrom: step.cacheHit ? 'cache' : 'fresh',
+    }));
+
+    return {
+      runId,
+      totalSteps: steps.length,
+      cacheHits,
+      cacheMisses,
+      cacheHitRate: totalExecuted > 0 ? cacheHits / totalExecuted : 0,
+      steps: cacheSteps,
     };
   }
 }

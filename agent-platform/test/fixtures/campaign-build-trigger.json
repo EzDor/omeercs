@@ -1,0 +1,54 @@
+{
+  "workflowName": "campaign.build.minimal",
+  "workflowVersion": "1.0.0",
+  "triggerPayload": {
+    "campaign_id": "test-campaign-001",
+    "campaign_name": "Test Campaign MVP",
+    "template_id": "spin_wheel",
+    "theme": "neon_arcade",
+    "difficulty": {
+      "level": "medium",
+      "win_probability": 0.3
+    },
+    "color_scheme": {
+      "primary": "#00ff00",
+      "secondary": "#0000ff",
+      "accent": "#ff0000",
+      "background": "#000000"
+    },
+    "copy": {
+      "title": "Spin to Win!",
+      "instructions": "Tap to spin the wheel",
+      "win_message": "Congratulations!",
+      "lose_message": "Better luck next time!"
+    },
+    "audio": {
+      "style": {
+        "genre": "electronic",
+        "mood": "epic"
+      },
+      "duration_sec": 30,
+      "prompt": "upbeat electronic game music"
+    },
+    "intro_video_uri": "file:///fixtures/videos/placeholder-intro.mp4",
+    "outcome_videos": {
+      "win_video_uri": "file:///fixtures/videos/placeholder-win.mp4",
+      "lose_video_uri": "file:///fixtures/videos/placeholder-lose.mp4"
+    },
+    "button_config": {
+      "bounds": {
+        "x": 100,
+        "y": 200,
+        "width": 150,
+        "height": 50
+      }
+    },
+    "rules": {
+      "active": true,
+      "require_login": false
+    },
+    "branding": {
+      "brand_name": "Test Brand"
+    }
+  }
+}

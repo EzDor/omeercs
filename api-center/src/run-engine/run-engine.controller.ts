@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, HttpCode, HttpStatus, Logger, ParseUUIDPipe } from '@nestjs/common';
 import { RunEngineApiService } from './services/run-engine-api.service';
 import type { TriggerRunRequest, TriggerRunResponse, RunResponse } from '@agentic-template/dto/src/run-engine/run.dto';
-import type { RunStepsResponse } from '@agentic-template/dto/src/run-engine/run-step.dto';
+import type { RunStepsResponse, CacheAnalysisResponse } from '@agentic-template/dto/src/run-engine/run-step.dto';
 import { StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
 
 @Controller('runs')
@@ -44,5 +44,11 @@ export class RunEngineController {
   async getRunArtifacts(@Param('runId', ParseUUIDPipe) runId: string, @Query('stepId') stepId?: string) {
     this.logger.debug(`GET /runs/${runId}/artifacts - stepId: ${stepId || 'all'}`);
     return this.runEngineApiService.getRunArtifacts(runId, stepId);
+  }
+
+  @Get(':runId/cache-analysis')
+  async getCacheAnalysis(@Param('runId', ParseUUIDPipe) runId: string): Promise<CacheAnalysisResponse> {
+    this.logger.debug(`GET /runs/${runId}/cache-analysis`);
+    return this.runEngineApiService.getCacheAnalysis(runId);
   }
 }

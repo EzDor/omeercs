@@ -57,6 +57,7 @@ export class RunResponse {
   stepsSummary?: StepsSummary;
   startedAt?: Date;
   completedAt?: Date;
+  durationMs?: number;
   createdAt: Date;
   updatedAt: Date;
 }

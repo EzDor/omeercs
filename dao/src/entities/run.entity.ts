@@ -3,19 +3,10 @@ import { BaseEntity } from './base.entity';
 import type { RunStep } from './run-step.entity';
 import type { CampaignContext } from '@agentic-template/dto/src/campaign-context/campaign-context.interface';
 
-/**
- * Run status enum type
- */
 export type RunStatusType = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-/**
- * Run trigger type enum
- */
 export type RunTriggerType = 'initial' | 'update';
 
-/**
- * Run error structure
- */
 export interface RunErrorJson {
   code: string;
   message: string;
@@ -23,9 +14,6 @@ export interface RunErrorJson {
   timestamp: string;
 }
 
-/**
- * Run entity representing one execution instance of a workflow
- */
 @Entity('runs')
 @Index(['tenantId', 'status'])
 @Index(['tenantId', 'workflowName'])
@@ -64,9 +52,9 @@ export class Run extends BaseEntity {
   @Column({ name: 'completed_at', type: 'timestamp with time zone', nullable: true })
   completedAt?: Date;
 
-  // createdAt and updatedAt are inherited from BaseEntity
+  @Column({ name: 'duration_ms', type: 'integer', nullable: true })
+  durationMs?: number;
 
-  // Relations will be added after RunStep entity is created
   @OneToMany('RunStep', 'run')
   steps?: RunStep[];
 }

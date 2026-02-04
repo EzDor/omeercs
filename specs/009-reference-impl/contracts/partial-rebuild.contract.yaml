@@ -1,0 +1,174 @@
+# Partial Rebuild Contract
+# Defines the API contract for triggering partial workflow rebuilds (e.g., audio update)
+
+openapi: 3.1.0
+info:
+  title: Partial Rebuild API
+  version: 1.0.0
+  description: API for triggering partial workflow rebuilds that reuse cached steps
+
+paths:
+  /api/workflows/campaign.update_audio/trigger:
+    post:
+      operationId: triggerAudioUpdate
+      summary: Trigger audio update for an existing campaign
+      description: |
+        Updates only the audio-related steps of an existing campaign run.
+        Reuses cached steps where inputs haven't changed (e.g., game_config).
+      tags:
+        - Workflows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioUpdateTriggerPayload'
+            examples:
+              audioUpdate:
+                summary: Update audio with new prompt
+                value:
+                  base_run_id: "550e8400-e29b-41d4-a716-446655440000"
+                  campaign_id: "campaign-2026-001"
+                  audio_overrides:
+                    prompt: "more energetic synthwave"
+                    mood: "epic"
+      responses:
+        '202':
+          description: Partial rebuild accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartialRebuildResponse'
+        '400':
+          description: Invalid trigger payload
+        '404':
+          description: Base run not found
+        '422':
+          description: Base run not in completed state
+
+  /api/workflows/runs/{runId}/cache-analysis:
+    get:
+      operationId: getCacheAnalysis
+      summary: Analyze cache reuse for a workflow run
+      description: |
+        Returns detailed information about which steps were reused from cache
+        versus re-executed for a given run.
+      tags:
+        - Workflows
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cache analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheAnalysisResponse'
+
+components:
+  schemas:
+    AudioUpdateTriggerPayload:
+      type: object
+      required:
+        - base_run_id
+        - campaign_id
+      properties:
+        base_run_id:
+          type: string
+          format: uuid
+          description: ID of the completed run to use as base
+        campaign_id:
+          type: string
+          description: Campaign ID (must match base run)
+        audio_overrides:
+          type: object
+          description: Audio parameters to override
+          properties:
+            prompt:
+              type: string
+              description: New audio generation prompt
+            mood:
+              type: string
+              enum: [happy, sad, tense, relaxed, epic, playful, dramatic, neutral]
+            style:
+              type: object
+              properties:
+                genre:
+                  type: string
+                energy_level:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+            duration_sec:
+              type: number
+              description: Override duration (optional)
+            sfx_list:
+              type: array
+              items:
+                type: string
+              description: Override SFX list (optional)
+
+    PartialRebuildResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        base_run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running]
+        workflow_name:
+          type: string
+        expected_reused_steps:
+          type: array
+          items:
+            type: string
+          description: Steps expected to be reused from cache
+          example: ["game_config"]
+        expected_rerun_steps:
+          type: array
+          items:
+            type: string
+          description: Steps expected to be re-executed
+          example: ["bgm", "sfx", "audio_mix", "bundle_game", "manifest"]
+
+    CacheAnalysisResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        total_steps:
+          type: number
+        cache_hits:
+          type: number
+        cache_misses:
+          type: number
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              step_id:
+                type: string
+              skill_id:
+                type: string
+              cache_hit:
+                type: boolean
+              input_hash:
+                type: string
+              reason:
+                type: string
+                description: Explanation for cache hit/miss
+                example: "Input hash matched previous run"
+        time_saved_ms:
+          type: number
+          description: Estimated time saved by cache reuse
