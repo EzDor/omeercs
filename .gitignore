@@ -83,3 +83,7 @@ dto/**/*.js
 
 # Claude Code local settings (user-specific)
 .claude/settings.local.json
+
+# Media files
+*.mp4
+!**/test/fixtures/**/*.mp4
