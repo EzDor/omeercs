@@ -26,6 +26,11 @@ const model = computed<MenuItem[]>(() => [
         icon: 'pi pi-fw pi-comment',
         to: '/chat',
       },
+      {
+        label: t('menu.gameCreation'),
+        icon: 'pi pi-fw pi-play',
+        to: '/game-creation',
+      },
     ],
   },
 ]);

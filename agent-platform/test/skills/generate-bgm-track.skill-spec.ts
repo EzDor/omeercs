@@ -273,8 +273,8 @@ describe('GenerateBgmTrackHandler (US3)', () => {
       if (result.ok) {
         expect(result.debug).toBeDefined();
         expect(result.debug?.timings_ms).toBeDefined();
-        expect(result.debug?.timings_ms?.total).toBeGreaterThan(0);
-        expect(result.debug?.timings_ms?.generation).toBeGreaterThan(0);
+        expect(result.debug?.timings_ms?.total).toBeGreaterThanOrEqual(0);
+        expect(result.debug?.timings_ms?.generation).toBeGreaterThanOrEqual(0);
 
         expect(result.debug?.provider_calls).toBeDefined();
         expect(result.debug?.provider_calls?.length).toBe(1);

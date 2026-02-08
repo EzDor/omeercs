@@ -99,8 +99,7 @@ echo "DAO build: $?"
 
 ### 4.1 Agent-Platform E2E Tests (40 tests)
 ```bash
-DATABASE_URL=postgresql://app_user:app_pass@localhost:5432/agentic_template \
-APP_SCHEMA=app \
+# Ensure .env is sourced or DATABASE_URL is set
 pnpm --filter @agentic-template/agent-platform test:e2e 2>&1
 ```
 
@@ -113,8 +112,7 @@ pnpm --filter @agentic-template/agent-platform test:e2e 2>&1
 
 ### 4.2 Agent-Platform Unit Tests (65 tests)
 ```bash
-DATABASE_URL=postgresql://app_user:app_pass@localhost:5432/agentic_template \
-APP_SCHEMA=app \
+# Ensure .env is sourced or DATABASE_URL is set
 npx jest --testRegex=".*\.spec\.ts$" --roots="$(pwd)/agent-platform/test" --passWithNoTests 2>&1
 ```
 
@@ -222,15 +220,8 @@ ls -la agent-platform/test/fixtures/
 
 ### 6.1 Test api-center Startup
 ```bash
-export DATABASE_URL=postgresql://app_user:app_pass@localhost:5432/agentic_template
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export REDIS_PASSWORD=devpassword
-export LITELLM_BASE_URL=http://localhost:4000
-export LITELLM_API_KEY=sk-1234
-export APP_SCHEMA=app
-export CLERK_PUBLISHABLE_KEY=$(awk -F= '/^CLERK_PUBLISHABLE_KEY=/{print $2}' .env)
-export CLERK_SECRET_KEY=$(awk -F= '/^CLERK_SECRET_KEY=/{print $2}' .env)
+# Source environment from .env file
+set -a && source .env && set +a
 
 timeout 30 pnpm --filter @agentic-template/api-server dev 2>&1 | tail -20
 ```
@@ -239,13 +230,8 @@ timeout 30 pnpm --filter @agentic-template/api-server dev 2>&1 | tail -20
 
 ### 6.2 Test agent-platform Startup
 ```bash
-export DATABASE_URL=postgresql://app_user:app_pass@localhost:5432/agentic_template
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export REDIS_PASSWORD=devpassword
-export LITELLM_BASE_URL=http://localhost:4000
-export LITELLM_API_KEY=sk-1234
-export APP_SCHEMA=app
+# Source environment from .env file
+set -a && source .env && set +a
 
 timeout 30 pnpm --filter @agentic-template/agent-platform dev 2>&1 | tail -20
 ```
