@@ -92,15 +92,23 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
+    "rootDir": ".",
+    "testMatch": [
+      "<rootDir>/test/**/*.spec.ts",
+      "<rootDir>/src/**/*.spec.ts"
+    ],
+    "moduleNameMapper": {
+      "^@agentic-template/common/src/(.*)$": "<rootDir>/../common/src/$1",
+      "^@agentic-template/dao/src/(.*)$": "<rootDir>/../dao/src/$1",
+      "^@agentic-template/dto/src/(.*)$": "<rootDir>/../dto/src/$1"
+    },
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "src/**/*.(t|j)s"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "./coverage",
     "testEnvironment": "node"
   }
 }

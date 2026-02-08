@@ -1,5 +1,5 @@
 ---
-name: clean-code
+name: refactor-code-cc
 description: Analyze a file and create a clean code refactoring plan following SOLID, DRY, KISS, and YAGNI principles
 ---
 

@@ -87,3 +87,4 @@ dto/**/*.js
 # Media files
 *.mp4
 !**/test/fixtures/**/*.mp4
+reports/

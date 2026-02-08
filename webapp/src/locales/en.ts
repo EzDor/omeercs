@@ -66,5 +66,6 @@ export default {
   },
   menu: {
     chat: 'Chat',
+    gameCreation: 'Game Creation',
   },
 };

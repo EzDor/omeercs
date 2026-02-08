@@ -29,6 +29,11 @@ const router = createRouter({
           name: 'chat',
           component: () => import('@/pages/ChatPage.vue'),
         },
+        {
+          path: '/game-creation',
+          name: 'game-creation',
+          component: () => import('@/pages/GameCreationPage.vue'),
+        },
       ],
     },
     {

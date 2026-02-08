@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useAuthSetup } from '@/services/api/auth.service';
-
 useAuthSetup();
 </script>
 
