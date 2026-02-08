@@ -118,6 +118,9 @@ export class GameConfigFromTemplateHandler implements SkillHandler<GameConfigFro
   async execute(input: GameConfigFromTemplateInput, context: SkillExecutionContext): Promise<SkillResult<GameConfigOutput>> {
     const startTime = Date.now();
     const timings: Record<string, number> = {};
+    const providerCalls: Array<{ provider: string; model: string; duration_ms: number; tokens: { input: number; output: number } }> = [];
+    const maxAttempts = 2;
+    const retryDelayMs = 1000;
 
     this.logger.log(`Executing game_config_from_template for template ${input.template_id}, tenant ${context.tenantId}`);
 
@@ -125,35 +128,79 @@ export class GameConfigFromTemplateHandler implements SkillHandler<GameConfigFro
       const userPrompt = this.buildUserPrompt(input);
       timings['prompt_build'] = Date.now() - startTime;
 
-      const llmStartTime = Date.now();
       const model = input.provider || this.defaultModel;
+      let lastParseError: Error | undefined;
+      let gameConfig: GameConfigOutput | undefined;
+      let attempts = 0;
 
-      const response = await this.llmClient.chatCompletion({
-        model,
-        messages: [
-          { role: 'system', content: GAME_CONFIG_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.5,
-        max_tokens: 8000,
-        response_format: {
-          type: 'json_schema',
-          json_schema: GAME_CONFIG_OUTPUT_SCHEMA,
-        },
-      });
-      timings['llm_call'] = Date.now() - llmStartTime;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        attempts = attempt;
+        const llmStartTime = Date.now();
 
-      const parseStartTime = Date.now();
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        return skillFailure('No content in LLM response', 'EMPTY_RESPONSE', { timings_ms: { total: Date.now() - startTime, ...timings } });
+        const response = await this.llmClient.chatCompletion({
+          model,
+          messages: [
+            { role: 'system', content: GAME_CONFIG_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.5,
+          max_tokens: 8000,
+          response_format: {
+            type: 'json_schema',
+            json_schema: GAME_CONFIG_OUTPUT_SCHEMA,
+          },
+        });
+
+        const llmDuration = Date.now() - llmStartTime;
+        timings[`llm_call_${attempt}`] = llmDuration;
+        providerCalls.push({
+          provider: 'litellm',
+          model,
+          duration_ms: llmDuration,
+          tokens: {
+            input: response.usage?.prompt_tokens || 0,
+            output: response.usage?.completion_tokens || 0,
+          },
+        });
+
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          return skillFailure('No content in LLM response', 'EMPTY_RESPONSE', {
+            timings_ms: { total: Date.now() - startTime, ...timings },
+            attempts,
+          });
+        }
+
+        const parseStartTime = Date.now();
+        try {
+          gameConfig = JSON.parse(content) as GameConfigOutput;
+          timings['parse'] = Date.now() - parseStartTime;
+          break;
+        } catch (parseError) {
+          timings[`parse_error_${attempt}`] = Date.now() - parseStartTime;
+          lastParseError = parseError instanceof Error ? parseError : new Error(String(parseError));
+          this.logger.warn(`JSON parse failed on attempt ${attempt}/${maxAttempts}: ${lastParseError.message}`);
+
+          if (attempt < maxAttempts) {
+            await this.delay(retryDelayMs);
+          }
+        }
       }
 
-      const gameConfig = JSON.parse(content) as GameConfigOutput;
-      timings['parse'] = Date.now() - parseStartTime;
+      const llmCallTotal = providerCalls.reduce((sum, call) => sum + call.duration_ms, 0);
+      timings['llm_call'] = llmCallTotal;
+
+      if (!gameConfig) {
+        const totalTime = Date.now() - startTime;
+        return skillFailure(`JSON parse failed after ${maxAttempts} attempts: ${lastParseError?.message}`, 'JSON_PARSE_ERROR', {
+          timings_ms: { total: totalTime, ...timings },
+          attempts,
+          provider_calls: providerCalls,
+        });
+      }
 
       const totalTime = Date.now() - startTime;
-      this.logger.log(`Game config generated successfully in ${totalTime}ms`);
+      this.logger.log(`Game config generated successfully in ${totalTime}ms (${attempts} attempt${attempts > 1 ? 's' : ''})`);
 
       return skillSuccess(
         gameConfig,
@@ -169,17 +216,8 @@ export class GameConfigFromTemplateHandler implements SkillHandler<GameConfigFro
         ],
         {
           timings_ms: { total: totalTime, ...timings },
-          provider_calls: [
-            {
-              provider: 'litellm',
-              model,
-              duration_ms: timings['llm_call'],
-              tokens: {
-                input: response.usage?.prompt_tokens || 0,
-                output: response.usage?.completion_tokens || 0,
-              },
-            },
-          ],
+          attempts,
+          provider_calls: providerCalls,
         },
       );
     } catch (error) {
@@ -190,6 +228,10 @@ export class GameConfigFromTemplateHandler implements SkillHandler<GameConfigFro
         timings_ms: { total: totalTime, ...timings },
       });
     }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private buildUserPrompt(input: GameConfigFromTemplateInput): string {
