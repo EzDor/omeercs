@@ -7,8 +7,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 
-const GAME_TEMPLATES_PATH = '/templates/games';
+import * as pathModule from 'path';
+
+const GAME_TEMPLATES_PATH = pathModule.resolve(__dirname, '../../../../..', 'templates', 'games');
 const DEFAULT_VERSION = '1.0.0';
+const FETCH_TIMEOUT_MS = 30000;
+const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254', '[::1]', 'metadata.google.internal'];
 
 @Injectable()
 export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplateInput, BundleGameTemplateOutput> {
@@ -28,68 +32,44 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
     this.logger.log(`Executing bundle_game_template for template ${input.template_id}, tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
-      // Create bundle output directory
       const bundleId = `bundle_${context.executionId}_${Date.now()}`;
       const bundlePath = path.join(this.outputDir, context.executionId, 'bundle');
 
       const setupStart = Date.now();
-      if (!fs.existsSync(bundlePath)) {
-        fs.mkdirSync(bundlePath, { recursive: true });
-      }
+      this.ensureDirectoryExists(bundlePath);
       timings['setup'] = Date.now() - setupStart;
 
-      // Copy template files
       const templateStart = Date.now();
+      if (!this.isValidTemplateId(input.template_id, this.templatesDir)) {
+        return skillFailure(`Invalid template_id: ${input.template_id}`, 'INPUT_VALIDATION_ERROR', {
+          timings_ms: { total: Date.now() - startTime },
+        });
+      }
       const templatePath = path.join(this.templatesDir, input.template_id);
       await this.copyTemplateFiles(templatePath, bundlePath);
       timings['copy_template'] = Date.now() - templateStart;
 
-      // Write game config
       const configStart = Date.now();
       const configPath = path.join(bundlePath, 'game_config.json');
-      fs.writeFileSync(configPath, JSON.stringify(input.game_config, null, 2));
-      fs.statSync(configPath);
+      this.writeJsonFile(configPath, input.game_config);
       timings['write_config'] = Date.now() - configStart;
 
-      // Copy assets
       const assetsStart = Date.now();
       const assetFiles = await this.copyAssets(input.assets, bundlePath, input.audio_uri);
       timings['copy_assets'] = Date.now() - assetsStart;
 
-      // Apply optimizations if requested
-      const optimizationsApplied: string[] = [];
-      if (input.optimization) {
-        const optimizeStart = Date.now();
-        if (input.optimization.minify_js) {
-          optimizationsApplied.push('minify_js');
-          // In production, would run actual minification
-        }
-        if (input.optimization.minify_css) {
-          optimizationsApplied.push('minify_css');
-        }
-        if (input.optimization.compress_images) {
-          optimizationsApplied.push('compress_images');
-        }
-        if (input.optimization.tree_shake) {
-          optimizationsApplied.push('tree_shake');
-        }
-        timings['optimize'] = Date.now() - optimizeStart;
-      }
+      const optimizationsApplied = this.applyOptimizations(input.optimization, timings);
 
-      // Generate file list with checksums
       const filesStart = Date.now();
       const allFiles = this.getAllFiles(bundlePath, bundlePath);
       timings['generate_file_list'] = Date.now() - filesStart;
 
-      // Create manifest
       const manifestStart = Date.now();
       const manifest = this.createManifest(bundleId, input.template_id, input.version || DEFAULT_VERSION, allFiles, assetFiles, optimizationsApplied);
-
       const manifestPath = path.join(bundlePath, 'bundle_manifest.json');
-      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      this.writeJsonFile(manifestPath, manifest);
       timings['create_manifest'] = Date.now() - manifestStart;
 
-      // Calculate totals
       const totalSizeBytes = allFiles.reduce((acc, f) => acc + f.size_bytes, 0);
 
       const totalTime = Date.now() - startTime;
@@ -141,12 +121,18 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
   private async copyTemplateFiles(templatePath: string, bundlePath: string): Promise<BundledFileInfo[]> {
     const files: BundledFileInfo[] = [];
 
-    // Check if template exists
     if (!fs.existsSync(templatePath)) {
       this.logger.warn(`Template path not found: ${templatePath}, creating placeholder structure`);
-      // Create placeholder index.html for demo purposes
-      const indexPath = path.join(bundlePath, 'index.html');
-      const indexContent = `<!DOCTYPE html>
+      return this.createPlaceholderTemplate(bundlePath, files);
+    }
+
+    await this.copyDirRecursive(templatePath, bundlePath, files, bundlePath);
+    return files;
+  }
+
+  private createPlaceholderTemplate(bundlePath: string, files: BundledFileInfo[]): BundledFileInfo[] {
+    const indexPath = path.join(bundlePath, 'index.html');
+    const indexContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -159,35 +145,37 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
   <script src="scripts/game.js" type="module"></script>
 </body>
 </html>`;
-      fs.writeFileSync(indexPath, indexContent);
+    fs.writeFileSync(indexPath, indexContent);
 
-      // Create directories
-      fs.mkdirSync(path.join(bundlePath, 'styles'), { recursive: true });
-      fs.mkdirSync(path.join(bundlePath, 'scripts'), { recursive: true });
-      fs.mkdirSync(path.join(bundlePath, 'assets'), { recursive: true });
+    this.createPlaceholderDirectories(bundlePath);
+    this.createPlaceholderStylesheet(bundlePath);
+    this.createPlaceholderScript(bundlePath);
 
-      // Create placeholder CSS
-      const cssPath = path.join(bundlePath, 'styles', 'main.css');
-      fs.writeFileSync(cssPath, '/* Game styles */\n#game-container { width: 100%; height: 100vh; }');
+    const indexStats = fs.statSync(indexPath);
+    files.push({
+      path: 'index.html',
+      size_bytes: indexStats.size,
+      content_type: 'text/html',
+      checksum: this.computeChecksum(indexPath),
+    });
 
-      // Create placeholder JS
-      const jsPath = path.join(bundlePath, 'scripts', 'game.js');
-      fs.writeFileSync(jsPath, '// Game logic\nimport config from "../game_config.json" assert { type: "json" };\nconsole.log("Game loaded", config);');
-
-      const indexStats = fs.statSync(indexPath);
-      files.push({
-        path: 'index.html',
-        size_bytes: indexStats.size,
-        content_type: 'text/html',
-        checksum: this.computeChecksum(indexPath),
-      });
-
-      return files;
-    }
-
-    // Copy all files from template recursively
-    await this.copyDirRecursive(templatePath, bundlePath, files, bundlePath);
     return files;
+  }
+
+  private createPlaceholderDirectories(bundlePath: string): void {
+    fs.mkdirSync(path.join(bundlePath, 'styles'), { recursive: true });
+    fs.mkdirSync(path.join(bundlePath, 'scripts'), { recursive: true });
+    fs.mkdirSync(path.join(bundlePath, 'assets'), { recursive: true });
+  }
+
+  private createPlaceholderStylesheet(bundlePath: string): void {
+    const cssPath = path.join(bundlePath, 'styles', 'main.css');
+    fs.writeFileSync(cssPath, '#game-container { width: 100%; height: 100vh; }');
+  }
+
+  private createPlaceholderScript(bundlePath: string): void {
+    const jsPath = path.join(bundlePath, 'scripts', 'game.js');
+    fs.writeFileSync(jsPath, 'import config from "../game_config.json" assert { type: "json" };\nconsole.log("Game loaded", config);');
   }
 
   private async copyDirRecursive(src: string, dest: string, files: BundledFileInfo[], basePath: string): Promise<void> {
@@ -264,10 +252,12 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       const destPath = path.join(destDir, filename);
       const relativePath = path.join('assets', asset.type, filename);
 
-      // Handle URL or local file
-      if (asset.uri.startsWith('http://') || asset.uri.startsWith('https://')) {
-        // Download the asset
-        const response = await fetch(asset.uri);
+      if (this.isRemoteUrl(asset.uri)) {
+        if (!this.isAllowedUrl(asset.uri)) {
+          this.logger.warn(`Blocked URL (SSRF prevention): ${asset.uri}`);
+          continue;
+        }
+        const response = await this.fetchWithTimeout(asset.uri);
         if (response.ok) {
           const buffer = Buffer.from(await response.arrayBuffer());
           fs.writeFileSync(destPath, buffer);
@@ -282,27 +272,30 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
         continue;
       }
 
-      // Categorize the asset
-      switch (asset.type) {
-        case 'image':
-          assetFiles.images.push(relativePath);
-          break;
-        case 'audio':
-          assetFiles.audio.push(relativePath);
-          break;
-        case 'video':
-          assetFiles.video.push(relativePath);
-          break;
-        case 'model':
-          assetFiles.models.push(relativePath);
-          break;
-        case 'json':
-          assetFiles.configs.push(relativePath);
-          break;
-      }
+      this.categorizeAsset(asset.type, relativePath, assetFiles);
     }
 
     return assetFiles;
+  }
+
+  private categorizeAsset(assetType: string, relativePath: string, assetFiles: { images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] }): void {
+    switch (assetType) {
+      case 'image':
+        assetFiles.images.push(relativePath);
+        break;
+      case 'audio':
+        assetFiles.audio.push(relativePath);
+        break;
+      case 'video':
+        assetFiles.video.push(relativePath);
+        break;
+      case 'model':
+        assetFiles.models.push(relativePath);
+        break;
+      case 'json':
+        assetFiles.configs.push(relativePath);
+        break;
+    }
   }
 
   private getAllFiles(dir: string, basePath: string): BundledFileInfo[] {
@@ -390,5 +383,78 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       '.fbx': 'model/fbx',
     };
     return contentTypes[ext] || 'application/octet-stream';
+  }
+
+  private isAllowedUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      const hostname = parsed.hostname.toLowerCase();
+      if (BLOCKED_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith(`.${blocked}`))) {
+        return false;
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private isValidTemplateId(templateId: string, baseDir: string): boolean {
+    if (templateId.includes('..') || path.isAbsolute(templateId)) {
+      return false;
+    }
+    const resolvedPath = path.resolve(baseDir, templateId);
+    return resolvedPath.startsWith(path.resolve(baseDir));
+  }
+
+  private async fetchWithTimeout(url: string, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private ensureDirectoryExists(dirPath: string): void {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  }
+
+  private writeJsonFile(filePath: string, data: unknown): void {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    fs.statSync(filePath);
+  }
+
+  private applyOptimizations(optimization: BundleGameTemplateInput['optimization'], timings: Record<string, number>): string[] {
+    const optimizationsApplied: string[] = [];
+    if (!optimization) {
+      return optimizationsApplied;
+    }
+
+    const optimizeStart = Date.now();
+    if (optimization.minify_js) {
+      optimizationsApplied.push('minify_js');
+    }
+    if (optimization.minify_css) {
+      optimizationsApplied.push('minify_css');
+    }
+    if (optimization.compress_images) {
+      optimizationsApplied.push('compress_images');
+    }
+    if (optimization.tree_shake) {
+      optimizationsApplied.push('tree_shake');
+    }
+    timings['optimize'] = Date.now() - optimizeStart;
+
+    return optimizationsApplied;
+  }
+
+  private isRemoteUrl(uri: string): boolean {
+    return uri.startsWith('http://') || uri.startsWith('https://');
   }
 }

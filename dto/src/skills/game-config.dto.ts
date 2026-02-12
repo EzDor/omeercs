@@ -157,11 +157,134 @@ export interface GameConfigAudio {
 }
 
 /**
- * Template-specific mechanics configuration
+ * Spin Wheel segment configuration
  */
-export interface GameConfigMechanics {
-  [key: string]: unknown;
+export interface SpinWheelSegment {
+  label: string;
+  color: string;
+  prize: string | null;
+  weight: number;
+  icon_uri?: string;
 }
+
+/**
+ * Spin Wheel mechanics configuration
+ */
+export interface SpinWheelMechanics {
+  segments: SpinWheelSegment[];
+  spin_duration_ms: number;
+  friction: number;
+}
+
+/**
+ * Scratch Card prize position
+ */
+export interface ScratchCardPrize {
+  position: { row: number; col: number };
+  value: string;
+  is_winner: boolean;
+}
+
+/**
+ * Scratch Card mechanics configuration
+ */
+export interface ScratchCardMechanics {
+  grid_size: { rows: number; cols: number };
+  reveal_threshold: number;
+  prizes: ScratchCardPrize[];
+  scratch_particle_color: string;
+}
+
+/**
+ * Slot Machine symbol configuration
+ */
+export interface SlotMachineSymbol {
+  id: string;
+  weight: number;
+  asset_slot?: string;
+  value: number;
+}
+
+/**
+ * Slot Machine mechanics configuration
+ */
+export interface SlotMachineMechanics {
+  reels: number;
+  rows_visible: number;
+  symbols: SlotMachineSymbol[];
+  paylines: number[][];
+  spin_duration_ms: number;
+  reel_delay_ms: number;
+}
+
+/**
+ * Memory Match mechanics configuration
+ */
+export interface MemoryMatchMechanics {
+  grid: { rows: number; cols: number };
+  time_limit_sec: number;
+  card_flip_duration_ms: number;
+  match_display_duration_ms: number;
+  card_back_asset?: string;
+}
+
+/**
+ * Catch Game object configuration
+ */
+export interface CatchGameObject {
+  id: string;
+  asset_slot?: string;
+  points: number;
+  spawn_weight: number;
+  fall_speed_multiplier: number;
+}
+
+/**
+ * Catch Game mechanics configuration
+ */
+export interface CatchGameMechanics {
+  duration_sec: number;
+  spawn_rate_per_sec: number;
+  base_fall_speed: number;
+  good_objects: CatchGameObject[];
+  bad_objects: CatchGameObject[];
+  win_score: number;
+  basket_width_percent: number;
+}
+
+/**
+ * Quiz question configuration
+ */
+export interface QuizQuestion {
+  text: string;
+  options: string[];
+  correct_index: number;
+  time_limit_sec: number;
+  points: number;
+}
+
+/**
+ * Quiz mechanics configuration
+ */
+export interface QuizMechanics {
+  questions: QuizQuestion[];
+  pass_threshold: number;
+  show_correct_answer: boolean;
+  shuffle_questions: boolean;
+  shuffle_options: boolean;
+}
+
+/**
+ * Template-specific mechanics configuration (union type)
+ */
+export type GameConfigMechanics =
+  | SpinWheelMechanics
+  | ScratchCardMechanics
+  | SlotMachineMechanics
+  | MemoryMatchMechanics
+  | CatchGameMechanics
+  | QuizMechanics
+  | Record<string, unknown>;
 
 /**
  * Output DTO for game_config_from_template skill

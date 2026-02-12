@@ -29,8 +29,13 @@ pnpm --filter dao build                       # Build DAO package
 ### Testing
 ```bash
 pnpm test                             # Run all tests
+pnpm --filter agent-platform test     # Backend unit tests (Jest)
 pnpm --filter webapp test:unit        # Frontend unit tests (Vitest)
 pnpm --filter webapp test:e2e         # Frontend e2e tests (Playwright)
+
+# Run single test file
+pnpm --filter agent-platform test -- path/to/test.spec.ts
+pnpm --filter webapp test:unit -- path/to/test.spec.ts
 ```
 
 ### Linting & Formatting
@@ -73,6 +78,34 @@ Build order matters: `dto` → `common` → `dao` → `api-center`/`agent-platfo
 3. **LLM Integration**: LiteLLM proxy abstracts model providers, configured in `/litellm/litellm_config.yaml`
 4. **Auth Flow**: Clerk JWT → AuthGuard validates → TenantContextInterceptor extracts org → CLS propagates tenant
 
+### Run Engine & Workflow Systems
+
+The agent-platform has two parallel execution systems:
+
+**Run Engine** (`agent-platform/src/run-engine/`):
+- Executes workflows as sequential steps with skill invocation
+- Key services: `RunEngineService`, `WorkflowRegistryService`, `CachedStepExecutorService`
+- Workflow definitions loaded from YAML files via `WorkflowYamlLoaderService`
+- Step dependencies managed via `DependencyGraphService` (topological sorting)
+- Input-based caching via `StepCacheService` with hash-based keys
+- Queue: `RUN_ORCHESTRATION` processed by `LangGraphRunProcessor`
+
+**Workflow Orchestration** (`agent-platform/src/workflow-orchestration/`):
+- Executes LangGraph workflows with PostgreSQL checkpointing
+- Key services: `WorkflowEngineService`, `WorkflowQueueService`
+- Supports workflow retry from checkpoints
+- Queue: `WORKFLOW_ORCHESTRATION` processed by `WorkflowQueueProcessor`
+
+**Skills System** (`agent-platform/src/skills/`):
+- `SkillRunnerService`: Main skill execution orchestrator with timeout/validation
+- `SkillCatalogService`: Loads skill descriptors from YAML, manages versions
+- Two skill types: handler-based (custom code) and template-based (LLM_JSON_GENERATION)
+- `LlmGenerationService`: Executes LLM-based skills with prompt rendering
+
+**Prompt Registry** (`agent-platform/src/prompt-registry/`):
+- In-memory registry of prompt templates loaded from filesystem
+- `TemplateRendererService`: f-string variable interpolation for prompts
+
 ### Data Flow (Chat Example)
 ```
 Frontend → API Center (POST /api/chat/send) → BullMQ queue → Agent Platform → LangGraph workflow → LiteLLM → LLM Provider
@@ -87,8 +120,11 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 | Auth Guard | `common/src/auth/auth.guard.ts` |
 | Tenant Context | `common/src/tenant/tenant-cls.service.ts` |
 | LLM Client | `common/src/llm/litellm-http.client.ts` |
+| Run Engine | `agent-platform/src/run-engine/` |
 | Workflow Engine | `agent-platform/src/workflow-orchestration/` |
+| Skill Runner | `agent-platform/src/skills/skill-runner/skill-runner.service.ts` |
 | Chat Entities | `dao/src/entities/chat-*.entity.ts` |
+| Run Entities | `dao/src/entities/run.entity.ts`, `run-step.entity.ts` |
 | Vue Routes | `webapp/src/router/` |
 | Pinia Stores | `webapp/src/stores/` |
 
@@ -116,27 +152,7 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 - **No code comments**: NEVER write code comments unless explicitly requested. Instead, extract the intended comment into a small, well-named function that makes the code self-documenting.
 - **No README files**: NEVER create a README.md unless explicitly requested.
 - **No barrel files (index.ts)**: NEVER create index.ts files that re-export from other files. Always import directly from the source file (e.g., import from './skill-result.interface' not from './index'). Exception: index.ts files that contain actual implementation logic (like webapp/src/router/index.ts which creates the Vue Router instance).
+- **Check docs with Context7**: When working with 3rd party libraries or APIs, use the Context7 MCP tool (`mcp__context7__resolve-library-id` and `mcp__context7__get-library-docs`) to fetch up-to-date documentation before implementing.
 
 ## .specify Directory
 Agentic workflow system for specification-driven development. Contains templates (spec, plan, tasks) and scripts for AI-assisted feature development. Used with Claude Code skills in `.claude/commands/`.
-
-## Active Technologies
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation) (001-skill-runner)
-- PostgreSQL with TypeORM (for artifact registry metadata) (001-skill-runner)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, existing LiteLLMHttpClien (003-provider-adapters)
-- N/A (provider-hosted URLs returned directly, no platform storage layer) (003-provider-adapters)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, BullMQ, TypeORM, class-validator, class-transformer, existing SkillRunner service (004-run-engine)
-- PostgreSQL with TypeORM (new tables: runs, run_steps, step_cache); Valkey/Redis for step cache (TTL-based) (004-run-engine)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, f-string (template rendering), Ajv (existing SchemaValidatorService), js-yaml (YAML frontmatter parsing) (005-prompt-config-registry)
-- Filesystem at startup (no database for templates); PostgreSQL for run_steps.debug storage (existing) (005-prompt-config-registry)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (existing SchemaValidatorService), f-string (existing PromptRegistryService), LiteLLMHttpClient (existing) (006-agent-layer-rules)
-- PostgreSQL with TypeORM (existing Run/RunStep tables for debug storage); Filesystem for prompt templates (existing pattern) (006-agent-layer-rules)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, js-yaml, Ajv (existing SchemaValidatorService), semver (existing pattern) (007-default-workflow-pack)
-- Filesystem for workflow YAML files; PostgreSQL for run data (existing Run, RunStep, StepCache, Artifact tables) (007-default-workflow-pack)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, TypeORM, class-validator, class-transformer (008-campaign-context)
-- PostgreSQL with TypeORM (CampaignContext as JSONB in Run entity or separate table) (008-campaign-context)
-- TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation), LiteLLMHttpClient (existing) (009-reference-impl)
-- PostgreSQL with TypeORM (Run, RunStep, Artifact, StepCache entities); filesystem for workflow YAML and skill catalogs (009-reference-impl)
-
-## Recent Changes
-- 001-skill-runner: Added TypeScript 5.x / Node.js 20.x (matches existing codebase) + NestJS 11.x, class-validator, class-transformer, js-yaml, Ajv (JSON Schema validation)

@@ -30,6 +30,9 @@ export class StepCache extends BaseEntity {
   @Column({ name: 'artifact_ids', type: 'jsonb' })
   artifactIds: string[];
 
+  @Column({ type: 'jsonb', nullable: true })
+  data?: Record<string, unknown>;
+
   @Column({ type: 'varchar', length: 20, default: 'global' })
   scope: CacheScopeType;
 

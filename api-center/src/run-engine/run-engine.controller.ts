@@ -14,18 +14,8 @@ export class RunEngineController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerRun(@Body() request: TriggerRunRequest): Promise<TriggerRunResponse> {
-    console.log('=== TRIGGER RUN CALLED ===');
-    console.log('Request:', JSON.stringify(request));
     this.logger.log(`POST /runs - workflow: ${request.workflowName}`);
-    try {
-      const result = await this.runEngineApiService.triggerRun(request);
-      console.log('=== TRIGGER RUN SUCCESS ===');
-      return result;
-    } catch (error) {
-      console.error('=== TRIGGER RUN ERROR ===');
-      console.error('Error:', error);
-      throw error;
-    }
+    return this.runEngineApiService.triggerRun(request);
   }
 
   @Get(':runId')

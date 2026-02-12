@@ -419,8 +419,8 @@ async function main(): Promise<void> {
           console.log(`  - ${artifact.type}: ${artifact.uri}${size}`);
         }
       }
-    } catch {
-      // Artifacts might not be available yet
+    } catch (error) {
+      console.log(color('Note:', 'yellow'), 'Could not fetch artifacts:', error instanceof Error ? error.message : 'Unknown error');
     }
 
     console.log('');

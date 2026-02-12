@@ -49,13 +49,13 @@ export class CachedStepExecutorService {
       }
 
       if (stepSpec.cachePolicy.enabled) {
-        const cachedArtifactIds = await this.stepCacheService.get(cacheKey);
-        if (cachedArtifactIds) {
+        const cached = await this.stepCacheService.get(cacheKey);
+        if (cached) {
           const durationMs = Date.now() - startTime;
 
           if (runStep) {
             await this.runEngineService.updateRunStepStatus(runStep.id, 'completed', {
-              outputArtifactIds: cachedArtifactIds,
+              outputArtifactIds: cached.artifactIds,
               cacheHit: true,
               durationMs,
             });
@@ -63,7 +63,7 @@ export class CachedStepExecutorService {
 
           this.logger.log(`[CachedStep] Cache hit: stepId=${stepSpec.stepId}, durationMs=${durationMs}`);
 
-          return this.buildSuccessUpdate(stepSpec.stepId, cachedArtifactIds, true, durationMs);
+          return this.buildSuccessUpdate(stepSpec.stepId, cached.artifactIds, true, durationMs, cached.data);
         }
       }
 
@@ -87,6 +87,7 @@ export class CachedStepExecutorService {
             stepId: stepSpec.stepId,
             inputHash,
             artifactIds,
+            data: result.data as Record<string, unknown> | undefined,
             scope: stepSpec.cachePolicy.scope,
           });
         }

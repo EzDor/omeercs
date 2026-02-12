@@ -9,7 +9,13 @@ export interface CacheSetParams {
   stepId: string;
   inputHash: string;
   artifactIds: string[];
+  data?: Record<string, unknown>;
   scope: CacheScopeType;
+}
+
+export interface CacheGetResult {
+  artifactIds: string[];
+  data?: Record<string, unknown>;
 }
 
 @Injectable()
@@ -21,14 +27,17 @@ export class StepCacheService {
     private readonly cacheRepository: Repository<StepCache>,
   ) {}
 
-  async get(cacheKey: string): Promise<string[] | null> {
+  async get(cacheKey: string): Promise<CacheGetResult | null> {
     const entry = await this.cacheRepository.findOne({
       where: { cacheKey },
     });
 
     if (entry) {
       this.logger.debug(`Cache hit for key: ${cacheKey}`);
-      return entry.artifactIds;
+      return {
+        artifactIds: entry.artifactIds,
+        data: entry.data,
+      };
     }
 
     this.logger.debug(`Cache miss for key: ${cacheKey}`);
@@ -36,12 +45,13 @@ export class StepCacheService {
   }
 
   async set(params: CacheSetParams): Promise<void> {
-    const { cacheKey, workflowName, stepId, inputHash, artifactIds, scope } = params;
+    const { cacheKey, workflowName, stepId, inputHash, artifactIds, data, scope } = params;
 
     const existing = await this.cacheRepository.findOne({ where: { cacheKey } });
 
     if (existing) {
       existing.artifactIds = artifactIds;
+      existing.data = data;
       existing.scope = scope;
       await this.cacheRepository.save(existing);
       this.logger.debug(`Cache updated for key: ${cacheKey}`);
@@ -52,6 +62,7 @@ export class StepCacheService {
         stepId,
         inputHash,
         artifactIds,
+        data,
         scope,
       });
       await this.cacheRepository.save(entry);
