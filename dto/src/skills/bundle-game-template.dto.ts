@@ -81,10 +81,15 @@ export class BundleGameTemplateInput {
   @IsNotEmpty()
   game_config: Record<string, unknown>;
 
+  @IsString()
+  @IsOptional()
+  audio_uri?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BundleAssetRef)
-  assets: BundleAssetRef[];
+  @IsOptional()
+  assets?: BundleAssetRef[];
 
   @ValidateNested()
   @Type(() => BundleOptimizationOptions)

@@ -47,6 +47,7 @@ export class PromptRegistryService implements OnModuleInit {
     }
 
     this.logger.log(`Loaded ${this.state.prompts.size} prompt(s), ${this.state.configs.size} config(s), ${this.state.rubrics.size} rubric(s)`);
+    this.logger.log(`Available prompts: ${Array.from(this.state.prompts.keys()).join(', ')}`);
 
     if (promptResult.errorCount > 0 || configResult.errorCount > 0 || rubricResult.errorCount > 0) {
       this.logger.warn(`Load errors: ${promptResult.errorCount} prompts, ${configResult.errorCount} configs, ${rubricResult.errorCount} rubrics`);
@@ -93,6 +94,7 @@ export class PromptRegistryService implements OnModuleInit {
   }
 
   getPrompt(promptId: string, version?: string): RegistryResult<PromptTemplate> {
+    this.logger.debug(`Looking up prompt: ${promptId}, available: ${Array.from(this.state.prompts.keys()).join(', ')}`);
     const versionMap = this.state.prompts.get(promptId);
     if (!versionMap) {
       return {

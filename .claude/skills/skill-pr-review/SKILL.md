@@ -20,14 +20,15 @@ This skill orchestrates a complete pull request review cycle including automated
 │  1. Check PR Status                                             │
 │     └── If no PR exists → Run /pr-changes command               │
 ├─────────────────────────────────────────────────────────────────┤
-│  2. Wait for Codex Review                                       │
-│     └── Poll every 2 minutes after initial 5-minute wait        │
+│  2. Run Claude Code Review        ┐                             │
+│     └── Use project-manager-      │ PARALLEL                    │
+│         reviewer agent            │ (Codex runs automatically   │
+├───────────────────────────────────┤  in background)             │
+│  3. Run Security Review           │                             │
+│     └── OWASP Top 10 analysis    ┘                             │
 ├─────────────────────────────────────────────────────────────────┤
-│  3. Run Claude Code Review                                      │
-│     └── Use project-manager-reviewer agent                      │
-├─────────────────────────────────────────────────────────────────┤
-│  4. Run Security Review                                         │
-│     └── Analyze for OWASP Top 10 and security vulnerabilities   │
+│  4. Wait for Codex (if still pending)                           │
+│     └── Only wait after other reviews complete                  │
 ├─────────────────────────────────────────────────────────────────┤
 │  5. Consolidate All Issues                                      │
 │     └── Gather from Codex, Claude review, and security review   │
@@ -46,30 +47,14 @@ scripts/check-pr-status.sh
 ```
 
 **Decision Tree:**
-- **PR exists**: Proceed to Phase 2
-- **No PR exists**: Execute `/pr-changes` command to create one, then wait for Codex
+- **PR exists**: Capture PR number and proceed to Phase 2
+- **No PR exists**: Execute `/pr-changes` command to create one, then proceed
 
-## Phase 2: Wait for Codex Review
+**Important:** Once a PR exists or is created, Codex automatically starts its review in the background. We don't wait for it here - we proceed immediately with other reviews.
 
-After PR creation or if PR already exists, wait for Codex to complete its review.
+## Phase 2: Claude Code Review (Parallel with Codex)
 
-Execute the polling script:
-
-```bash
-scripts/wait-for-codex.sh <PR_NUMBER>
-```
-
-**Polling Strategy:**
-1. Initial wait: 5 minutes (Codex typically takes 3-5 minutes)
-2. Subsequent polls: Every 2 minutes
-3. Stop conditions:
-   - Codex review detected (has comments from `chatgpt-codex-connector[bot]`)
-   - Codex not configured/running (no review after reasonable time)
-   - Maximum wait time exceeded (15 minutes)
-
-**Important:** The script outputs the Codex review status. Capture this for Phase 5.
-
-## Phase 3: Claude Code Review
+**Start this immediately after PR exists - do NOT wait for Codex.**
 
 Launch the `project-manager-reviewer` agent to perform a comprehensive code review.
 
@@ -86,7 +71,9 @@ Launch the `project-manager-reviewer` agent to perform a comprehensive code revi
 
 Capture the agent's output for consolidation in Phase 5.
 
-## Phase 4: Security Review
+## Phase 3: Security Review (Parallel with Codex)
+
+**Start this immediately - do NOT wait for Codex.**
 
 Perform a security-focused review of all changes.
 
@@ -114,6 +101,34 @@ Perform a security-focused review of all changes.
 
 **Output Format:** List all findings with severity (Critical/High/Medium/Low).
 
+## Phase 4: Wait for Codex (Conditional)
+
+**Only after Phases 2 and 3 are complete**, check if Codex has finished its review.
+
+First, check the current status without waiting:
+
+```bash
+scripts/check-codex-status.sh <PR_NUMBER>
+```
+
+**Decision Tree:**
+- **CODEX_REVIEW_EXISTS**: Codex is done, proceed to Phase 5
+- **CODEX_PENDING**: Wait for Codex using the polling script:
+
+```bash
+scripts/wait-for-codex.sh <PR_NUMBER> 60 60 600
+```
+
+The parameters above use shorter waits since we've already spent time on other reviews:
+- Initial wait: 60 seconds (reduced from 300s - Codex has had time already)
+- Poll interval: 60 seconds (reduced from 120s)
+- Max wait: 600 seconds (10 minutes max additional wait)
+
+**Stop conditions:**
+- Codex review detected (has comments from `chatgpt-codex-connector[bot]`)
+- Codex not configured/running (no review after reasonable time)
+- Maximum wait time exceeded
+
 ## Phase 5: Issue Consolidation
 
 Gather all issues from the three review sources:
@@ -134,10 +149,10 @@ scripts/get-codex-comments.sh <PR_NUMBER>
 - No badge → Medium (default)
 
 ### Collecting Claude Review Issues
-Parse the output from Phase 3 (project-manager-reviewer agent).
+Parse the output from Phase 2 (project-manager-reviewer agent).
 
 ### Collecting Security Issues
-Parse the output from Phase 4 (security review).
+Parse the output from Phase 3 (security review).
 
 ### Consolidation Format
 
@@ -219,8 +234,14 @@ If any answer is "yes", include in the plan.
 ### scripts/check-pr-status.sh
 Checks if current branch has an open PR and outputs PR number or "none".
 
+### scripts/check-codex-status.sh
+Non-blocking check for Codex review status. Returns immediately with:
+- `CODEX_REVIEW_EXISTS` - Review is complete
+- `CODEX_PENDING` - Review not yet available
+
 ### scripts/wait-for-codex.sh
 Polls GitHub API for Codex review completion with configurable timing.
+Usage: `wait-for-codex.sh <PR_NUMBER> [INITIAL_WAIT_SEC] [POLL_INTERVAL_SEC] [MAX_WAIT_SEC]`
 
 ### scripts/get-codex-comments.sh
 Fetches and parses Codex review comments with priority extraction.
@@ -228,9 +249,20 @@ Fetches and parses Codex review comments with priority extraction.
 ## Error Handling
 
 - **No PR after /pr-changes**: Fail with message to check git status
-- **Codex timeout**: Proceed with Claude and security reviews only
+- **Codex timeout**: Proceed with Claude and security reviews only (already captured)
 - **GitHub API errors**: Retry with exponential backoff, max 3 attempts
 - **Agent failures**: Log error and continue with available reviews
+
+## Execution Strategy
+
+The key optimization in this workflow is **parallelization**:
+
+1. **Do NOT block on Codex early** - Codex starts automatically when PR is created
+2. **Run Claude and Security reviews immediately** - These take 2-5 minutes each
+3. **Check Codex at the end** - By then, Codex often has finished (3-5 minutes typical)
+4. **Wait only if necessary** - Use shorter timeouts since time has already passed
+
+This approach typically saves 3-5 minutes compared to waiting for Codex first.
 
 ## Usage Example
 
@@ -238,9 +270,9 @@ Fetches and parses Codex review comments with priority extraction.
 User: /skill-pr-review
 
 [Skill checks for PR, creates if needed]
-[Waits for Codex review]
-[Runs Claude code review]
-[Performs security review]
-[Consolidates issues]
+[Immediately runs Claude code review - Codex works in background]
+[Runs security review - Codex continues in background]
+[Checks Codex status - waits only if still pending]
+[Consolidates issues from all three sources]
 [Generates fix plan in console]
 ```

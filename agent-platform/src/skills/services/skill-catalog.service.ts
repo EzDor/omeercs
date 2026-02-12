@@ -69,7 +69,17 @@ export class SkillCatalogService implements OnModuleInit {
   }
 
   private resolveCatalogPath(): string {
-    return this.configService.get<string>('SKILLS_CATALOG_PATH') || path.join(process.cwd(), '..', 'skills', 'catalog');
+    const configuredPath = this.configService.get<string>('SKILLS_CATALOG_PATH');
+    if (configuredPath) {
+      return configuredPath;
+    }
+
+    const dockerPath = path.join(process.cwd(), 'skills', 'catalog');
+    if (fs.existsSync(dockerPath)) {
+      return dockerPath;
+    }
+
+    return path.join(process.cwd(), '..', 'skills', 'catalog');
   }
 
   onModuleInit(): void {

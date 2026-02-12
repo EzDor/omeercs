@@ -239,6 +239,7 @@ export class SkillRunnerService {
     runId: string,
   ): Promise<SkillResult<TOutput>> {
     const templateConfig = descriptor.template_config as LlmJsonGenerationTemplateConfig;
+    this.logger.debug(`executeLlmJsonGeneration: templateConfig=${JSON.stringify(templateConfig)}`);
 
     if (!templateConfig?.prompt_id) {
       timings.total = Date.now() - startTime;

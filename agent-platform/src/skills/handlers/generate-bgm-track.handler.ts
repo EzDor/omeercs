@@ -8,6 +8,7 @@ import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/s
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';
+import { isAllowedUrl, fetchWithTimeout } from './network-safety.utils';
 
 const DEFAULT_BPM = 120;
 const DEFAULT_FORMAT = 'mp3';
@@ -55,7 +56,9 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
     this.defaultModel = configService.get<string>('AUDIO_GENERATION_MODEL') || 'suno-v3';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.audioGenerationTimeout = configService.get<number>('AUDIO_GENERATION_TIMEOUT_MS') || 300000;
-    this.useStubProvider = configService.get<string>('AUDIO_PROVIDER_STUB') === 'true';
+    const stubEnvValue = configService.get<string>('AUDIO_PROVIDER_STUB');
+    this.useStubProvider = stubEnvValue === 'true';
+    this.logger.log(`GenerateBgmTrackHandler initialized: AUDIO_PROVIDER_STUB='${stubEnvValue}', useStubProvider=${this.useStubProvider}`);
   }
 
   private isAsyncGenerationInProgress(status: string | undefined): boolean {
@@ -271,7 +274,11 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       fs.mkdirSync(outputPath, { recursive: true });
     }
 
-    const response = await fetch(audioUrl);
+    if (!isAllowedUrl(audioUrl)) {
+      throw new Error(`Blocked URL (SSRF prevention): ${audioUrl}`);
+    }
+
+    const response = await fetchWithTimeout(audioUrl);
     if (!response.ok) {
       throw new Error(`Failed to download audio: ${response.statusText}`);
     }

@@ -23,7 +23,6 @@ input_schema:
   required:
     - template_id
     - game_config
-    - assets
   properties:
     template_id:
       type: string
@@ -32,6 +31,9 @@ input_schema:
     game_config:
       type: object
       description: Complete game configuration JSON
+    audio_uri:
+      type: string
+      description: URI to the background music audio file (optional, alternative to assets)
     assets:
       type: array
       description: List of assets to include in the bundle

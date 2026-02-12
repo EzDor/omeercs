@@ -1,4 +1,4 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpStatus, Logger } from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpStatus, Logger, HttpException } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { ErrorResponse } from '@agentic-template/dto/src/error/interfaces/error-response.interface';
 
@@ -20,16 +20,29 @@ export class UnhandledExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const errorMessage = this.extractErrorMessage(exception);
-    const errorStack = exception instanceof Error ? exception.stack : undefined;
     const sanitizedPath = this.sanitizePath(request.url);
 
-    this.logger.error('Unhandled exception occurred', {
-      error: errorMessage,
-      stack: errorStack,
-      path: sanitizedPath,
-      method: request.method,
-    });
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+
+      const baseResponse = typeof exceptionResponse === 'object' ? (exceptionResponse as Record<string, unknown>) : {};
+
+      const errorResponse: ErrorResponse = {
+        statusCode: status,
+        message: (baseResponse.message as string) || exception.message || 'An error occurred',
+        error: (baseResponse.error as string) || exception.name || 'Error',
+        timestamp: new Date().toISOString(),
+        path: sanitizedPath,
+      };
+
+      return response.status(status).json(errorResponse);
+    }
+
+    const errorMessage = this.extractErrorMessage(exception);
+    const errorStack = exception instanceof Error ? exception.stack : undefined;
+
+    this.logger.error(`Unhandled exception on ${request.method} ${sanitizedPath}: ${errorMessage}`, errorStack);
 
     const errorResponse: ErrorResponse = {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,

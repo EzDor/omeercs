@@ -49,13 +49,13 @@ export class CachedStepExecutorService {
       }
 
       if (stepSpec.cachePolicy.enabled) {
-        const cachedArtifactIds = await this.stepCacheService.get(cacheKey);
-        if (cachedArtifactIds) {
+        const cached = await this.stepCacheService.get(cacheKey);
+        if (cached) {
           const durationMs = Date.now() - startTime;
 
           if (runStep) {
             await this.runEngineService.updateRunStepStatus(runStep.id, 'completed', {
-              outputArtifactIds: cachedArtifactIds,
+              outputArtifactIds: cached.artifactIds,
               cacheHit: true,
               durationMs,
             });
@@ -63,7 +63,7 @@ export class CachedStepExecutorService {
 
           this.logger.log(`[CachedStep] Cache hit: stepId=${stepSpec.stepId}, durationMs=${durationMs}`);
 
-          return this.buildSuccessUpdate(stepSpec.stepId, cachedArtifactIds, true, durationMs);
+          return this.buildSuccessUpdate(stepSpec.stepId, cached.artifactIds, true, durationMs, cached.data);
         }
       }
 
@@ -87,13 +87,14 @@ export class CachedStepExecutorService {
             stepId: stepSpec.stepId,
             inputHash,
             artifactIds,
+            data: result.data as Record<string, unknown> | undefined,
             scope: stepSpec.cachePolicy.scope,
           });
         }
 
         this.logger.log(`[CachedStep] Completed: stepId=${stepSpec.stepId}, durationMs=${durationMs}`);
 
-        return this.buildSuccessUpdate(stepSpec.stepId, artifactIds, false, durationMs);
+        return this.buildSuccessUpdate(stepSpec.stepId, artifactIds, false, durationMs, result.data as Record<string, unknown> | undefined);
       }
 
       if (runStep) {
@@ -121,6 +122,7 @@ export class CachedStepExecutorService {
         stepId,
         status: result.status,
         outputArtifactIds: result.artifactIds,
+        data: result.data,
       });
     }
 
@@ -134,11 +136,12 @@ export class CachedStepExecutorService {
     };
   }
 
-  private buildSuccessUpdate(stepId: string, artifactIds: string[], cacheHit: boolean, durationMs: number): Partial<RunStateType> {
+  private buildSuccessUpdate(stepId: string, artifactIds: string[], cacheHit: boolean, durationMs: number, data?: Record<string, unknown>): Partial<RunStateType> {
     const stepResult: StepResult = {
       stepId,
       status: 'completed',
       artifactIds,
+      data,
       cacheHit,
       durationMs,
     };

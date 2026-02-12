@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, HttpCode, HttpStatus, Logger, ParseUUIDPipe } from '@nestjs/common';
 import { RunEngineApiService } from './services/run-engine-api.service';
-import type { TriggerRunRequest, TriggerRunResponse, RunResponse } from '@agentic-template/dto/src/run-engine/run.dto';
+import { TriggerRunRequest } from '@agentic-template/dto/src/run-engine/run.dto';
+import type { TriggerRunResponse, RunResponse } from '@agentic-template/dto/src/run-engine/run.dto';
 import type { RunStepsResponse, CacheAnalysisResponse } from '@agentic-template/dto/src/run-engine/run-step.dto';
 import { StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
 
@@ -13,7 +14,7 @@ export class RunEngineController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerRun(@Body() request: TriggerRunRequest): Promise<TriggerRunResponse> {
-    this.logger.debug(`POST /runs - workflow: ${request.workflowName}`);
+    this.logger.log(`POST /runs - workflow: ${request.workflowName}`);
     return this.runEngineApiService.triggerRun(request);
   }
 

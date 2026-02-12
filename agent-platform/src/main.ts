@@ -20,7 +20,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = configService.get<number>('PORT', 3000);
+  const port = configService.get<number>('AGENT_PLATFORM_PORT', 3002);
   await app.listen(port);
 }
 void bootstrap();

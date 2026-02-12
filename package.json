@@ -25,7 +25,8 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -d dao/src/datasource.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d dao/src/datasource.ts",
     "migration:show": "typeorm-ts-node-commonjs migration:show -d dao/src/datasource.ts",
-    "sync-prompt": "npx tsx common/scripts/sync-prompts-from-langsmith.ts"
+    "sync-prompt": "npx tsx common/scripts/sync-prompts-from-langsmith.ts",
+    "trigger": "npx tsx scripts/trigger-workflow.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
