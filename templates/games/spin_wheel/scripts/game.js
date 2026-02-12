@@ -362,12 +362,13 @@ class SpinWheelGame {
     window.dispatchEvent(event);
 
     if (window.parent !== window) {
+      const targetOrigin = this.config.settings?.parent_origin || window.location.origin;
       window.parent.postMessage({
         type: 'game_complete',
         result: isWin ? 'win' : 'lose',
         prize: segment.prize,
         segment_label: segment.label,
-      }, '*');
+      }, targetOrigin);
     }
   }
 }

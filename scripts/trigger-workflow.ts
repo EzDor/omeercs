@@ -229,7 +229,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
 }
 
 async function triggerWorkflow(apiUrl: string, tenantId: string, workflowName: string, payload: Record<string, unknown>): Promise<TriggerResponse> {
-  return fetchJson<TriggerResponse>(`${apiUrl}/api/dev/runs`, {
+  return fetchJson<TriggerResponse>(`${apiUrl}/api/runs`, {
     method: 'POST',
     headers: {
       'x-tenant-id': tenantId,
@@ -243,7 +243,7 @@ async function triggerWorkflow(apiUrl: string, tenantId: string, workflowName: s
 }
 
 async function getRun(apiUrl: string, tenantId: string, runId: string): Promise<RunResponse> {
-  return fetchJson<RunResponse>(`${apiUrl}/api/dev/runs/${runId}`, {
+  return fetchJson<RunResponse>(`${apiUrl}/api/runs/${runId}`, {
     headers: {
       'x-tenant-id': tenantId,
     },
@@ -251,7 +251,7 @@ async function getRun(apiUrl: string, tenantId: string, runId: string): Promise<
 }
 
 async function getRunSteps(apiUrl: string, tenantId: string, runId: string): Promise<RunStepsResponse> {
-  return fetchJson<RunStepsResponse>(`${apiUrl}/api/dev/runs/${runId}/steps`, {
+  return fetchJson<RunStepsResponse>(`${apiUrl}/api/runs/${runId}/steps`, {
     headers: {
       'x-tenant-id': tenantId,
     },
@@ -259,7 +259,7 @@ async function getRunSteps(apiUrl: string, tenantId: string, runId: string): Pro
 }
 
 async function getRunArtifacts(apiUrl: string, tenantId: string, runId: string): Promise<ArtifactsResponse> {
-  return fetchJson<ArtifactsResponse>(`${apiUrl}/api/dev/runs/${runId}/artifacts`, {
+  return fetchJson<ArtifactsResponse>(`${apiUrl}/api/runs/${runId}/artifacts`, {
     headers: {
       'x-tenant-id': tenantId,
     },

@@ -8,6 +8,7 @@ import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/s
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
 import * as path from 'path';
+import { isAllowedUrl, fetchWithTimeout } from './network-safety.utils';
 
 const DEFAULT_BPM = 120;
 const DEFAULT_FORMAT = 'mp3';
@@ -19,8 +20,6 @@ const LOW_ENERGY_THRESHOLD = 0.3;
 const HIGH_ENERGY_THRESHOLD = 0.7;
 
 const BGM_ARTIFACT_TYPE = 'audio/bgm';
-const FETCH_TIMEOUT_MS = 30000;
-const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254', '[::1]', 'metadata.google.internal'];
 
 const MOOD_DESCRIPTIONS: Record<string, string> = {
   happy: 'with a happy, uplifting feel',
@@ -275,11 +274,11 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       fs.mkdirSync(outputPath, { recursive: true });
     }
 
-    if (!this.isAllowedUrl(audioUrl)) {
+    if (!isAllowedUrl(audioUrl)) {
       throw new Error(`Blocked URL (SSRF prevention): ${audioUrl}`);
     }
 
-    const response = await this.fetchWithTimeout(audioUrl);
+    const response = await fetchWithTimeout(audioUrl);
     if (!response.ok) {
       throw new Error(`Failed to download audio: ${response.statusText}`);
     }
@@ -296,32 +295,6 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       uri: filePath,
       fileSize: stats.size,
     };
-  }
-
-  private isAllowedUrl(url: string): boolean {
-    try {
-      const parsed = new URL(url);
-      const hostname = parsed.hostname.toLowerCase();
-      if (BLOCKED_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith(`.${blocked}`))) {
-        return false;
-      }
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return false;
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async fetchWithTimeout(url: string, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetch(url, { signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 
   private async executeWithStubProvider(

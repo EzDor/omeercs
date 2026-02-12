@@ -6,13 +6,12 @@ import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { isAllowedUrl, fetchWithTimeout } from './network-safety.utils';
 
 import * as pathModule from 'path';
 
 const GAME_TEMPLATES_PATH = pathModule.resolve(__dirname, '../../../../..', 'templates', 'games');
 const DEFAULT_VERSION = '1.0.0';
-const FETCH_TIMEOUT_MS = 30000;
-const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254', '[::1]', 'metadata.google.internal'];
 
 @Injectable()
 export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplateInput, BundleGameTemplateOutput> {
@@ -230,9 +229,13 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       const filename = path.basename(audioUri);
       const destPath = path.join(audioDir, filename);
       if (fs.existsSync(audioUri)) {
-        fs.copyFileSync(audioUri, destPath);
-        assetFiles.audio.push(path.join('assets', 'audio', filename));
-        this.logger.log(`Copied audio from audio_uri: ${audioUri} -> ${destPath}`);
+        if (this.isAllowedLocalPath(audioUri)) {
+          fs.copyFileSync(audioUri, destPath);
+          assetFiles.audio.push(path.join('assets', 'audio', filename));
+          this.logger.log(`Copied audio from audio_uri: ${audioUri} -> ${destPath}`);
+        } else {
+          this.logger.warn(`Audio URI path traversal blocked: ${audioUri}`);
+        }
       } else {
         this.logger.warn(`Audio URI not found: ${audioUri}`);
       }
@@ -253,11 +256,11 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       const relativePath = path.join('assets', asset.type, filename);
 
       if (this.isRemoteUrl(asset.uri)) {
-        if (!this.isAllowedUrl(asset.uri)) {
+        if (!isAllowedUrl(asset.uri)) {
           this.logger.warn(`Blocked URL (SSRF prevention): ${asset.uri}`);
           continue;
         }
-        const response = await this.fetchWithTimeout(asset.uri);
+        const response = await fetchWithTimeout(asset.uri);
         if (response.ok) {
           const buffer = Buffer.from(await response.arrayBuffer());
           fs.writeFileSync(destPath, buffer);
@@ -266,6 +269,10 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
           continue;
         }
       } else if (fs.existsSync(asset.uri)) {
+        if (!this.isAllowedLocalPath(asset.uri)) {
+          this.logger.warn(`Local asset path traversal blocked: ${asset.uri}`);
+          continue;
+        }
         fs.copyFileSync(asset.uri, destPath);
       } else {
         this.logger.warn(`Asset not found: ${asset.uri}`);
@@ -385,20 +392,9 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
     return contentTypes[ext] || 'application/octet-stream';
   }
 
-  private isAllowedUrl(url: string): boolean {
-    try {
-      const parsed = new URL(url);
-      const hostname = parsed.hostname.toLowerCase();
-      if (BLOCKED_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith(`.${blocked}`))) {
-        return false;
-      }
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return false;
-      }
-      return true;
-    } catch {
-      return false;
-    }
+  private isAllowedLocalPath(localPath: string): boolean {
+    const resolved = path.resolve(localPath);
+    return resolved.startsWith(path.resolve(this.outputDir));
   }
 
   private isValidTemplateId(templateId: string, baseDir: string): boolean {
@@ -407,16 +403,6 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
     }
     const resolvedPath = path.resolve(baseDir, templateId);
     return resolvedPath.startsWith(path.resolve(baseDir));
-  }
-
-  private async fetchWithTimeout(url: string, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetch(url, { signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 
   private ensureDirectoryExists(dirPath: string): void {

@@ -52,7 +52,7 @@ export class AssetsController {
       throw new BadRequestException('Invalid file path');
     }
 
-    const fullPath = path.join(this.outputDir, runId, filePath);
+    const fullPath = path.join(this.outputDir, runId, 'bundle', filePath);
     const normalizedPath = path.normalize(fullPath);
 
     if (!normalizedPath.startsWith(this.outputDir)) {
@@ -104,8 +104,18 @@ export class AssetsController {
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
 
     const stream = fs.createReadStream(filePath);
+    stream.on('error', (err) => {
+      this.logger.error(`Stream error for ${filePath}: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Error reading file' });
+      } else {
+        res.end();
+      }
+    });
     stream.pipe(res);
   }
 
@@ -115,6 +125,17 @@ export class AssetsController {
   }
 
   private containsPathTraversal(filePath: string): boolean {
-    return filePath.includes('..') || filePath.includes('\0');
+    if (filePath.includes('..') || filePath.includes('\0')) {
+      return true;
+    }
+    try {
+      const decoded = decodeURIComponent(filePath);
+      if (decoded.includes('..') || decoded.includes('\0') || path.isAbsolute(decoded)) {
+        return true;
+      }
+    } catch {
+      return true;
+    }
+    return false;
   }
 }
