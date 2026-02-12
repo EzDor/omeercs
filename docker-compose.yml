@@ -118,11 +118,13 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}
       - CLAUDE_MAX_TOKENS=${CLAUDE_MAX_TOKENS:-8192}
+      - AUDIO_PROVIDER_STUB=${AUDIO_PROVIDER_STUB:-false}
     volumes:
       - ./agent-platform:/app/agent-platform
       - ./dao:/app/dao
       - ./dto:/app/dto
       - ./common:/app/common
+      - ./skills:/app/skills
     networks:
       - agentic-template-network
     depends_on:

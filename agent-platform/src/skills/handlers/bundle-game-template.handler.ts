@@ -53,7 +53,7 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
 
       // Copy assets
       const assetsStart = Date.now();
-      const assetFiles = await this.copyAssets(input.assets, bundlePath);
+      const assetFiles = await this.copyAssets(input.assets, bundlePath, input.audio_uri);
       timings['copy_assets'] = Date.now() - assetsStart;
 
       // Apply optimizations if requested
@@ -219,6 +219,7 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
   private async copyAssets(
     assets: BundleGameTemplateInput['assets'],
     bundlePath: string,
+    audioUri?: string,
   ): Promise<{ images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] }> {
     const assetFiles = {
       images: [] as string[],
@@ -231,6 +232,26 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
     const assetsDir = path.join(bundlePath, 'assets');
     if (!fs.existsSync(assetsDir)) {
       fs.mkdirSync(assetsDir, { recursive: true });
+    }
+
+    if (audioUri) {
+      const audioDir = path.join(assetsDir, 'audio');
+      if (!fs.existsSync(audioDir)) {
+        fs.mkdirSync(audioDir, { recursive: true });
+      }
+      const filename = path.basename(audioUri);
+      const destPath = path.join(audioDir, filename);
+      if (fs.existsSync(audioUri)) {
+        fs.copyFileSync(audioUri, destPath);
+        assetFiles.audio.push(path.join('assets', 'audio', filename));
+        this.logger.log(`Copied audio from audio_uri: ${audioUri} -> ${destPath}`);
+      } else {
+        this.logger.warn(`Audio URI not found: ${audioUri}`);
+      }
+    }
+
+    if (!assets || !Array.isArray(assets)) {
+      return assetFiles;
     }
 
     for (const asset of assets) {

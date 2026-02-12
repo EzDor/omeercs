@@ -13,6 +13,7 @@ COPY agent-platform/ ./agent-platform/
 COPY dao/ ./dao/
 COPY dto/ ./dto/
 COPY common/ ./common/
+COPY skills/ ./skills/
 
 EXPOSE 3000
 EXPOSE 9229

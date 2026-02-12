@@ -66,10 +66,10 @@ steps:
         source: step_output
         step_id: game_config
         path: data
-      audio_assets:
+      audio_uri:
         source: step_output
         step_id: bgm
-        path: outputArtifactIds
+        path: audio_uri
       template_id:
         source: trigger
         path: template_id
@@ -101,7 +101,7 @@ steps:
       game_bundle_uri:
         source: step_output
         step_id: bundle_game
-        path: outputArtifactIds[0]
+        path: data.bundle_uri
       button_config:
         source: trigger
         path: button_config

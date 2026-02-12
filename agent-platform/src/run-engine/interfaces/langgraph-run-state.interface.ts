@@ -4,6 +4,7 @@ export interface StepResult {
   stepId: string;
   status: 'completed' | 'skipped' | 'failed';
   artifactIds: string[];
+  data?: Record<string, unknown>;
   cacheHit: boolean;
   durationMs: number;
   error?: { code: string; message: string };

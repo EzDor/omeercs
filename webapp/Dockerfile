@@ -11,6 +11,7 @@ COPY webapp/package.json ./webapp/package.json
 COPY pnpm-workspace.yaml package.json ./
 COPY webapp/ ./webapp/
 COPY dto/ ./dto/
+COPY dao/ ./dao/
 COPY common/ ./common/
 
 RUN pnpm install

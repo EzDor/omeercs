@@ -42,41 +42,54 @@ export class RunEngineApiService {
   ) {}
 
   async triggerRun(request: TriggerRunRequest): Promise<TriggerRunResponse> {
+    process.stderr.write('[DEBUG] triggerRun called\n');
     const tenantId = this.tenantClsService.getTenantId();
+    process.stderr.write(`[DEBUG] tenantId: ${tenantId}\n`);
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
 
-    const run = this.runRepository.create({
-      tenantId,
-      workflowName: request.workflowName,
-      workflowVersion: request.workflowVersion || '1.0.0',
-      triggerType: 'initial',
-      triggerPayload: request.triggerPayload || {},
-      status: 'queued',
-    });
-
-    const savedRun = await this.runRepository.save(run);
-    this.logger.log(`Run created: ${savedRun.id} for workflow ${request.workflowName}`);
-
-    await this.orchestrationQueue.add(
-      'orchestrate',
-      {
-        runId: savedRun.id,
+    try {
+      process.stderr.write('[DEBUG] Creating run entity\n');
+      const run = this.runRepository.create({
         tenantId,
-      },
-      {
-        jobId: `run-${savedRun.id}`,
-        removeOnComplete: true,
-        removeOnFail: false,
-      },
-    );
+        workflowName: request.workflowName,
+        workflowVersion: request.workflowVersion || '1.0.0',
+        triggerType: 'initial',
+        triggerPayload: request.triggerPayload || {},
+        status: 'queued',
+      });
 
-    return {
-      runId: savedRun.id,
-      status: 'queued' as RunStatus,
-      message: 'Run queued for execution',
-    };
+      process.stderr.write('[DEBUG] Saving run to database\n');
+      const savedRun = await this.runRepository.save(run);
+      process.stderr.write(`[DEBUG] Run saved: ${savedRun.id}\n`);
+      this.logger.log(`Run created: ${savedRun.id} for workflow ${request.workflowName}`);
+
+      process.stderr.write('[DEBUG] Adding job to queue\n');
+      await this.orchestrationQueue.add(
+        'orchestrate',
+        {
+          runId: savedRun.id,
+          tenantId,
+        },
+        {
+          jobId: `run-${savedRun.id}`,
+          removeOnComplete: true,
+          removeOnFail: false,
+        },
+      );
+
+      process.stderr.write('[DEBUG] Job added, returning response\n');
+      return {
+        runId: savedRun.id,
+        status: 'queued' as RunStatus,
+        message: 'Run queued for execution',
+      };
+    } catch (error) {
+      process.stderr.write(`[DEBUG] ERROR in triggerRun: ${error}\n`);
+      process.stderr.write(`[DEBUG] ERROR stack: ${error instanceof Error ? error.stack : 'N/A'}\n`);
+      throw error;
+    }
   }
 
   async getRun(runId: string): Promise<RunResponse> {

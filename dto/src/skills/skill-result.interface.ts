@@ -40,6 +40,8 @@ export interface SkillDebugInfo {
   };
   /** Provider calls made during execution */
   provider_calls?: SkillProviderCall[];
+  /** Number of retry attempts (for retryable operations) */
+  attempts?: number;
 }
 
 export interface SkillResult<T = unknown> {

@@ -19,7 +19,7 @@ template_type: LLM_JSON_GENERATION
 template_config:
   prompt_id: game_config_from_template
   prompt_version: "1.0.0"
-  model: claude-3-5-sonnet
+  model: gemini-2.0-flash-lite
   temperature: 0.5
   retry_on_validation_failure: true
 

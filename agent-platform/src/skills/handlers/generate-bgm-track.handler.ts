@@ -55,7 +55,9 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
     this.defaultModel = configService.get<string>('AUDIO_GENERATION_MODEL') || 'suno-v3';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.audioGenerationTimeout = configService.get<number>('AUDIO_GENERATION_TIMEOUT_MS') || 300000;
-    this.useStubProvider = configService.get<string>('AUDIO_PROVIDER_STUB') === 'true';
+    const stubEnvValue = configService.get<string>('AUDIO_PROVIDER_STUB');
+    this.useStubProvider = stubEnvValue === 'true';
+    this.logger.log(`GenerateBgmTrackHandler initialized: AUDIO_PROVIDER_STUB='${stubEnvValue}', useStubProvider=${this.useStubProvider}`);
   }
 
   private isAsyncGenerationInProgress(status: string | undefined): boolean {

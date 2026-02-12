@@ -15,6 +15,9 @@ import { RunEngineApiService } from './services/run-engine-api.service';
 
 // Controllers
 import { RunEngineController } from './run-engine.controller';
+import { DevRunEngineController } from './dev-run-engine.controller';
+
+const devControllers = process.env.NODE_ENV !== 'production' ? [DevRunEngineController] : [];
 
 @Module({
   imports: [
@@ -25,7 +28,7 @@ import { RunEngineController } from './run-engine.controller';
       name: QueueNames.RUN_ORCHESTRATION,
     }),
   ],
-  controllers: [RunEngineController],
+  controllers: [RunEngineController, ...devControllers],
   providers: [RunEngineApiService],
   exports: [RunEngineApiService],
 })

@@ -93,7 +93,7 @@ export class CachedStepExecutorService {
 
         this.logger.log(`[CachedStep] Completed: stepId=${stepSpec.stepId}, durationMs=${durationMs}`);
 
-        return this.buildSuccessUpdate(stepSpec.stepId, artifactIds, false, durationMs);
+        return this.buildSuccessUpdate(stepSpec.stepId, artifactIds, false, durationMs, result.data as Record<string, unknown> | undefined);
       }
 
       if (runStep) {
@@ -121,6 +121,7 @@ export class CachedStepExecutorService {
         stepId,
         status: result.status,
         outputArtifactIds: result.artifactIds,
+        data: result.data,
       });
     }
 
@@ -134,11 +135,12 @@ export class CachedStepExecutorService {
     };
   }
 
-  private buildSuccessUpdate(stepId: string, artifactIds: string[], cacheHit: boolean, durationMs: number): Partial<RunStateType> {
+  private buildSuccessUpdate(stepId: string, artifactIds: string[], cacheHit: boolean, durationMs: number, data?: Record<string, unknown>): Partial<RunStateType> {
     const stepResult: StepResult = {
       stepId,
       status: 'completed',
       artifactIds,
+      data,
       cacheHit,
       durationMs,
     };
