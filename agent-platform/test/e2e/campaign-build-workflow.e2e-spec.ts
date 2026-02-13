@@ -72,7 +72,7 @@ describe('Campaign Build Workflow E2E (US1)', () => {
     });
 
     it('should have workflow file present', () => {
-      const workflowPath = path.resolve(__dirname, '../../workflows/campaign.build.v1.minimal.yaml');
+      const workflowPath = path.resolve(__dirname, '../../workflows/campaign.build.minimal.v1.yaml');
       expect(fs.existsSync(workflowPath)).toBe(true);
     });
   });
