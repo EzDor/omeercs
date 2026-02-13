@@ -24,6 +24,9 @@ export class MeshyAsset3dAdapter implements Asset3DProviderAdapter {
   }
 
   async generate3D(params: Asset3DGenerationParams): Promise<Asset3DGenerationResult> {
+    this.validatePrompt(params.prompt);
+    this.validateApiKey();
+
     const startTime = Date.now();
     const format = params.format || DEFAULT_FORMAT;
 
@@ -81,6 +84,18 @@ export class MeshyAsset3dAdapter implements Asset3DProviderAdapter {
       return false;
     }
     return true;
+  }
+
+  private validatePrompt(prompt: string): void {
+    if (!prompt || prompt.trim().length === 0) {
+      throw new ProviderError(ProviderErrorCode.INVALID_PARAMS, this.providerId, 'Prompt is required and cannot be empty');
+    }
+  }
+
+  private validateApiKey(): void {
+    if (!this.apiKey) {
+      throw new ProviderError(ProviderErrorCode.AUTHENTICATION_ERROR, this.providerId, 'MESHY_API_KEY is not configured');
+    }
   }
 
   private extractJobId(data: Record<string, unknown>): string {

@@ -4,6 +4,7 @@ import axios from 'axios';
 import { VideoProviderAdapter, VideoGenerationParams, VideoGenerationResult } from '@agentic-template/dto/src/providers/interfaces/video-provider.interface';
 import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { ProviderError } from '../errors/provider.error';
+import { isAllowedUrl } from '../network-safety.utils';
 
 const DEFAULT_API_URL = 'https://api.nanobanana.com/v1/video/generate';
 const DEFAULT_RESOLUTION = '1920x1080';
@@ -25,13 +26,15 @@ export class NanoBananaVideoAdapter implements VideoProviderAdapter {
   }
 
   async generateVideo(params: VideoGenerationParams): Promise<VideoGenerationResult> {
+    this.validatePrompt(params.prompt);
+    this.validateApiKey();
+    this.validateInputUris(params.inputUris);
+
     const startTime = Date.now();
     const resolution = params.resolution || DEFAULT_RESOLUTION;
     const fps = params.fps || DEFAULT_FPS;
 
     this.logger.debug(`[${this.providerId}] Generating video: duration=${params.durationSec}s, resolution=${resolution}, fps=${fps}, prompt="${params.prompt.substring(0, 50)}..."`);
-
-    this.validateApiKey();
 
     try {
       const response = await axios.post(
@@ -70,9 +73,25 @@ export class NanoBananaVideoAdapter implements VideoProviderAdapter {
     return true;
   }
 
+  private validatePrompt(prompt: string): void {
+    if (!prompt || prompt.trim().length === 0) {
+      throw new ProviderError(ProviderErrorCode.INVALID_PARAMS, this.providerId, 'Prompt is required and cannot be empty');
+    }
+  }
+
   private validateApiKey(): void {
     if (!this.apiKey) {
       throw new ProviderError(ProviderErrorCode.AUTHENTICATION_ERROR, this.providerId, 'NANO_BANANA_API_KEY is not configured');
+    }
+  }
+
+  private validateInputUris(inputUris?: string[]): void {
+    if (!inputUris || inputUris.length === 0) return;
+
+    for (const uri of inputUris) {
+      if (!isAllowedUrl(uri)) {
+        throw new ProviderError(ProviderErrorCode.INVALID_PARAMS, this.providerId, `Input URI is not allowed: blocked by SSRF policy`);
+      }
     }
   }
 

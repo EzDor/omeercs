@@ -26,6 +26,9 @@ export class NanoBananaImageAdapter implements ImageProviderAdapter {
   }
 
   async generateImage(params: ImageGenerationParams): Promise<ImageGenerationResult> {
+    this.validatePrompt(params.prompt);
+    this.validateApiKey();
+
     const startTime = Date.now();
     const width = params.width || DEFAULT_WIDTH;
     const height = params.height || DEFAULT_HEIGHT;
@@ -85,6 +88,18 @@ export class NanoBananaImageAdapter implements ImageProviderAdapter {
       return false;
     }
     return true;
+  }
+
+  private validatePrompt(prompt: string): void {
+    if (!prompt || prompt.trim().length === 0) {
+      throw new ProviderError(ProviderErrorCode.INVALID_PARAMS, this.providerId, 'Prompt is required and cannot be empty');
+    }
+  }
+
+  private validateApiKey(): void {
+    if (!this.apiKey) {
+      throw new ProviderError(ProviderErrorCode.AUTHENTICATION_ERROR, this.providerId, 'NANO_BANANA_API_KEY is not configured');
+    }
   }
 
   private extractJobId(data: Record<string, unknown>): string {

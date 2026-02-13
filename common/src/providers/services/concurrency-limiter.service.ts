@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+const MAX_QUEUE_LENGTH = 100;
+
 export interface ConcurrencyLimits {
   video: number;
   audio_sfx: number;
@@ -38,7 +40,12 @@ export class ConcurrencyLimiterService {
       return this.createRelease(key);
     }
 
-    this.logger.debug(`Queuing request for ${key}: ${active}/${limit} active, queue length: ${this.getQueueLength(tenantId, mediaType)}`);
+    const currentQueueLength = this.getQueueLength(tenantId, mediaType);
+    if (currentQueueLength >= MAX_QUEUE_LENGTH) {
+      throw new Error(`Concurrency queue full for ${key}: ${currentQueueLength}/${MAX_QUEUE_LENGTH} queued requests`);
+    }
+
+    this.logger.debug(`Queuing request for ${key}: ${active}/${limit} active, queue length: ${currentQueueLength}`);
     return new Promise<() => void>((resolve) => {
       const queue = this.queues.get(key) || [];
       queue.push({ resolve });

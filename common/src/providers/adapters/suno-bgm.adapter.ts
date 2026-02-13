@@ -26,6 +26,9 @@ export class SunoBgmAdapter implements AudioProviderAdapter {
   }
 
   async generateAudio(params: AudioGenerationParams): Promise<AudioGenerationResult> {
+    this.validatePrompt(params.prompt);
+    this.validateApiKey();
+
     const startTime = Date.now();
     const durationSec = params.durationSec || DEFAULT_DURATION_SEC;
     const format = params.format || DEFAULT_FORMAT;
@@ -87,5 +90,17 @@ export class SunoBgmAdapter implements AudioProviderAdapter {
       return false;
     }
     return true;
+  }
+
+  private validatePrompt(prompt: string): void {
+    if (!prompt || prompt.trim().length === 0) {
+      throw new ProviderError(ProviderErrorCode.INVALID_PARAMS, this.providerId, 'Prompt is required and cannot be empty');
+    }
+  }
+
+  private validateApiKey(): void {
+    if (!this.apiKey) {
+      throw new ProviderError(ProviderErrorCode.AUTHENTICATION_ERROR, this.providerId, 'SUNO_API_KEY is not configured');
+    }
   }
 }

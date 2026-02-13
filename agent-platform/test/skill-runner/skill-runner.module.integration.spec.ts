@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import { Global, Module } from '@nestjs/common';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { GenerationJob } from '@agentic-template/dao/src/entities/generation-job.entity';
 import { SkillRunnerModule } from '../../src/skills/skill-runner/skill-runner.module';
 import { SkillRunnerService } from '../../src/skills/skill-runner/skill-runner.service';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
@@ -15,6 +17,27 @@ const mockTenantClsService = {
   getEntityManager: jest.fn(),
   setEntityManager: jest.fn(),
   get: jest.fn(),
+};
+
+const mockRepository = {
+  find: jest.fn().mockResolvedValue([]),
+  findOne: jest.fn().mockResolvedValue(null),
+  findOneBy: jest.fn().mockResolvedValue(null),
+  findOneByOrFail: jest.fn().mockResolvedValue({}),
+  save: jest.fn(),
+  create: jest.fn(),
+  manager: {
+    connection: {
+      createQueryRunner: jest.fn().mockReturnValue({
+        connect: jest.fn(),
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn(),
+        rollbackTransaction: jest.fn(),
+        release: jest.fn(),
+        manager: { getRepository: jest.fn().mockReturnValue({ find: jest.fn().mockResolvedValue([]) }), save: jest.fn() },
+      }),
+    },
+  },
 };
 
 @Global()
@@ -44,7 +67,10 @@ describe('SkillRunnerModule - Integration', () => {
         MockTenantClsModule,
         SkillRunnerModule,
       ],
-    }).compile();
+    })
+      .overrideProvider(getRepositoryToken(GenerationJob))
+      .useValue(mockRepository)
+      .compile();
   });
 
   afterEach(async () => {

@@ -3,17 +3,22 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Artifact } from '@agentic-template/dao/src/entities/artifact.entity';
+import { containsPathTraversal } from './path-safety.utils';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
+const DEFAULT_MAX_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
+
 export interface StorageUploadParams {
   tenantId: string;
   runId: string;
+  skillId: string;
   artifactType: string;
   buffer: Buffer;
   mimeType: string;
   originalFilename?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface StorageUploadResult {
@@ -22,12 +27,14 @@ export interface StorageUploadResult {
   contentHash: string;
   sizeBytes: number;
   deduplicated: boolean;
+  artifactId: string;
 }
 
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly storageDir: string;
+  private readonly maxUploadSizeBytes: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -35,10 +42,14 @@ export class StorageService {
     private readonly artifactRepository: Repository<Artifact>,
   ) {
     this.storageDir = this.configService.get<string>('ASSET_STORAGE_DIR') || '/tmp/skills/assets';
+    this.maxUploadSizeBytes = this.configService.get<number>('MAX_UPLOAD_SIZE_BYTES') || DEFAULT_MAX_UPLOAD_SIZE_BYTES;
     this.logger.log(`StorageService initialized with storage dir: ${this.storageDir}`);
   }
 
   async upload(params: StorageUploadParams): Promise<StorageUploadResult> {
+    this.validateUploadSize(params.buffer);
+    this.validatePathSegments(params.tenantId, params.runId, params.artifactType);
+
     const contentHash = crypto.createHash('sha256').update(params.buffer).digest('hex');
     const ext = this.getExtensionFromMimeType(params.mimeType);
     const filename = `${contentHash}.${ext}`;
@@ -46,29 +57,39 @@ export class StorageService {
     const existingUri = await this.exists(contentHash);
     if (existingUri) {
       this.logger.debug(`Deduplicated asset: ${contentHash}`);
+      const artifact = await this.persistArtifact(params, this.buildFilePath(params.tenantId, params.runId, params.artifactType, filename), contentHash);
       return {
         uri: this.buildFilePath(params.tenantId, params.runId, params.artifactType, filename),
         httpUrl: this.getHttpUrl(params.tenantId, params.runId, params.artifactType, filename),
         contentHash,
         sizeBytes: params.buffer.length,
         deduplicated: true,
+        artifactId: artifact.id,
       };
     }
 
     const dirPath = path.join(this.storageDir, params.tenantId, params.runId, params.artifactType);
+    this.validateResolvedPath(dirPath);
+
     await fs.promises.mkdir(dirPath, { recursive: true });
 
     const filePath = path.join(dirPath, filename);
+    this.validateResolvedPath(filePath);
+
     await this.writeFileWithRetry(filePath, params.buffer);
+
+    const uri = this.buildFilePath(params.tenantId, params.runId, params.artifactType, filename);
+    const artifact = await this.persistArtifact(params, uri, contentHash);
 
     this.logger.log(`Stored asset: ${filePath} (${params.buffer.length} bytes)`);
 
     return {
-      uri: this.buildFilePath(params.tenantId, params.runId, params.artifactType, filename),
+      uri,
       httpUrl: this.getHttpUrl(params.tenantId, params.runId, params.artifactType, filename),
       contentHash,
       sizeBytes: params.buffer.length,
       deduplicated: false,
+      artifactId: artifact.id,
     };
   }
 
@@ -84,13 +105,44 @@ export class StorageService {
     return `/api/media/${tenantId}/${runId}/${artifactType}/${filename}`;
   }
 
-  validateTenantAccess(tenantId: string, requestedPath: string): boolean {
-    const normalizedPath = path.normalize(requestedPath);
-    return normalizedPath.startsWith(tenantId + path.sep) || normalizedPath === tenantId;
-  }
-
   getAbsolutePath(tenantId: string, runId: string, artifactType: string, filename: string): string {
     return path.join(this.storageDir, tenantId, runId, artifactType, filename);
+  }
+
+  private validateUploadSize(buffer: Buffer): void {
+    if (buffer.length > this.maxUploadSizeBytes) {
+      throw new Error(`Upload size ${buffer.length} bytes exceeds maximum allowed size of ${this.maxUploadSizeBytes} bytes`);
+    }
+  }
+
+  private validatePathSegments(...segments: string[]): void {
+    for (const segment of segments) {
+      if (containsPathTraversal(segment)) {
+        throw new Error(`Invalid path segment: contains path traversal characters`);
+      }
+    }
+  }
+
+  private validateResolvedPath(resolvedPath: string): void {
+    const normalized = path.normalize(resolvedPath);
+    if (!normalized.startsWith(this.storageDir)) {
+      throw new Error('Resolved path escapes storage directory');
+    }
+  }
+
+  private async persistArtifact(params: StorageUploadParams, uri: string, contentHash: string): Promise<Artifact> {
+    const artifact = this.artifactRepository.create({
+      tenantId: params.tenantId,
+      runId: params.runId,
+      skillId: params.skillId,
+      type: params.artifactType,
+      uri,
+      contentHash,
+      sizeBytes: params.buffer.length,
+      filename: params.originalFilename,
+      metadata: params.metadata,
+    });
+    return this.artifactRepository.save(artifact);
   }
 
   private buildFilePath(tenantId: string, runId: string, artifactType: string, filename: string): string {

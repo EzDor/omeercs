@@ -2,6 +2,7 @@ import { Controller, Get, Param, Res, Req, NotFoundException, BadRequestExceptio
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
+import { containsPathTraversal } from '@agentic-template/common/src/storage/path-safety.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -58,7 +59,7 @@ export class MediaController {
       throw new ForbiddenException('Access denied');
     }
 
-    if (this.containsPathTraversal(tenantId) || this.containsPathTraversal(runId) || this.containsPathTraversal(artifactType) || this.containsPathTraversal(filename)) {
+    if (containsPathTraversal(tenantId) || containsPathTraversal(runId) || containsPathTraversal(artifactType) || containsPathTraversal(filename)) {
       throw new BadRequestException('Invalid path');
     }
 
@@ -81,9 +82,8 @@ export class MediaController {
     const contentType = CONTENT_TYPES[ext] || 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
     const stream = fs.createReadStream(normalizedPath);
@@ -96,21 +96,6 @@ export class MediaController {
       }
     });
     stream.pipe(res);
-  }
-
-  private containsPathTraversal(segment: string): boolean {
-    if (segment.includes('..') || segment.includes('\0') || segment.includes('/') || segment.includes('\\')) {
-      return true;
-    }
-    try {
-      const decoded = decodeURIComponent(segment);
-      if (decoded.includes('..') || decoded.includes('\0') || decoded.includes('/') || decoded.includes('\\')) {
-        return true;
-      }
-    } catch {
-      return true;
-    }
-    return false;
   }
 
   private isValidUuidOrId(id: string): boolean {

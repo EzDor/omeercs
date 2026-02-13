@@ -5,6 +5,10 @@ import { GenerationJob } from '@agentic-template/dao/src/entities/generation-job
 import type { GenerationJobStatus } from '@agentic-template/dao/src/entities/generation-job.entity';
 import { ConcurrencyLimiterService, ConcurrencyLimits } from './concurrency-limiter.service';
 
+const MAX_POLL_ATTEMPTS = 1000;
+const MIN_POLL_INTERVAL_MS = 1000;
+const MAX_TIMEOUT_MS = 3_600_000;
+
 export interface PollingConfig {
   pollIntervalMs: number;
   timeoutMs: number;
@@ -61,6 +65,8 @@ export class PollingService {
 
   async pollUntilComplete(jobId: string, checkStatus: (providerJobId: string) => Promise<ProviderJobStatus>): Promise<void> {
     const job = await this.generationJobRepository.findOneByOrFail({ id: jobId });
+    this.enforcePollingBounds(job);
+
     const startTime = Date.now();
 
     const mediaType = this.mapMediaType(job.mediaType);
@@ -71,6 +77,8 @@ export class PollingService {
       job.startedAt = new Date();
       await this.generationJobRepository.save(job);
 
+      let pollCount = 0;
+
       while (true) {
         const elapsed = Date.now() - startTime;
         if (elapsed >= job.timeoutMs) {
@@ -78,6 +86,16 @@ export class PollingService {
           job.completedAt = new Date();
           await this.generationJobRepository.save(job);
           this.logger.warn(`Job ${jobId} timed out after ${elapsed}ms`);
+          return;
+        }
+
+        pollCount++;
+        if (pollCount > MAX_POLL_ATTEMPTS) {
+          job.status = 'failed';
+          job.errorMessage = `Exceeded maximum poll attempts (${MAX_POLL_ATTEMPTS})`;
+          job.completedAt = new Date();
+          await this.generationJobRepository.save(job);
+          this.logger.warn(`Job ${jobId} exceeded max poll attempts`);
           return;
         }
 
@@ -125,26 +143,42 @@ export class PollingService {
   }
 
   async recoverIncompleteJobs(): Promise<void> {
-    const incompleteJobs = await this.generationJobRepository.find({
-      where: {
-        status: In(['pending', 'processing']),
-      },
-    });
+    const queryRunner = this.generationJobRepository.manager.connection.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    const now = Date.now();
-    const recoverableJobs = incompleteJobs.filter((job) => {
-      const createdAt = job.createdAt.getTime();
-      return now - createdAt < job.timeoutMs;
-    });
+    try {
+      const incompleteJobs = await queryRunner.manager
+        .getRepository(GenerationJob)
+        .find({
+          where: { status: In(['pending', 'processing']) },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-    this.logger.log(`Found ${recoverableJobs.length} recoverable incomplete jobs out of ${incompleteJobs.length} total`);
+      const now = Date.now();
+      let recoveredCount = 0;
+      let timedOutCount = 0;
 
-    for (const job of incompleteJobs) {
-      if (!recoverableJobs.includes(job)) {
-        job.status = 'timed_out';
-        job.completedAt = new Date();
-        await this.generationJobRepository.save(job);
+      for (const job of incompleteJobs) {
+        const createdAt = job.createdAt.getTime();
+        if (now - createdAt >= job.timeoutMs) {
+          job.status = 'timed_out';
+          job.completedAt = new Date();
+          await queryRunner.manager.save(job);
+          timedOutCount++;
+        } else {
+          recoveredCount++;
+        }
       }
+
+      await queryRunner.commitTransaction();
+      this.logger.log(`Recovery: ${recoveredCount} recoverable, ${timedOutCount} timed out (of ${incompleteJobs.length} total)`);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to recover incomplete jobs: ${(error as Error).message}`);
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
   }
 
@@ -156,6 +190,17 @@ export class PollingService {
     const detectedMime = this.detectMimeFromBuffer(buffer);
     if (detectedMime && !this.mimeMatchesMediaType(detectedMime, expectedMediaType)) {
       throw new Error(`MIME type mismatch: expected '${expectedMediaType}' but detected '${detectedMime}'`);
+    }
+  }
+
+  private enforcePollingBounds(job: GenerationJob): void {
+    if (job.pollIntervalMs < MIN_POLL_INTERVAL_MS) {
+      this.logger.warn(`Job ${job.id}: pollIntervalMs ${job.pollIntervalMs} below minimum, clamping to ${MIN_POLL_INTERVAL_MS}`);
+      job.pollIntervalMs = MIN_POLL_INTERVAL_MS;
+    }
+    if (job.timeoutMs > MAX_TIMEOUT_MS) {
+      this.logger.warn(`Job ${job.id}: timeoutMs ${job.timeoutMs} above maximum, clamping to ${MAX_TIMEOUT_MS}`);
+      job.timeoutMs = MAX_TIMEOUT_MS;
     }
   }
 
