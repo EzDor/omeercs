@@ -11,6 +11,9 @@ export const StandardArtifactTypes = {
   OUTCOME_WIN_VIDEO: 'outcome_win_video',
   OUTCOME_LOSE_VIDEO: 'outcome_lose_video',
   CAMPAIGN_MANIFEST: 'campaign_manifest',
+  MODEL_3D: 'model_3d',
+  TEXTURE: 'texture',
+  ENVIRONMENT_MAP: 'environment_map',
 } as const;
 
 export type StandardArtifactType = (typeof StandardArtifactTypes)[keyof typeof StandardArtifactTypes];

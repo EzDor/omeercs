@@ -156,3 +156,10 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 
 ## .specify Directory
 Agentic workflow system for specification-driven development. Contains templates (spec, plan, tasks) and scripts for AI-assisted feature development. Used with Claude Code skills in `.claude/commands/`.
+
+## Active Technologies
+- TypeScript 5.x (strict mode), Node.js 20+ + NestJS 10, TypeORM, BullMQ, class-validator, axios (HTTP downloads from providers) (010-core-media-integration)
+- PostgreSQL 17 (pgvector) for entities; local filesystem (`ASSET_STORAGE_DIR`) for binary assets (010-core-media-integration)
+
+## Recent Changes
+- 010-core-media-integration: Added TypeScript 5.x (strict mode), Node.js 20+ + NestJS 10, TypeORM, BullMQ, class-validator, axios (HTTP downloads from providers)

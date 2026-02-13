@@ -413,6 +413,9 @@ importers:
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
+      axios:
+        specifier: ^1.6.2
+        version: 1.13.2
       ioredis:
         specifier: ^5.4.2
         version: 5.8.2

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 import { CoreModule } from 'src/core/core.module';
@@ -12,6 +12,8 @@ import { AppService } from './app.service';
 import { UnhandledExceptionFilter } from '@agentic-template/common/src/filters/unhandled-exception.filter';
 import { GlobalHttpExceptionFilter } from '@agentic-template/common/src/filters/global-http-exception.filter';
 import { ProvidersModule } from '@agentic-template/common/src/providers/providers.module';
+import { StorageModule } from '@agentic-template/common/src/storage/storage.module';
+import { PollingService } from '@agentic-template/common/src/providers/services/polling.service';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { ProvidersModule } from '@agentic-template/common/src/providers/provider
     HealthModule,
     SkillsModule,
     ProvidersModule,
+    StorageModule,
     RunEngineModule,
     PromptRegistryModule,
   ],
@@ -39,4 +42,17 @@ import { ProvidersModule } from '@agentic-template/common/src/providers/provider
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements OnModuleInit {
+  private readonly logger = new Logger(AppModule.name);
+
+  constructor(private readonly pollingService: PollingService) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.pollingService.recoverIncompleteJobs();
+      this.logger.log('Recovered incomplete generation jobs on startup');
+    } catch (error) {
+      this.logger.error(`Failed to recover incomplete jobs: ${(error as Error).message}`);
+    }
+  }
+}
