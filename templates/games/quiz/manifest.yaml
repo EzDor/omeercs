@@ -1,0 +1,125 @@
+template_id: quiz
+version: "1.0.0"
+title: "Quiz"
+description: "3D quiz game with animated question panels, raycaster answer selection, score tracking, and prize tier assignment"
+
+config_schema:
+  type: object
+  required:
+    - questions
+  properties:
+    questions:
+      type: array
+      minItems: 1
+      maxItems: 20
+      items:
+        type: object
+        required:
+          - text
+          - answers
+        properties:
+          text:
+            type: string
+          answers:
+            type: array
+            minItems: 2
+            maxItems: 4
+            items:
+              type: string
+          timer_seconds:
+            type: integer
+            minimum: 10
+            maximum: 60
+    randomize_questions:
+      type: boolean
+    randomize_answers:
+      type: boolean
+    prize_tiers:
+      type: array
+      items:
+        type: object
+        required:
+          - min_score
+          - max_score
+          - prize_id
+        properties:
+          min_score:
+            type: integer
+          max_score:
+            type: integer
+          prize_id:
+            type: string
+    show_correct_answer:
+      type: boolean
+
+asset_slots:
+  - slot_id: stage_model
+    type: model_3d
+    required: false
+    formats:
+      - glb
+
+  - slot_id: correct_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+
+  - slot_id: incorrect_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+
+  - slot_id: timer_sound
+    type: audio
+    required: false
+    formats:
+      - mp3
+      - ogg
+
+  - slot_id: background_music
+    type: audio
+    required: false
+    formats:
+      - mp3
+      - ogg
+
+  - slot_id: question_panel_texture
+    type: texture
+    required: false
+    formats:
+      - png
+      - jpg
+
+  - slot_id: environment_map
+    type: environment_map
+    required: false
+    formats:
+      - hdr
+      - exr
+
+scene_config:
+  camera:
+    type: perspective
+    fov: 60
+    position: [0, 2, 5]
+    look_at: [0, 1, 0]
+  lighting:
+    ambient:
+      color: "#ffffff"
+      intensity: 0.4
+    directional:
+      - color: "#ffffff"
+        intensity: 1.0
+        position: [3, 8, 5]
+        cast_shadow: true
+  post_processing:
+    bloom:
+      enabled: false
+    fxaa:
+      enabled: true
+
+entry_point: index.html

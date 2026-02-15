@@ -108,7 +108,20 @@ skills:
     tags: [game, validation, qa, bundling, testing, quality]
     status: active
 
-  # G) Publishable campaign manifest
+  # G) Code generation & headless validation
+  - skill_id: generate_threejs_code
+    version: "1.0.0"
+    title: Generate Three.js Code
+    tags: [code-generation, ai, threejs, game, webgl]
+    status: active
+
+  - skill_id: validate_bundle
+    version: "1.0.0"
+    title: Validate Bundle (Headless)
+    tags: [validation, puppeteer, headless, webgl, game]
+    status: active
+
+  # H) Publishable campaign manifest
   - skill_id: assemble_campaign_manifest
     version: "1.0.0"
     title: Assemble Campaign Manifest

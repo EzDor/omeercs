@@ -1,0 +1,106 @@
+# Skill Descriptor: generate_threejs_code
+# Generates Three.js game code using Claude Agent SDK
+
+skill_id: generate_threejs_code
+version: "1.0.0"
+title: Generate Three.js Code
+description: |
+  Generates Three.js game code using Claude Agent SDK based on a template manifest,
+  game configuration, and asset mappings. Produces multiple code files (scene-setup.js,
+  game-logic.js, asset-loader.js, interaction.js, animation.js, main.js) that
+  compose the interactive 3D game experience.
+
+tags:
+  - game
+  - generation
+  - ai
+  - threejs
+  - code
+  - 3d
+
+input_schema:
+  type: object
+  required:
+    - template_id
+    - template_manifest
+    - game_config
+  properties:
+    template_id:
+      type: string
+      enum: [spin_wheel, quiz, scratch_card, memory_match]
+      description: Template to generate code for
+    template_manifest:
+      type: object
+      description: Full template manifest loaded from YAML
+    game_config:
+      type: object
+      description: Game-specific configuration
+    asset_mappings:
+      type: array
+      description: Asset slot mappings
+      items:
+        type: object
+        required: [slot_id, uri, type]
+        properties:
+          slot_id:
+            type: string
+          uri:
+            type: string
+          type:
+            type: string
+          format:
+            type: string
+    scene_overrides:
+      type: object
+      description: Optional scene configuration overrides
+    sealed_outcome_token:
+      type: string
+      description: Encrypted pre-determined outcome token
+
+output_schema:
+  type: object
+  required:
+    - code_files
+    - code_dir
+    - total_lines
+  properties:
+    code_files:
+      type: array
+      items:
+        type: object
+        required: [filename, purpose, content, line_count]
+        properties:
+          filename:
+            type: string
+          purpose:
+            type: string
+            enum: [scene_setup, game_logic, asset_loader, interaction, animation, entry]
+          content:
+            type: string
+          line_count:
+            type: integer
+    code_dir:
+      type: string
+    total_lines:
+      type: integer
+
+implementation:
+  type: ts_function
+  handler: "@skills/generate-threejs-code/handler"
+
+produces_artifacts:
+  - artifact_type: code/javascript
+    description: Generated Three.js game code files
+
+policy:
+  max_runtime_sec: 120
+  network: allowlist
+  allowed_hosts:
+    - "api.anthropic.com"
+  fs:
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

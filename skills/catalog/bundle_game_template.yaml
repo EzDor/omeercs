@@ -105,6 +105,35 @@ input_schema:
       type: string
       default: "1.0.0"
       description: Version string for the bundle
+    scene_overrides:
+      type: object
+      description: Optional overrides for template scene defaults
+      properties:
+        camera_position:
+          type: array
+          items: { type: number }
+          minItems: 3
+          maxItems: 3
+        camera_fov:
+          type: number
+          minimum: 10
+          maximum: 120
+        lighting_intensity:
+          type: number
+          minimum: 0
+          maximum: 5
+        background_color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+        post_processing:
+          type: object
+          properties:
+            bloom_enabled: { type: boolean }
+            bloom_strength: { type: number }
+            dof_enabled: { type: boolean }
+    sealed_outcome_token:
+      type: string
+      description: Encrypted server-side pre-determined outcome token (opaque to client)
 
 output_schema:
   type: object

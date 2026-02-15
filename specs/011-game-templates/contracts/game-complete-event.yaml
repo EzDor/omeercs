@@ -1,0 +1,107 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Game Complete Event
+description: Event emitted by generated game bundles when the game ends. Sent from client to server for outcome verification and prize fulfillment.
+type: object
+required:
+  - event_type
+  - template_id
+  - sealed_outcome_token
+  - player_result
+  - duration_ms
+  - timestamp
+properties:
+  event_type:
+    const: gameComplete
+
+  template_id:
+    type: string
+    enum: [spin_wheel, quiz, scratch_card, memory_match]
+
+  sealed_outcome_token:
+    type: string
+    description: Opaque token from GAME_CONFIG, passed back for server-side outcome verification
+
+  player_result:
+    oneOf:
+      - $ref: "#/$defs/SpinWheelResult"
+      - $ref: "#/$defs/QuizResult"
+      - $ref: "#/$defs/ScratchCardResult"
+      - $ref: "#/$defs/MemoryMatchResult"
+
+  duration_ms:
+    type: integer
+    minimum: 0
+    description: Total game play time in milliseconds
+
+  timestamp:
+    type: string
+    format: date-time
+
+$defs:
+  SpinWheelResult:
+    type: object
+    required: [type, landed_segment_index]
+    properties:
+      type:
+        const: spin_wheel
+      landed_segment_index:
+        type: integer
+        minimum: 0
+        description: Index of the segment the wheel landed on
+
+  QuizResult:
+    type: object
+    required: [type, answers, score, total_questions]
+    properties:
+      type:
+        const: quiz
+      answers:
+        type: array
+        items:
+          type: object
+          required: [question_index, selected_answer_index]
+          properties:
+            question_index:
+              type: integer
+              minimum: 0
+            selected_answer_index:
+              type: integer
+              minimum: 0
+      score:
+        type: integer
+        minimum: 0
+        description: Client-calculated score (verified server-side)
+      total_questions:
+        type: integer
+        minimum: 1
+
+  ScratchCardResult:
+    type: object
+    required: [type, percent_scratched]
+    properties:
+      type:
+        const: scratch_card
+      percent_scratched:
+        type: number
+        minimum: 0
+        maximum: 100
+        description: Percentage of scratch area revealed
+
+  MemoryMatchResult:
+    type: object
+    required: [type, moves, time_ms, pairs_matched, total_pairs]
+    properties:
+      type:
+        const: memory_match
+      moves:
+        type: integer
+        minimum: 0
+      time_ms:
+        type: integer
+        minimum: 0
+      pairs_matched:
+        type: integer
+        minimum: 0
+      total_pairs:
+        type: integer
+        minimum: 1

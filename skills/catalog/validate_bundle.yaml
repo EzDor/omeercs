@@ -1,0 +1,81 @@
+# Skill Descriptor: validate_bundle
+# Validates a generated game bundle via headless Chromium render
+
+skill_id: validate_bundle
+version: "1.0.0"
+title: Validate Bundle (Headless Render)
+description: |
+  Validates a generated game bundle by launching a headless Chromium browser via Puppeteer.
+  Checks: HTML loads, WebGL context created, GAME_CONFIG accessible, no JS errors,
+  gameReady event fires, and total bundle size under 5MB.
+
+tags:
+  - game
+  - validation
+  - testing
+  - webgl
+  - headless
+  - quality
+
+input_schema:
+  type: object
+  required:
+    - bundle_dir
+    - entry_point
+  properties:
+    bundle_dir:
+      type: string
+      description: Path to the bundle directory
+    entry_point:
+      type: string
+      description: Entry HTML file (e.g., index.html)
+    timeout_ms:
+      type: integer
+      description: Timeout for validation in milliseconds
+      default: 15000
+
+output_schema:
+  type: object
+  required:
+    - valid
+    - checks
+    - total_size_bytes
+    - load_time_ms
+    - errors
+  properties:
+    valid:
+      type: boolean
+    checks:
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          passed:
+            type: boolean
+          details:
+            type: string
+    total_size_bytes:
+      type: integer
+    load_time_ms:
+      type: integer
+    errors:
+      type: array
+      items:
+        type: string
+
+implementation:
+  type: ts_function
+  handler: "@skills/validate-bundle/handler"
+
+policy:
+  max_runtime_sec: 30
+  network: none
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

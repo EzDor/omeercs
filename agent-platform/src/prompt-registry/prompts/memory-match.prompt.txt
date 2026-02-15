@@ -1,0 +1,197 @@
+You are generating Three.js r170+ code for a Memory Match card game. The game presents a grid of face-down cards on a 3D table surface. Players tap cards to flip them, attempting to find matching pairs. The game tracks moves, elapsed time, and matched pairs, then emits a gameComplete event with a MemoryMatchResult payload.
+
+Read all game parameters from window.GAME_CONFIG. Never hardcode grid dimensions, timing values, pair definitions, or win conditions.
+
+
+== GRID LAYOUT SYSTEM ==
+
+Parse the grid_size string from window.GAME_CONFIG (one of "2x3", "3x4", "4x4", "4x5") into rows and columns. Compute the total number of cells as rows * columns, then derive the number of pairs as totalCells / 2.
+
+Build a flat array of card objects, each holding a pair_id from the card_pairs config array. Duplicate each pair entry so two cards share the same pair_id. Shuffle the array using the Fisher-Yates algorithm.
+
+Compute card positions in a centered grid on the XZ plane. Determine card width and spacing so the grid fits within a visible area of approximately 6 world units wide. Use a THREE.Group as the grid container positioned at the scene origin. Each card's position is computed as:
+
+  x = (col - (columns - 1) / 2) * (cardWidth + gap)
+  z = (row - (rows - 1) / 2) * (cardHeight + gap)
+  y = tableHeight + cardThickness / 2
+
+where tableHeight is the Y position of the table surface.
+
+
+== TABLE SURFACE ==
+
+Create the table using a THREE.PlaneGeometry rotated -90 degrees on X, positioned at y = 0. Apply a MeshStandardMaterial with a wood-like appearance: roughness 0.7, metalness 0.0, color derived from window.GAME_CONFIG.visuals or a warm brown default (#8B6914). Scale the plane to extend at least 1 unit beyond the outermost cards in each direction.
+
+
+== CARD MESHES ==
+
+Construct each card as a THREE.Group containing a BoxGeometry with dimensions (cardWidth, cardThickness, cardHeight) where cardThickness is approximately 0.02.
+
+Apply materials to the box faces using a material array of six MeshStandardMaterial entries:
+- Index 4 (top face / +Y when face-up): use the card face texture loaded from the card_face_textures asset slot, mapped by the card's image_slot reference
+- Index 5 (bottom face / -Y, visible when face-down): use the card_back_texture asset slot
+- Remaining faces: use a thin edge material with a neutral color
+
+Set roughness to 0.4 and metalness to 0.1 on the face materials for a semi-glossy card surface.
+
+Store card metadata (pair_id, grid_index, is_flipped, is_matched) on the mesh's userData property for lookup during interaction and match detection.
+
+
+== CARD FLIP ANIMATION ==
+
+Animate card flips as a 180-degree Y-axis rotation using gsap.to targeting the card group's rotation.y property. Use a duration of 0.6 seconds with ease "back.out(1.7)" for a physics-based overshoot bounce on the flip.
+
+When flipping face-up, rotate from 0 to Math.PI. When flipping face-down (mismatch reset), rotate from Math.PI back to 0.
+
+Play the flip_sound PositionalAudio attached to the card's position when the flip animation begins.
+
+
+== RAYCASTER TAP DETECTION ==
+
+Use the InteractionManager's raycaster to detect pointer taps on card meshes. On each pointerdown event, cast a ray from the camera through the pointer position and test intersection against all card meshes in the grid group.
+
+Filter intersections to only accept cards where userData.is_flipped === false and userData.is_matched === false. Ignore taps when the flipped array already contains two cards (waiting for match resolution).
+
+
+== TWO-CARD FLIP LIMIT ==
+
+Maintain a flipped array that tracks currently face-up, unmatched cards. Maximum length is 2. When a valid card is tapped:
+
+1. Push the card to the flipped array and animate the flip.
+2. If flipped.length === 1, wait for the second card.
+3. If flipped.length === 2, disable further taps via InteractionManager.disable(), then proceed to match detection after both flip animations complete.
+
+
+== MATCH DETECTION ==
+
+After both cards finish their flip animations, compare the pair_id values from their userData:
+
+If pair_ids match:
+- Set both cards' userData.is_matched = true
+- Apply an emissive glow effect by animating emissiveIntensity from 0 to 0.8 and back to 0.3 on both card face materials using gsap.to with a yoyo repeat
+- Set the emissive color to a bright highlight (#00ff88)
+- Create a particle burst at the midpoint between the two matched cards using a THREE.Points geometry with randomized velocities, fading opacity over 1 second, then dispose the particle system
+- Animate the camera position to zoom 0.5 units closer toward the midpoint of the matched pair using gsap.to on camera.position with duration 0.4 and ease "power2.out", then animate back to the original position
+- Play match_sound via PositionalAudio at the midpoint position
+- Increment the pairs_matched counter
+- Clear the flipped array
+- Re-enable taps via InteractionManager.enable()
+- Check win condition
+
+If pair_ids do not match:
+- Use gsap.delayedCall with the flip_delay_ms value from window.GAME_CONFIG (divided by 1000 for seconds) to pause before flipping both cards back face-down
+- Play mismatch_sound (if asset is loaded) via PositionalAudio
+- After the delay, animate both cards rotating back to 0 on Y
+- Clear the flipped array
+- Re-enable taps via InteractionManager.enable()
+
+
+== MOVE COUNTER ==
+
+Increment the move counter each time the second card in a pair is flipped (when flipped.length reaches 2). This represents one "move" as a pair-flip attempt. Store the counter as an integer in the game state.
+
+
+== TIMER ==
+
+Start a timer when the first card is tapped. Track elapsed time in milliseconds using performance.now() deltas accumulated in the game loop's update function. If win_condition is "time_limit", display a countdown from time_limit_seconds. Otherwise display elapsed time counting up.
+
+Render the timer and move counter as an HTML overlay div positioned absolutely over the canvas with pointer-events: none. Update the text content each frame. Style with a semi-transparent dark background, white text, and monospace font.
+
+
+== WIN CONDITIONS ==
+
+Check win conditions after each successful match or move:
+
+"all_pairs": The game is won when pairs_matched equals total_pairs. Trigger the win sequence.
+
+"move_limit": If the move counter exceeds the move_limit from config, the game is lost. Trigger the loss sequence. If all pairs are matched before exceeding the limit, the game is won.
+
+"time_limit": If elapsed time exceeds time_limit_seconds * 1000, the game is lost. Check this in the update loop. If all pairs are matched before time expires, the game is won.
+
+
+== WIN AND LOSS SEQUENCES ==
+
+On win:
+- Disable all card interactions
+- Play win_sound via the global AudioListener
+- Animate all matched cards with a staggered scale pulse using gsap.to with stagger 0.05, scaling to 1.1 then back to 1.0
+- Transition to the results screen after 2 seconds
+
+On loss:
+- Disable all card interactions
+- Flip all remaining unmatched cards face-up with a staggered animation (stagger 0.1) to reveal their positions
+- Transition to the results screen after 2 seconds
+
+
+== RESULTS SCREEN ==
+
+Create an HTML overlay div centered on the viewport displaying:
+- Game outcome ("You Win!" or "Game Over")
+- Total moves taken
+- Time elapsed formatted as MM:SS
+- Pairs matched out of total pairs
+- Prize tier (if applicable): iterate prize_tiers from config, find the first tier where the player's moves <= max_moves (for move-based tiers) or time <= max_time * 1000 (for time-based tiers), and display the corresponding prize_id
+
+Animate the results screen fading in with opacity transition over 0.5 seconds.
+
+
+== GAME COMPLETE EVENT ==
+
+Dispatch a "gameComplete" CustomEvent on the window when the game ends. The detail payload must include:
+
+{
+  event_type: "gameComplete",
+  template_id: "memory_match",
+  sealed_outcome_token: window.GAME_CONFIG.sealed_outcome_token,
+  player_result: {
+    type: "memory_match",
+    moves: <integer total moves>,
+    time_ms: <integer elapsed milliseconds>,
+    pairs_matched: <integer matched pairs>,
+    total_pairs: <integer total pairs in grid>
+  },
+  duration_ms: <integer total play time>,
+  timestamp: new Date().toISOString()
+}
+
+The event must bubble and must not be cancelable.
+
+
+== CAMERA BEHAVIOR ==
+
+Set up a PerspectiveCamera with fov, position, and lookAt from the template manifest scene_config. During match checking, perform a subtle camera zoom: animate the camera 0.5 units closer to the midpoint of the two flipped cards over 0.4 seconds using gsap.to with ease "power2.out", then animate back to the rest position over 0.3 seconds.
+
+
+== AUDIO SETUP ==
+
+Create a single THREE.AudioListener and attach it to the camera. For spatialized effects (flip_sound, match_sound, mismatch_sound), create THREE.PositionalAudio instances with refDistance 2 and rolloffFactor 1. For background_music, create a non-positional THREE.Audio instance with loop enabled and volume from window.GAME_CONFIG.audio.bgm if present, defaulting to 0.3. For win_sound, use a non-positional THREE.Audio instance.
+
+Load all audio buffers through the centralized asset-loader.js using THREE.AudioLoader. Start background_music playback only after the first user interaction.
+
+
+== PARTICLE SYSTEM FOR MATCH EFFECT ==
+
+On a successful match, create a THREE.Points object at the midpoint of the two matched cards. Use a THREE.BufferGeometry with 30 particles. Assign random position offsets within a 0.5-unit radius, random velocities in the Y-up direction, and a bright emissive particle material (THREE.PointsMaterial with size 0.05, color #ffdd44, transparent true). Animate particle positions upward and fade opacity from 1.0 to 0.0 over 1 second using the animation loop, then remove and dispose the Points object.
+
+
+== OUTPUT FILE STRUCTURE ==
+
+Generate exactly six JavaScript files with these headers and responsibilities:
+
+// FILE: scene-setup.js
+Creates THREE.Scene, PerspectiveCamera, WebGLRenderer, and EffectComposer (FXAA pass). Builds the table surface PlaneGeometry with wood PBR material. Configures ambient light, directional light with shadow, and two point lights from the manifest scene_config. Attaches resize and context loss handlers. Returns { scene, camera, renderer, composer, tableGroup, audioListener, dispose }.
+
+// FILE: asset-loader.js
+Exports loadAssets(assetMappings, loadingManager) that loads card_back_texture and card_face_textures via THREE.TextureLoader, table_model via GLTFLoader (if provided), and all audio buffers via THREE.AudioLoader. Returns a Map<string, LoadedAsset> keyed by slot_id. Applies SRGBColorSpace to color textures. Implements one retry with 2-second delay on network failures.
+
+// FILE: game-logic.js
+Exports initGame, updateGame, checkWinCondition, getGameState, resetGame. Manages the card grid data model, flipped array, move counter, pairs_matched counter, elapsed timer, and win/loss state machine. Reads grid_size, card_pairs, flip_delay_ms, win_condition, move_limit, time_limit_seconds, and prize_tiers from window.GAME_CONFIG. Dispatches the gameComplete CustomEvent with MemoryMatchResult payload including window.GAME_CONFIG.sealed_outcome_token.
+
+// FILE: interaction.js
+Exports InteractionManager class. Binds pointerdown on the canvas, normalizes to NDC, raycasts against card meshes using THREE.Raycaster. Filters hits to non-flipped, non-matched cards only. Enforces the two-card flip limit. Provides enable(), disable(), dispose(), and setInteractiveObjects(objects) methods.
+
+// FILE: animation.js
+Exports card flip functions (animateFlipUp, animateFlipDown) using gsap.to on rotation.y with back.out easing. Exports emissive glow pulse (animateMatchGlow) using gsap.to on material.emissiveIntensity. Exports particle burst (createMatchParticles) returning a disposable THREE.Points. Exports camera zoom (animateCameraZoom) using gsap.to on camera.position. Exports staggered win celebration (animateWinCelebration) and loss reveal (animateLossReveal). Exports tick(deltaTime) to update active particle systems.
+
+// FILE: main.js
+Entry point. Reads window.GAME_CONFIG. Orchestrates startup: loadAssets, setupScene, buildCardGrid, initGame, bind InteractionManager, start requestAnimationFrame loop calling updateGame and composer.render. Dispatches "gameReady" CustomEvent with { template_id, asset_count, load_time_ms }. Creates the HUD overlay for timer and move counter. Creates the results screen overlay on game end. Exports destroy() for teardown.

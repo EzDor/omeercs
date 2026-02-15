@@ -1,0 +1,173 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Game Template Manifest
+description: Schema for game template manifest YAML files in templates/games/{template_id}/manifest.yaml
+type: object
+required:
+  - template_id
+  - version
+  - title
+  - description
+  - config_schema
+  - asset_slots
+  - scene_config
+  - entry_point
+properties:
+  template_id:
+    type: string
+    enum: [spin_wheel, quiz, scratch_card, memory_match]
+    description: Unique template identifier
+
+  version:
+    type: string
+    pattern: "^\\d+\\.\\d+\\.\\d+$"
+    description: Semantic version
+
+  title:
+    type: string
+    minLength: 1
+    maxLength: 100
+
+  description:
+    type: string
+    minLength: 1
+    maxLength: 500
+
+  config_schema:
+    type: object
+    description: JSON Schema defining valid game configurations for this template
+    required: [type, properties]
+    properties:
+      type:
+        const: object
+      required:
+        type: array
+        items: { type: string }
+      properties:
+        type: object
+
+  asset_slots:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [slot_id, type, required]
+      properties:
+        slot_id:
+          type: string
+          pattern: "^[a-z][a-z0-9_]*$"
+        type:
+          type: string
+          enum: [image, audio, model_3d, texture, environment_map]
+        formats:
+          type: array
+          items: { type: string }
+        required:
+          type: boolean
+        default:
+          type: string
+        description:
+          type: string
+        max_size_bytes:
+          type: integer
+          minimum: 0
+
+  scene_config:
+    type: object
+    required: [camera, lighting]
+    properties:
+      camera:
+        type: object
+        required: [type, fov, position, look_at]
+        properties:
+          type:
+            type: string
+            enum: [perspective, orthographic]
+          fov:
+            type: number
+            minimum: 10
+            maximum: 120
+          position:
+            type: array
+            items: { type: number }
+            minItems: 3
+            maxItems: 3
+          look_at:
+            type: array
+            items: { type: number }
+            minItems: 3
+            maxItems: 3
+      lighting:
+        type: object
+        required: [ambient]
+        properties:
+          ambient:
+            type: object
+            required: [color, intensity]
+            properties:
+              color: { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+              intensity: { type: number, minimum: 0, maximum: 5 }
+          directional:
+            type: array
+            items:
+              type: object
+              required: [color, intensity, position]
+              properties:
+                color: { type: string }
+                intensity: { type: number }
+                position:
+                  type: array
+                  items: { type: number }
+                  minItems: 3
+                  maxItems: 3
+                cast_shadow: { type: boolean }
+          point_lights:
+            type: array
+            items:
+              type: object
+              required: [color, intensity, position]
+              properties:
+                color: { type: string }
+                intensity: { type: number }
+                position:
+                  type: array
+                  items: { type: number }
+                  minItems: 3
+                  maxItems: 3
+                distance: { type: number }
+                decay: { type: number }
+          spot_lights:
+            type: array
+            items:
+              type: object
+      environment:
+        type: object
+        properties:
+          background_type:
+            type: string
+            enum: [color, environment_map, skybox]
+          background_color: { type: string }
+          environment_map_slot: { type: string }
+      post_processing:
+        type: object
+        properties:
+          bloom:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              strength: { type: number, minimum: 0, maximum: 3 }
+              threshold: { type: number, minimum: 0, maximum: 1 }
+          dof:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              focus: { type: number }
+              aperture: { type: number }
+              max_blur: { type: number }
+          fxaa:
+            type: object
+            properties:
+              enabled: { type: boolean }
+
+  entry_point:
+    type: string
+    pattern: "^[a-zA-Z0-9._/-]+$"

@@ -1,0 +1,122 @@
+template_id: scratch_card
+version: "1.0.0"
+title: "Scratch Card"
+description: "3D scratch card game with shader-based scratch layer, UV-mapped touch interaction, and percentage-based auto-reveal"
+
+config_schema:
+  type: object
+  required:
+    - scratch_threshold_percent
+  properties:
+    scratch_threshold_percent:
+      type: number
+      minimum: 30
+      maximum: 90
+      default: 60
+    brush_size:
+      type: number
+      minimum: 10
+      maximum: 50
+      default: 25
+    reveal_animation_duration_ms:
+      type: integer
+      minimum: 1000
+      maximum: 5000
+    prize_display:
+      type: object
+      properties:
+        text:
+          type: string
+        image_slot:
+          type: string
+
+asset_slots:
+  - slot_id: card_model
+    type: model_3d
+    required: false
+    formats:
+      - glb
+    description: "Optional 3D card geometry model"
+
+  - slot_id: scratch_texture
+    type: texture
+    required: true
+    formats:
+      - png
+      - jpg
+    description: "Texture for the metallic scratch layer surface"
+
+  - slot_id: reveal_texture
+    type: texture
+    required: true
+    formats:
+      - png
+      - jpg
+    description: "Texture revealed underneath the scratch layer"
+
+  - slot_id: scratch_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect looped during active scratching"
+
+  - slot_id: reveal_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played on auto-reveal trigger"
+
+  - slot_id: win_sound
+    type: audio
+    required: false
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played on win celebration"
+
+  - slot_id: background_music
+    type: audio
+    required: false
+    formats:
+      - mp3
+      - ogg
+    description: "Optional looping background music track"
+
+  - slot_id: environment_map
+    type: environment_map
+    required: false
+    formats:
+      - hdr
+      - exr
+    description: "Optional HDR environment map for reflections and IBL"
+
+scene_config:
+  camera:
+    type: perspective
+    fov: 45
+    position: [0, 0, 3]
+    look_at: [0, 0, 0]
+  lighting:
+    ambient:
+      color: "#ffffff"
+      intensity: 0.5
+    directional:
+      - color: "#ffffff"
+        intensity: 0.8
+        position: [3, 5, 5]
+      - color: "#ffffff"
+        intensity: 0.6
+        position: [-3, 5, -5]
+  post_processing:
+    bloom:
+      enabled: true
+      strength: 0.4
+      threshold: 0.8
+    fxaa:
+      enabled: true
+
+entry_point: index.html

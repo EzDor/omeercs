@@ -1,6 +1,7 @@
 import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsObject, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { GameTemplateId } from './game-config.dto';
+import { SceneOverrides } from './generate-threejs-code.dto';
 
 /**
  * Asset reference for bundling
@@ -104,6 +105,15 @@ export class BundleGameTemplateInput {
   @IsString()
   @IsOptional()
   version?: string;
+
+  @ValidateNested()
+  @Type(() => SceneOverrides)
+  @IsOptional()
+  scene_overrides?: SceneOverrides;
+
+  @IsString()
+  @IsOptional()
+  sealed_outcome_token?: string;
 }
 
 /**
