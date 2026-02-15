@@ -11,7 +11,7 @@ export class TemplateConfigValidatorService {
   private readonly validatorCache: Map<string, ValidateFunction> = new Map();
 
   constructor(private readonly manifestLoader: TemplateManifestLoaderService) {
-    this.ajv = new Ajv({ allErrors: true });
+    this.ajv = new Ajv({ allErrors: true, strict: true, validateSchema: true });
   }
 
   private buildValidatorKey(templateId: string, version: string): string {

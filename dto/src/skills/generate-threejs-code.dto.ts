@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsObject, IsNumber, IsBoolean, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsObject, IsNumber, IsBoolean, Min, Max, MaxLength, ArrayMaxSize, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TemplateManifest } from '../template-system/template-manifest.interface';
 
@@ -14,18 +14,22 @@ export interface CodeFile {
 export class AssetMapping {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(256)
   slot_id: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(256)
   uri: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(256)
   type: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(256)
   format?: string;
 }
 
@@ -73,6 +77,8 @@ export class PostProcessingOverrides {
 export class GenerateThreejsCodeInput {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(64)
+  @Matches(/^[a-z][a-z0-9_]{2,30}$/)
   template_id: string;
 
   @IsObject()
@@ -87,6 +93,7 @@ export class GenerateThreejsCodeInput {
   @ValidateNested({ each: true })
   @Type(() => AssetMapping)
   @IsOptional()
+  @ArrayMaxSize(50)
   asset_mappings?: AssetMapping[];
 
   @ValidateNested()
@@ -96,6 +103,7 @@ export class GenerateThreejsCodeInput {
 
   @IsString()
   @IsOptional()
+  @MaxLength(2048)
   sealed_outcome_token?: string;
 }
 

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsObject, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsObject, IsBoolean, MaxLength, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
 import { GameTemplateId } from './game-config.dto';
 import { SceneOverrides } from './generate-threejs-code.dto';
@@ -9,6 +9,7 @@ import { SceneOverrides } from './generate-threejs-code.dto';
 export class BundleAssetRef {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(2048)
   uri: string;
 
   @IsString()
@@ -17,6 +18,7 @@ export class BundleAssetRef {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(256)
   slot: string;
 
   @IsString()
@@ -76,6 +78,7 @@ export class BundleOutputConfig {
 export class BundleGameTemplateInput {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(64)
   template_id: GameTemplateId;
 
   @IsObject()
@@ -84,12 +87,14 @@ export class BundleGameTemplateInput {
 
   @IsString()
   @IsOptional()
+  @MaxLength(2048)
   audio_uri?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BundleAssetRef)
   @IsOptional()
+  @ArrayMaxSize(50)
   assets?: BundleAssetRef[];
 
   @ValidateNested()
@@ -113,6 +118,7 @@ export class BundleGameTemplateInput {
 
   @IsString()
   @IsOptional()
+  @MaxLength(2048)
   sealed_outcome_token?: string;
 }
 

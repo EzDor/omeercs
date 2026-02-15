@@ -262,15 +262,21 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
     fs.writeFileSync(path.join(libDir, 'gsap.min.js'), placeholder);
   }
 
+  private escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   private writeIndexHtml(bundlePath: string, scriptFiles: string[], title: string): void {
-    const scriptTags = scriptFiles.map((f) => `  <script src="scripts/${f}" type="module" defer></script>`).join('\n');
+    const safeFilename = /^[a-zA-Z0-9_-]+\.js$/;
+    const safeScripts = scriptFiles.filter((f) => safeFilename.test(f));
+    const scriptTags = safeScripts.map((f) => `  <script src="scripts/${f}" type="module" defer></script>`).join('\n');
 
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>${title}</title>
+  <title>${this.escapeHtml(title)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
@@ -549,7 +555,8 @@ ${scriptTags}
 
   private isAllowedLocalPath(localPath: string): boolean {
     const resolved = path.resolve(localPath);
-    return resolved.startsWith(path.resolve(this.outputDir));
+    const assetStorageDir = this.configService.get<string>('ASSET_STORAGE_DIR') || '/tmp/skills/assets';
+    return resolved.startsWith(path.resolve(this.outputDir)) || resolved.startsWith(path.resolve(assetStorageDir));
   }
 
   private isValidTemplateId(templateId: string, baseDir: string): boolean {

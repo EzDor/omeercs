@@ -79,7 +79,7 @@ export class ValidateBundleHandler implements SkillHandler<ValidateBundleInput, 
       const browserStart = Date.now();
       browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+        args: ['--disable-gpu', '--disable-dev-shm-usage', '--disable-extensions', '--disable-background-networking'],
       });
       timings['launch_browser'] = Date.now() - browserStart;
 
@@ -172,7 +172,7 @@ export class ValidateBundleHandler implements SkillHandler<ValidateBundleInput, 
             setTimeout(() => resolve(false), timeout);
           });
         },
-        Math.min(timeoutMs - (Date.now() - startTime), 5000),
+        Math.max(Math.min(timeoutMs - (Date.now() - startTime), 5000), 1000),
       );
 
       const readyCheck: ValidationCheck = {
@@ -214,10 +214,15 @@ export class ValidateBundleHandler implements SkillHandler<ValidateBundleInput, 
       });
     } finally {
       if (browser) {
-        await browser.close().catch(() => {});
+        await browser.close().catch((err: Error) => this.logger.warn(`Browser close error: ${err.message}`));
       }
       if (server) {
-        server.close();
+        await new Promise<void>((resolve) => {
+          server!.close((err) => {
+            if (err) this.logger.warn(`Server close error: ${err.message}`);
+            resolve();
+          });
+        });
       }
     }
   }
@@ -225,10 +230,13 @@ export class ValidateBundleHandler implements SkillHandler<ValidateBundleInput, 
   private async startStaticServer(bundleDir: string): Promise<{ server: http.Server; port: number }> {
     return new Promise((resolve, reject) => {
       const server = http.createServer((req, res) => {
-        const urlPath = req.url === '/' ? '/index.html' : req.url || '/index.html';
-        const filePath = path.join(bundleDir, urlPath);
+        const rawUrl = (req.url || '/').split('?')[0].split('#')[0];
+        const urlPath = rawUrl === '/' ? '/index.html' : rawUrl;
+        const decodedPath = decodeURIComponent(urlPath);
+        const filePath = path.resolve(bundleDir, '.' + decodedPath);
+        const resolvedBundleDir = path.resolve(bundleDir);
 
-        if (!filePath.startsWith(bundleDir)) {
+        if (!filePath.startsWith(resolvedBundleDir + path.sep) && filePath !== resolvedBundleDir) {
           res.writeHead(403);
           res.end('Forbidden');
           return;

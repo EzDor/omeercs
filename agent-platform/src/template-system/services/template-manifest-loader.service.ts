@@ -102,14 +102,20 @@ export class TemplateManifestLoaderService {
   }
 
   async loadManifest(templateId: string, version?: string): Promise<TemplateLoadResult> {
-    const manifestPath = path.join(this.templatesDir, templateId, 'manifest.yaml');
+    if (templateId.includes('..') || path.isAbsolute(templateId)) {
+      throw new Error(`Invalid template_id: ${templateId}`);
+    }
+    const manifestPath = path.resolve(this.templatesDir, templateId, 'manifest.yaml');
+    if (!manifestPath.startsWith(path.resolve(this.templatesDir) + path.sep)) {
+      throw new Error(`Template path escapes templates directory: ${templateId}`);
+    }
 
     if (!fs.existsSync(manifestPath)) {
       throw new Error(`Template manifest not found: ${manifestPath}`);
     }
 
     const content = fs.readFileSync(manifestPath, 'utf-8');
-    const manifest = yaml.load(content) as TemplateManifest;
+    const manifest = yaml.load(content, { schema: yaml.JSON_SCHEMA }) as TemplateManifest;
 
     const isValid = this.validateManifest(manifest);
     if (!isValid) {

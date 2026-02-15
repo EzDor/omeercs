@@ -17,6 +17,8 @@ const PURPOSE_MAP: Record<string, CodeFilePurpose> = {
 };
 
 const BACKOFF_BASE_MS = 1000;
+const ALLOWED_TEMPLATE_IDS = ['spin_wheel', 'quiz', 'scratch_card', 'memory_match'];
+const SAFE_CODE_FILENAME = /^[a-zA-Z0-9_-]+\.js$/;
 
 @Injectable()
 export class GenerateThreejsCodeHandler implements SkillHandler<GenerateThreejsCodeInput, GenerateThreejsCodeOutput> {
@@ -51,6 +53,12 @@ export class GenerateThreejsCodeHandler implements SkillHandler<GenerateThreejsC
 
     this.logger.log(`Generating Three.js code for template ${input.template_id}, execution ${context.executionId}`);
 
+    if (!ALLOWED_TEMPLATE_IDS.includes(input.template_id)) {
+      return skillFailure(`Invalid template_id: ${input.template_id}`, 'INVALID_TEMPLATE_ID', {
+        timings_ms: { total: Date.now() - startTime },
+      });
+    }
+
     try {
       const promptStart = Date.now();
       const systemPrompt = this.loadPromptFile('threejs-system.prompt.txt');
@@ -76,6 +84,14 @@ export class GenerateThreejsCodeHandler implements SkillHandler<GenerateThreejsC
           if (codeFiles.length === 0) {
             lastError = 'No code files were generated. Output must contain // FILE: headers.';
             this.logger.warn(`Attempt ${attempt}: No code files parsed, retrying...`);
+            await this.backoff(attempt);
+            continue;
+          }
+
+          const violations = this.validateGeneratedCode(codeFiles);
+          if (violations.length > 0) {
+            lastError = `Generated code contains forbidden patterns: ${violations.join('; ')}`;
+            this.logger.warn(`Attempt ${attempt}: Code safety check failed, retrying...`);
             await this.backoff(attempt);
             continue;
           }
@@ -138,9 +154,13 @@ export class GenerateThreejsCodeHandler implements SkillHandler<GenerateThreejsC
   }
 
   private loadPromptFile(filename: string): string {
-    const filePath = path.join(this.promptsDir, filename);
+    const resolvedPromptsDir = path.resolve(this.promptsDir);
+    const filePath = path.resolve(this.promptsDir, filename);
+    if (!filePath.startsWith(resolvedPromptsDir + path.sep)) {
+      throw new Error(`Prompt file path escapes prompts directory`);
+    }
     if (!fs.existsSync(filePath)) {
-      throw new Error(`Prompt file not found: ${filePath}`);
+      throw new Error(`Prompt file not found for template: ${filename.replace('.prompt.txt', '')}`);
     }
     return fs.readFileSync(filePath, 'utf-8');
   }
@@ -222,8 +242,12 @@ export class GenerateThreejsCodeHandler implements SkillHandler<GenerateThreejsC
     for (let i = 0; i < matches.length; i++) {
       const match = matches[i];
       const filename = match[1].trim();
-      const startIdx = match.index! + match[0].length;
-      const endIdx = i + 1 < matches.length ? matches[i + 1].index! : response.length;
+      if (!SAFE_CODE_FILENAME.test(filename)) {
+        this.logger.warn(`Skipping unsafe filename from LLM output: ${filename}`);
+        continue;
+      }
+      const startIdx = match.index + match[0].length;
+      const endIdx = i + 1 < matches.length ? matches[i + 1].index : response.length;
 
       let content = response.substring(startIdx, endIdx).trim();
       content = content.replace(/^```(?:javascript|js)?\s*\n?/, '').replace(/\n?```\s*$/, '');
@@ -247,12 +271,45 @@ export class GenerateThreejsCodeHandler implements SkillHandler<GenerateThreejsC
   }
 
   private writeCodeFiles(codeDir: string, files: CodeFile[]): void {
+    const resolvedCodeDir = path.resolve(codeDir);
     if (!fs.existsSync(codeDir)) {
       fs.mkdirSync(codeDir, { recursive: true });
     }
     for (const file of files) {
-      fs.writeFileSync(path.join(codeDir, file.filename), file.content);
+      const resolvedFile = path.resolve(codeDir, file.filename);
+      if (!resolvedFile.startsWith(resolvedCodeDir + path.sep)) {
+        this.logger.warn(`Skipping file that escapes code dir: ${file.filename}`);
+        continue;
+      }
+      fs.writeFileSync(resolvedFile, file.content);
     }
+  }
+
+  private readonly DANGEROUS_PATTERNS = [
+    /\beval\s*\(/,
+    /\bnew\s+Function\s*\(/,
+    /\brequire\s*\(/,
+    /\bimport\s*\(\s*['"][^.]/,
+    /\bprocess\b/,
+    /\b__dirname\b/,
+    /\b__filename\b/,
+    /\bchild_process\b/,
+    /\bfs\.\b/,
+    /\bexecSync\b/,
+    /\bexecFile\b/,
+    /\bspawnSync\b/,
+  ];
+
+  private validateGeneratedCode(files: CodeFile[]): string[] {
+    const violations: string[] = [];
+    for (const file of files) {
+      for (const pattern of this.DANGEROUS_PATTERNS) {
+        if (pattern.test(file.content)) {
+          violations.push(`${file.filename}: contains forbidden pattern ${pattern.source}`);
+        }
+      }
+    }
+    return violations;
   }
 
   private async backoff(attempt: number): Promise<void> {
