@@ -132,7 +132,7 @@ export class ValidateBundleHandler implements SkillHandler<ValidateBundleInput, 
       }
 
       const gameConfigAccessible = await page.evaluate(() => {
-        return typeof (window as any).GAME_CONFIG !== 'undefined';
+        return typeof (window as unknown as Record<string, unknown>).GAME_CONFIG !== 'undefined';
       });
 
       const configCheck: ValidationCheck = {
@@ -160,7 +160,7 @@ export class ValidateBundleHandler implements SkillHandler<ValidateBundleInput, 
       const gameReadyFired = await page.evaluate(
         (timeout: number) => {
           return new Promise<boolean>((resolve) => {
-            if ((window as any).__gameReady) {
+            if ((window as unknown as Record<string, unknown>).__gameReady) {
               resolve(true);
               return;
             }

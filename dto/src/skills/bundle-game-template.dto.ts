@@ -3,9 +3,6 @@ import { Type } from 'class-transformer';
 import { GameTemplateId } from './game-config.dto';
 import { SceneOverrides } from './generate-threejs-code.dto';
 
-/**
- * Asset reference for bundling
- */
 export class BundleAssetRef {
   @IsString()
   @IsNotEmpty()
@@ -26,9 +23,6 @@ export class BundleAssetRef {
   content_type?: string;
 }
 
-/**
- * Bundle optimization options
- */
 export class BundleOptimizationOptions {
   @IsBoolean()
   @IsOptional()
@@ -51,9 +45,6 @@ export class BundleOptimizationOptions {
   tree_shake?: boolean;
 }
 
-/**
- * Bundle output format configuration
- */
 export class BundleOutputConfig {
   @IsString()
   @IsOptional()
@@ -72,9 +63,6 @@ export class BundleOutputConfig {
   include_checksums?: boolean;
 }
 
-/**
- * Input DTO for bundle_game_template skill
- */
 export class BundleGameTemplateInput {
   @IsString()
   @IsNotEmpty()
@@ -122,9 +110,6 @@ export class BundleGameTemplateInput {
   sealed_outcome_token?: string;
 }
 
-/**
- * Bundled file info in output
- */
 export interface BundledFileInfo {
   path: string;
   size_bytes: number;
@@ -132,9 +117,6 @@ export interface BundledFileInfo {
   checksum?: string;
 }
 
-/**
- * Bundle manifest structure
- */
 export interface BundleManifest {
   bundle_id: string;
   template_id: GameTemplateId;
@@ -157,9 +139,6 @@ export interface BundleManifest {
   };
 }
 
-/**
- * Output DTO for bundle_game_template skill
- */
 export interface BundleGameTemplateOutput {
   bundle_uri: string;
   manifest_uri: string;

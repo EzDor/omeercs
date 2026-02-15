@@ -101,7 +101,7 @@ export class TemplateManifestLoaderService {
     return `${templateId}@${version}`;
   }
 
-  async loadManifest(templateId: string, version?: string): Promise<TemplateLoadResult> {
+  loadManifest(templateId: string, version?: string): TemplateLoadResult {
     if (templateId.includes('..') || path.isAbsolute(templateId)) {
       throw new Error(`Invalid template_id: ${templateId}`);
     }

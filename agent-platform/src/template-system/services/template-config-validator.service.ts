@@ -48,10 +48,10 @@ export class TemplateConfigValidatorService {
     return { valid: false, errors, config: null };
   }
 
-  async validateByTemplateId(templateId: string, gameConfig: Record<string, unknown>, version?: string): Promise<TemplateValidationResult> {
+  validateByTemplateId(templateId: string, gameConfig: Record<string, unknown>, version?: string): TemplateValidationResult {
     let manifest = this.manifestLoader.getManifest(templateId, version);
     if (!manifest) {
-      const result = await this.manifestLoader.loadManifest(templateId, version);
+      const result = this.manifestLoader.loadManifest(templateId, version);
       manifest = result.manifest;
     }
 

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { BundleGameTemplateInput, BundleGameTemplateOutput, BundleManifest, BundledFileInfo } from '@agentic-template/dto/src/skills/bundle-game-template.dto';
 import { SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
+import { TemplateManifest } from '@agentic-template/dto/src/template-system/template-manifest.interface';
 import { TemplateManifestLoaderService } from '../../template-system/services/template-manifest-loader.service';
 import { TemplateConfigValidatorService } from '../../template-system/services/template-config-validator.service';
 import { GenerateThreejsCodeHandler } from './generate-threejs-code.handler';
@@ -60,9 +61,9 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       timings['validate_template_id'] = Date.now() - templateStart;
 
       const manifestStart = Date.now();
-      let templateManifest;
+      let templateManifest: TemplateManifest;
       try {
-        const loadResult = await this.manifestLoader.loadManifest(input.template_id, input.version);
+        const loadResult = this.manifestLoader.loadManifest(input.template_id, input.version);
         templateManifest = loadResult.manifest;
       } catch {
         this.logger.warn(`No manifest found for ${input.template_id}, using legacy pipeline`);
