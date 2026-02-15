@@ -1,13 +1,12 @@
-import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsObject, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsObject, IsBoolean, MaxLength, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
 import { GameTemplateId } from './game-config.dto';
+import { SceneOverrides } from './generate-threejs-code.dto';
 
-/**
- * Asset reference for bundling
- */
 export class BundleAssetRef {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(2048)
   uri: string;
 
   @IsString()
@@ -16,6 +15,7 @@ export class BundleAssetRef {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(256)
   slot: string;
 
   @IsString()
@@ -23,9 +23,6 @@ export class BundleAssetRef {
   content_type?: string;
 }
 
-/**
- * Bundle optimization options
- */
 export class BundleOptimizationOptions {
   @IsBoolean()
   @IsOptional()
@@ -48,9 +45,6 @@ export class BundleOptimizationOptions {
   tree_shake?: boolean;
 }
 
-/**
- * Bundle output format configuration
- */
 export class BundleOutputConfig {
   @IsString()
   @IsOptional()
@@ -69,12 +63,10 @@ export class BundleOutputConfig {
   include_checksums?: boolean;
 }
 
-/**
- * Input DTO for bundle_game_template skill
- */
 export class BundleGameTemplateInput {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(64)
   template_id: GameTemplateId;
 
   @IsObject()
@@ -83,12 +75,14 @@ export class BundleGameTemplateInput {
 
   @IsString()
   @IsOptional()
+  @MaxLength(2048)
   audio_uri?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BundleAssetRef)
   @IsOptional()
+  @ArrayMaxSize(50)
   assets?: BundleAssetRef[];
 
   @ValidateNested()
@@ -104,11 +98,18 @@ export class BundleGameTemplateInput {
   @IsString()
   @IsOptional()
   version?: string;
+
+  @ValidateNested()
+  @Type(() => SceneOverrides)
+  @IsOptional()
+  scene_overrides?: SceneOverrides;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2048)
+  sealed_outcome_token?: string;
 }
 
-/**
- * Bundled file info in output
- */
 export interface BundledFileInfo {
   path: string;
   size_bytes: number;
@@ -116,9 +117,6 @@ export interface BundledFileInfo {
   checksum?: string;
 }
 
-/**
- * Bundle manifest structure
- */
 export interface BundleManifest {
   bundle_id: string;
   template_id: GameTemplateId;
@@ -141,9 +139,6 @@ export interface BundleManifest {
   };
 }
 
-/**
- * Output DTO for bundle_game_template skill
- */
 export interface BundleGameTemplateOutput {
   bundle_uri: string;
   manifest_uri: string;

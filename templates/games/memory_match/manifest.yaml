@@ -1,0 +1,150 @@
+template_id: memory_match
+version: "1.0.0"
+title: "Memory Match"
+description: "3D card-flipping memory game with grid layout, pair matching, move counting, and configurable win conditions"
+
+config_schema:
+  type: object
+  required:
+    - grid_size
+    - card_pairs
+    - win_condition
+  properties:
+    grid_size:
+      type: string
+      enum: ["2x3", "3x4", "4x4", "4x5"]
+    card_pairs:
+      type: array
+      items:
+        type: object
+        required:
+          - pair_id
+          - image_slot
+        properties:
+          pair_id:
+            type: string
+          image_slot:
+            type: string
+    flip_delay_ms:
+      type: integer
+      minimum: 500
+      maximum: 3000
+      default: 1000
+    win_condition:
+      type: string
+      enum: ["all_pairs", "move_limit", "time_limit"]
+    move_limit:
+      type: integer
+    time_limit_seconds:
+      type: integer
+    prize_tiers:
+      type: array
+      items:
+        type: object
+        properties:
+          max_moves:
+            type: integer
+          max_time:
+            type: integer
+          prize_id:
+            type: string
+
+asset_slots:
+  - slot_id: card_back_texture
+    type: texture
+    required: true
+    formats:
+      - png
+      - jpg
+    description: "Texture applied to the back face of all cards"
+
+  - slot_id: card_face_textures
+    type: texture
+    required: true
+    formats:
+      - png
+      - jpg
+    description: "Used for all card pair faces"
+
+  - slot_id: table_model
+    type: model_3d
+    required: false
+    formats:
+      - glb
+    description: "Optional 3D table model placed beneath the card grid"
+
+  - slot_id: match_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played when two cards match"
+
+  - slot_id: mismatch_sound
+    type: audio
+    required: false
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played when two cards do not match"
+
+  - slot_id: flip_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played when a card is flipped"
+
+  - slot_id: win_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played when the player wins"
+
+  - slot_id: background_music
+    type: audio
+    required: false
+    formats:
+      - mp3
+      - ogg
+    description: "Optional looping background music track"
+
+  - slot_id: environment_map
+    type: environment_map
+    required: false
+    formats:
+      - hdr
+      - exr
+    description: "Optional HDR environment map for reflections and IBL"
+
+scene_config:
+  camera:
+    type: perspective
+    fov: 55
+    position: [0, 5, 4]
+    look_at: [0, 0, 0]
+  lighting:
+    ambient:
+      color: "#ffffff"
+      intensity: 0.5
+    directional:
+      - color: "#ffffff"
+        intensity: 0.8
+        position: [0, 8, 5]
+        cast_shadow: true
+    point_lights:
+      - color: "#ffffff"
+        intensity: 0.4
+        position: [-3, 2, 0]
+      - color: "#ffffff"
+        intensity: 0.4
+        position: [3, 2, 0]
+  post_processing:
+    fxaa:
+      enabled: true
+
+entry_point: index.html

@@ -1,0 +1,172 @@
+You are generating Three.js r170+ game code for a 3D quiz game. The game presents questions on 3D panels, allows the player to select answers via raycaster-based tap/click, provides visual and audio feedback, tracks the score, and assigns a prize tier at the end.
+
+Read all game configuration from window.GAME_CONFIG. The config contains questions (array of objects with text, answers, and optional timer_seconds), randomize_questions, randomize_answers, show_correct_answer, and prize_tiers (array with min_score, max_score, prize_id). The sealed outcome token is at window.GAME_CONFIG.sealed_outcome_token and is used for server-side answer verification.
+
+
+== STATE MACHINE ==
+
+Implement a finite state machine with five states: LOADING, QUESTION, ANSWER_FEEDBACK, TRANSITION, RESULTS.
+
+LOADING: Load all assets, initialize the scene, build the question queue. When ready, transition to QUESTION and dispatch the "gameReady" event.
+
+QUESTION: Display the current question panel and answer buttons. Enable raycaster interaction on the answer meshes. If timer_seconds is defined for the current question, start the countdown ring. Disable interaction on all non-answer objects.
+
+ANSWER_FEEDBACK: Triggered when the player taps an answer or the timer expires. Play the appropriate feedback animation (correct or incorrect). If show_correct_answer is true and the player answered incorrectly, highlight the correct answer. Hold this state for the feedback animation duration (approximately 1.5 seconds for correct, 2 seconds for incorrect).
+
+TRANSITION: Animate the camera flying from the current question position to the next question position using a GSAP timeline. Fade out the current question panel and answer meshes. If there are no more questions, transition to RESULTS instead.
+
+RESULTS: Display a 3D podium or stage mesh with the final score, percentage, prize tier label, and total time taken. Dispatch the "gameComplete" CustomEvent on the window with detail containing the QuizResult object: { type: "quiz", answers (array of { question_index, selected_answer_index }), score, total_questions }.
+
+
+== QUESTION PANEL RENDERING ==
+
+Create each question panel using PlaneGeometry with dimensions approximately 4 units wide by 2 units tall. Render the question text dynamically onto an OffscreenCanvas (or standard Canvas), then create a CanvasTexture from that canvas and apply it as the map on a MeshStandardMaterial. Set the material roughness to 0.6 and metalness to 0.1.
+
+For text rendering on the canvas, use a resolution of 1024x512 pixels. Set the font to bold 48px sans-serif. Use fillText with word wrapping: measure each word with measureText, accumulate words per line, and break to a new line when the accumulated width exceeds the canvas width minus padding (64px each side). Center each line horizontally. Fill the background with a dark color (e.g., #1a1a2e) and render text in white (#ffffff).
+
+If the question_panel_texture asset is loaded, use it as a background instead of the solid fill color.
+
+Position question panels along the Z axis with spacing of 8 units between each panel, so question 0 is at z=0, question 1 at z=-8, question 2 at z=-16, and so on. Set each panel's Y position to 2.5 units.
+
+
+== ANSWER BUTTONS ==
+
+For each question, create 2 to 4 answer option meshes depending on the number of answers in the config. Build each button using ExtrudeGeometry from a RoundedRectShape: create a Shape with moveTo and quadraticCurveTo calls to produce rounded corners (radius 0.1 units), then extrude with depth 0.15 units and bevelEnabled false. Each button should be approximately 1.6 units wide and 0.5 units tall.
+
+Apply MeshStandardMaterial with a neutral base color (#2d3436 for idle), roughness 0.5, and metalness 0.2. Render the answer text onto a CanvasTexture at 512x128 resolution, font 32px sans-serif, white text centered both horizontally and vertically on a transparent background. Apply this texture as the material's map.
+
+Lay out the answer buttons in a 2-column grid below the question panel. For 2 answers, place them side by side at y=0.8. For 3 answers, place two in the top row and one centered below. For 4 answers, place them in a 2x2 grid. Center the grid horizontally under the question panel. Set each button's Z position to match the parent question panel's Z plus 1 unit (closer to the camera).
+
+Store each answer button mesh in an array associated with the question index, and tag each mesh with userData containing { questionIndex, answerIndex } so the interaction system can identify which answer was selected.
+
+
+== RAYCASTER INTERACTION ==
+
+Use the InteractionManager from interaction.js. Register only the answer button meshes for the current question as interactive objects. On pointer down, cast a ray and check intersection with the answer meshes. When a hit is detected, read the questionIndex and answerIndex from the intersected mesh's userData, record the answer, and transition to ANSWER_FEEDBACK.
+
+Disable interaction during ANSWER_FEEDBACK, TRANSITION, and RESULTS states by calling the InteractionManager's disable() method. Re-enable when entering the QUESTION state.
+
+Add a hover effect: on pointer move, if the ray intersects an answer button, scale it to 1.05 using gsap.to with duration 0.15, and set emissiveIntensity to 0.2. When the ray leaves the button, tween back to scale 1.0 and emissiveIntensity 0.
+
+
+== CORRECT ANSWER FEEDBACK ==
+
+When the selected answer is correct:
+
+1. Set the selected button's material emissive color to green (#00e676) and tween emissiveIntensity from 0 to 1.0 using gsap.to over 0.3 seconds.
+2. Scale the selected button to 1.15 using gsap.to with ease "back.out(2)" and duration 0.4.
+3. Create a particle celebration burst at the button's world position. Use Points with BufferGeometry, allocate Float32Array for 100 particles. Set random initial velocities (x: -2 to 2, y: 2 to 5, z: -2 to 2). Use PointsMaterial with size 0.08, color #ffeb3b, transparent true, opacity 1. Animate particles each frame: update positions by velocity * deltaTime, apply gravity (velocity.y -= 9.8 * deltaTime), fade opacity toward 0. Remove the Points object after 1.5 seconds.
+4. Animate the camera to zoom toward the selected button: gsap.to camera.position with x offset toward the button, z closer by 1 unit, duration 0.8, ease "power2.inOut".
+5. Play the correct_sound audio buffer through the AudioListener.
+6. Increment the score counter.
+7. Hold for 1.5 seconds total, then transition to TRANSITION state.
+
+
+== INCORRECT ANSWER FEEDBACK ==
+
+When the selected answer is incorrect:
+
+1. Set the selected button's material emissive color to red (#ff1744) and tween emissiveIntensity from 0 to 0.8 using gsap.to over 0.2 seconds.
+2. Camera shake: use gsap.to on camera.position with a timeline of 5 rapid keyframes over 0.4 seconds total. Each keyframe offsets camera.position.x by a random value between -0.05 and 0.05, and camera.position.y by a random value between -0.03 and 0.03. Use ease "power1.inOut" for each step. After the shake, tween back to the original camera position.
+3. If show_correct_answer is true, find the correct answer button mesh and set its material emissive to green (#00e676), tween emissiveIntensity to 0.6, and add a green outline effect by creating a slightly larger clone of the mesh (scale 1.08) with a MeshBasicMaterial colored #00e676, opacity 0.3, transparent true, side BackSide, and adding it as a sibling in the scene.
+4. Play the incorrect_sound audio buffer.
+5. Do not increment the score counter.
+6. Hold for 2.0 seconds total, then transition to TRANSITION state.
+
+
+== COUNTDOWN TIMER ==
+
+When a question has timer_seconds defined, render a 3D countdown ring using RingGeometry. Create the ring with innerRadius 0.4, outerRadius 0.5, thetaSegments 64, thetaStart 0, thetaLength Math.PI * 2. Position the ring to the right of the question panel (x offset +2.5 units, same y and z as the panel).
+
+Apply MeshBasicMaterial with color #4fc3f7 and side DoubleSide.
+
+Each frame, calculate the remaining fraction (remainingSeconds / totalSeconds). Recreate or update the geometry with thetaLength = remainingSeconds / totalSeconds * Math.PI * 2. Dispose the old geometry before creating the new one to avoid GPU memory leaks.
+
+When the remaining time reaches the last 5 seconds, change the ring color to #ff7043 and play the timer_sound audio in a loop at low volume (0.3).
+
+When the timer reaches zero, treat it as an incorrect answer with selected_answer_index of -1 and transition to ANSWER_FEEDBACK.
+
+Render the remaining seconds as text in the center of the ring using a small CanvasTexture (128x128, centered bold text, font size 48px).
+
+
+== QUESTION AND ANSWER RANDOMIZATION ==
+
+If randomize_questions is true, shuffle the questions array using the Fisher-Yates algorithm at game start. Track the original question indices so that the answers array in the gameComplete event uses the original question_index values.
+
+If randomize_answers is true, shuffle each question's answers array independently using Fisher-Yates. Track the original answer indices so that selected_answer_index in the gameComplete event maps back to the original answer positions. Store the correct answer index before shuffling so correct/incorrect detection still works after randomization.
+
+
+== CAMERA TRANSITIONS ==
+
+Between questions, animate the camera from its current position to a position facing the next question panel. Use gsap.timeline() with the following sequence:
+
+1. Ease out from the current position: gsap.to camera.position z with value interpolated toward the next panel z + 5 (maintaining the 5-unit distance in front), duration 1.0, ease "power2.inOut".
+2. Simultaneously tween camera lookAt target from the current panel center to the next panel center using an intermediary object and onUpdate to call camera.lookAt with the interpolated vector.
+3. Also tween camera.position.y through a slight arc: raise by 0.5 units at the midpoint using a custom ease or keyframes.
+
+During the TRANSITION state, fade out the previous question's panel and answer meshes by tweening their materials' opacity from 1 to 0 over 0.5 seconds (set material.transparent = true before tweening). Remove them from the scene after the fade completes and dispose their geometries and materials.
+
+
+== SCORE TRACKING ==
+
+Maintain a score object: { correct: 0, total: 0, answers: [], startTime: Date.now() }.
+
+On each answer (correct, incorrect, or timeout), push an entry to the answers array: { question_index: originalIndex, selected_answer_index: originalAnswerIndex }. For timeouts, set selected_answer_index to -1.
+
+After each answer, increment total. After a correct answer, increment correct.
+
+Calculate the percentage as Math.round((correct / total) * 100), guarding against division by zero by returning 0 when total is 0.
+
+
+== PRIZE TIER DETERMINATION ==
+
+After all questions are answered, look up the prize tier from the config's prize_tiers array. Iterate through prize_tiers and find the first entry where score >= min_score AND score <= max_score. Store the matching prize_id. If no tier matches, set prize_id to null.
+
+
+== RESULTS SCREEN ==
+
+Build a 3D results scene at z position = (totalQuestions * -8) - 10 so it is beyond the last question panel.
+
+Create a podium using CylinderGeometry with radiusTop 1, radiusBottom 1.2, height 0.5, radialSegments 32. Apply MeshStandardMaterial with color #ffd700, metalness 0.7, roughness 0.3. Position at y=0.25.
+
+On top of the podium, render three CanvasTexture text panels:
+1. Score panel: "{correct}/{total}" in large bold text (64px), positioned at y=1.5.
+2. Percentage panel: "{percentage}%" in medium text (48px), positioned at y=2.2.
+3. Prize tier panel: display the prize_id string or "No Prize" if null, positioned at y=2.8.
+4. Time panel: display "Time: {seconds}s" showing total elapsed time, positioned at y=3.4.
+
+Animate the podium entrance: start at y=-2 and scale 0, tween to final position with gsap.from using ease "back.out(1.7)" and duration 1.0. Stagger the text panels appearing with 0.3 second delays.
+
+If the player scored above 0, add a celebration particle system similar to the correct answer particles but with 200 particles and multiple colors (#ffeb3b, #00e676, #42a5f5, #ab47bc).
+
+Animate the camera to fly to the results area: gsap.to camera.position to [0, 2, resultsZ + 5] and camera lookAt [0, 1.5, resultsZ] over 1.5 seconds.
+
+After the results animation completes (approximately 3 seconds total), dispatch the "gameComplete" CustomEvent on window with detail: { event_type: "gameComplete", template_id: "quiz", sealed_outcome_token: window.GAME_CONFIG.sealed_outcome_token, player_result: { type: "quiz", answers, score: correct, total_questions: total }, duration_ms: Date.now() - startTime, timestamp: new Date().toISOString() }.
+
+
+== BACKGROUND MUSIC ==
+
+If the background_music asset is loaded, create a non-positional Audio attached to the AudioListener. Set loop to true and volume to 0.2. Start playback only after the first user interaction (pointer event) to comply with browser autoplay policies. Fade out the music over 2 seconds when entering the RESULTS state using gsap.to on the audio gain node value.
+
+
+== OUTPUT FILES ==
+
+Generate exactly six JavaScript ES module files with these headers:
+
+// FILE: scene-setup.js
+Creates the Scene, PerspectiveCamera, WebGLRenderer, and EffectComposer (with FXAA pass). Reads camera and lighting configuration from the template manifest's scene_config. Creates the AmbientLight, DirectionalLight with shadow mapping. Attaches the resize listener and WebGL context loss handlers. Returns { scene, camera, renderer, composer, audioListener, dispose }.
+
+// FILE: game-logic.js
+Implements the quiz state machine (LOADING, QUESTION, ANSWER_FEEDBACK, TRANSITION, RESULTS). Manages the question queue, randomization, score tracking, timer logic, prize tier determination, and answer recording. Exposes initGame(scene, config, assets), updateGame(deltaTime), getCurrentState(), getScore(), and resetGame(). Dispatches "gameComplete" CustomEvent when the results screen animation finishes.
+
+// FILE: asset-loader.js
+Loads all assets from the asset_mappings using GLTFLoader for model_3d slots, TextureLoader for texture slots, AudioLoader for audio slots, and RGBELoader or EXRLoader for environment_map slots. Returns a Map keyed by slot_id. Reports progress through LoadingManager. Implements one retry with 2-second delay on failed loads. Falls back gracefully on missing optional assets.
+
+// FILE: interaction.js
+InteractionManager class that binds pointer events (pointerdown, pointermove, pointerup) to the canvas. Manages a Raycaster and tests intersections against the current set of interactive answer button meshes. Fires callbacks for answer selection and hover state changes. Provides enable(), disable(), dispose(), and setInteractiveObjects(objects) methods.
+
+// FILE: animation.js
+Animation utilities wrapping GSAP. Provides createQuestionEntrance(panel, buttons) for animating question panels and buttons appearing, createCorrectFeedback(mesh, scene, camera) for the correct answer celebration, createIncorrectFeedback(mesh, correctMesh, camera, showCorrect) for the incorrect answer shake and highlight, createCameraTransition(camera, fromZ, toZ) for the fly-through between questions, createResultsEntrance(podium, textPanels) for the results screen animation, and tick(deltaTime) for updating active GSAP tweens and any Three.js AnimationMixers.
+
+// FILE: main.js
+Entry point that imports all other modules. Reads window.GAME_CONFIG. Orchestrates startup: load assets, set up scene, initialize game logic, bind interactions, start the render loop. Shows a "Tap to Start" overlay until the first user interaction to enable audio. Dispatches "gameReady" when initialization is complete. Exports a destroy() function that tears down all subsystems, kills GSAP tweens, disposes geometries and materials, and removes event listeners.

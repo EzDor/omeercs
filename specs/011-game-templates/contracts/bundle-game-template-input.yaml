@@ -1,0 +1,159 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Bundle Game Template Input
+description: Input contract for the bundle_game_template skill handler
+type: object
+required:
+  - template_id
+  - game_config
+properties:
+  template_id:
+    type: string
+    enum: [spin_wheel, quiz, scratch_card, memory_match]
+    description: Template to generate bundle for
+
+  game_config:
+    type: object
+    description: Game-specific configuration validated against the template's config_schema
+
+  assets:
+    type: array
+    description: Asset mappings for template asset slots
+    items:
+      type: object
+      required: [slot_id, uri, type]
+      properties:
+        slot_id:
+          type: string
+          description: Template asset slot to fill
+        uri:
+          type: string
+          description: Source URI (local path or HTTP URL)
+        type:
+          type: string
+          enum: [image, audio, model_3d, texture, environment_map]
+        format:
+          type: string
+          description: File format (e.g., glb, png, mp3, hdr)
+        content_type:
+          type: string
+          description: MIME type
+
+  scene_overrides:
+    type: object
+    description: Optional overrides for template scene defaults
+    properties:
+      camera_position:
+        type: array
+        items: { type: number }
+        minItems: 3
+        maxItems: 3
+      camera_fov:
+        type: number
+        minimum: 10
+        maximum: 120
+      lighting_intensity:
+        type: number
+        minimum: 0
+        maximum: 5
+      background_color:
+        type: string
+        pattern: "^#[0-9a-fA-F]{6}$"
+      post_processing:
+        type: object
+        properties:
+          bloom_enabled: { type: boolean }
+          bloom_strength: { type: number }
+          dof_enabled: { type: boolean }
+
+  sealed_outcome_token:
+    type: string
+    description: Encrypted server-side pre-determined outcome. Opaque to client.
+
+  version:
+    type: string
+    description: Template version to use (defaults to latest)
+
+  optimization:
+    type: object
+    properties:
+      minify:
+        type: boolean
+        default: true
+      compress_textures:
+        type: boolean
+        default: true
+        description: Compress textures to KTX2 format
+      draco_compress_models:
+        type: boolean
+        default: true
+        description: Apply Draco compression to GLB models
+
+---
+
+title: Bundle Game Template Output
+description: Output contract for the bundle_game_template skill handler
+type: object
+required:
+  - bundle_uri
+  - manifest_uri
+  - manifest
+  - total_size_bytes
+  - file_count
+  - entry_point
+properties:
+  bundle_uri:
+    type: string
+    description: URI to the stored bundle directory
+
+  manifest_uri:
+    type: string
+    description: URI to the bundle manifest JSON
+
+  manifest:
+    type: object
+    description: Inline bundle manifest
+    required: [template_id, version, files, checksums]
+    properties:
+      template_id: { type: string }
+      version: { type: string }
+      files:
+        type: array
+        items:
+          type: object
+          required: [path, size_bytes, type]
+          properties:
+            path: { type: string }
+            size_bytes: { type: integer }
+            type: { type: string }
+            checksum: { type: string }
+      checksums:
+        type: object
+        description: SHA-256 checksums for each file
+
+  total_size_bytes:
+    type: integer
+    description: Total uncompressed bundle size
+
+  file_count:
+    type: integer
+
+  entry_point:
+    type: string
+
+  validation:
+    type: object
+    description: Results from headless render validation
+    properties:
+      valid: { type: boolean }
+      checks:
+        type: array
+        items:
+          type: object
+          properties:
+            name: { type: string }
+            passed: { type: boolean }
+            details: { type: string }
+      load_time_ms: { type: integer }
+      errors:
+        type: array
+        items: { type: string }

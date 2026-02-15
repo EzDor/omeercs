@@ -25,6 +25,10 @@ import { Optimize3DAssetHandler } from '../handlers/optimize-3d-asset.handler';
 import { BundleGameTemplateHandler } from '../handlers/bundle-game-template.handler';
 import { ValidateGameBundleHandler } from '../handlers/validate-game-bundle.handler';
 import { AssembleCampaignManifestHandler } from '../handlers/assemble-campaign-manifest.handler';
+import { GenerateThreejsCodeHandler } from '../handlers/generate-threejs-code.handler';
+import { ValidateBundleHandler } from '../handlers/validate-bundle.handler';
+import { TemplateManifestLoaderService } from '../../template-system/services/template-manifest-loader.service';
+import { TemplateConfigValidatorService } from '../../template-system/services/template-config-validator.service';
 
 interface CatalogIndex {
   version: string;
@@ -64,6 +68,8 @@ export class SkillCatalogService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly imageProviderRegistry: ImageProviderRegistry,
     private readonly audioProviderRegistry: AudioProviderRegistry,
+    private readonly templateManifestLoader: TemplateManifestLoaderService,
+    private readonly templateConfigValidator: TemplateConfigValidatorService,
   ) {
     this.catalogPath = this.resolveCatalogPath();
   }
@@ -398,7 +404,9 @@ export class SkillCatalogService implements OnModuleInit {
       { skillId: 'mix_audio_for_game', create: () => new MixAudioForGameHandler(this.configService) },
       { skillId: 'generate_3d_asset', create: () => new Generate3DAssetHandler(this.configService) },
       { skillId: 'optimize_3d_asset', create: () => new Optimize3DAssetHandler(this.configService) },
-      { skillId: 'bundle_game_template', create: () => new BundleGameTemplateHandler(this.configService) },
+      { skillId: 'generate_threejs_code', create: () => new GenerateThreejsCodeHandler(this.configService) },
+      { skillId: 'validate_bundle', create: () => new ValidateBundleHandler(this.configService) },
+      { skillId: 'bundle_game_template', create: () => new BundleGameTemplateHandler(this.configService, this.templateManifestLoader, this.templateConfigValidator) },
       { skillId: 'validate_game_bundle', create: () => new ValidateGameBundleHandler(this.configService) },
       { skillId: 'assemble_campaign_manifest', create: () => new AssembleCampaignManifestHandler(this.configService) },
     ];

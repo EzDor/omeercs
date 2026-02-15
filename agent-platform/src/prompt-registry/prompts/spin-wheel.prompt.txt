@@ -1,0 +1,152 @@
+You are generating Three.js r170+ code for a 3D Spin Wheel game. The game renders a prize wheel with configurable segments, spins it with physics-based deceleration, and lands on a server-side pre-determined outcome. All game configuration is available at window.GAME_CONFIG and the sealed outcome is at window.GAME_CONFIG.sealed_outcome_token.
+
+Generate code across the six output files (scene-setup.js, game-logic.js, asset-loader.js, interaction.js, animation.js, main.js) following the // FILE: header convention.
+
+
+== WHEEL GEOMETRY AND SEGMENTS ==
+
+Build the 3D wheel using CylinderGeometry with a low height (0.3 units) and high radial segments (64 minimum). The wheel has N segments defined in window.GAME_CONFIG.segments, where N is between 4 and 12.
+
+Divide the cylinder's top face into N angular slices. For each segment, compute the start angle and arc angle based on the segment's weight relative to the total weight of all segments. Use custom UV mapping on the BufferGeometry to isolate each segment's face for independent texturing.
+
+Create a separate MeshStandardMaterial for each segment using the hex color from the segment config:
+- metalness: 0.3
+- roughness: 0.5
+- emissive: set to the segment color at emissiveIntensity 0.0 (will be boosted during win animation)
+
+Apply the per-segment materials using geometry groups (addGroup on the BufferGeometry) so each angular slice uses its own material index.
+
+Add a beveled rim around the wheel edge using a TorusGeometry with MeshStandardMaterial (metalness: 0.7, roughness: 0.3) to create a polished metallic border.
+
+
+== SEGMENT LABELS ==
+
+Render each segment's label text onto the wheel face using a canvas-to-texture approach:
+
+1. For each segment, create an OffscreenCanvas (256x128).
+2. Draw the segment label text centered on the canvas using a bold sans-serif font. Scale font size to fit within the segment arc width.
+3. Create a Texture from each canvas and apply it as the map on a PlaneGeometry positioned on the wheel's top face at the midpoint angle of each segment.
+4. Rotate each label plane to align with its segment's angular center and tilt it flat against the wheel surface.
+5. Set the label material to MeshBasicMaterial with transparent: true so only the text is visible.
+
+
+== POINTER / FLAPPER MESH ==
+
+Create a pointer mesh positioned at the top edge of the wheel (y-axis above wheel center, at the 12-o'clock position). Use a ConeGeometry pointing downward toward the wheel rim, or load from the pointer_model asset slot if available.
+
+Apply MeshStandardMaterial with a contrasting metallic appearance (metalness: 0.8, roughness: 0.2, color: #ff2244).
+
+Add a subtle oscillation animation to the pointer using gsap.to on rotation.z to create a spring-back "flapper" effect when segments pass underneath. Trigger this flapper animation each time a segment boundary crosses the pointer position during the spin.
+
+
+== PHYSICS-BASED SPIN ANIMATION ==
+
+Implement the spin in game-logic.js using GSAP for the core rotation tween.
+
+Read spin_duration_ms and min_rotations from window.GAME_CONFIG. Default min_rotations to 3 if not specified.
+
+Calculate the target rotation angle:
+1. Decode the sealed outcome from window.GAME_CONFIG.sealed_outcome_token to determine the target segment index.
+2. Compute the angular position of the target segment center based on segment weights.
+3. Add (min_rotations * 2 * Math.PI) to ensure the minimum full rotations.
+4. Add additional random offset within the target segment arc so the landing position looks natural.
+
+Execute the spin using gsap.to on the wheel Group's rotation.y property:
+- duration: spin_duration_ms / 1000
+- ease: "power3.out" for physics-like deceleration (fast start, gradual slowdown)
+- onUpdate callback: track angular velocity by computing delta rotation per frame, use this for tick audio triggering and pointer flapper animation
+
+Maintain angular velocity state for audio/visual effects that depend on current spin speed.
+
+
+== SPATIAL TICK AUDIO ==
+
+Attach an AudioListener to the camera in scene-setup.js. Create a PositionalAudio source on the pointer mesh for the tick sound.
+
+During the spin onUpdate callback, calculate how many segment boundaries the wheel has crossed since the last frame by comparing previous angle to current angle (accounting for total weight distribution of segments). Each time a new segment boundary is crossed, trigger the tick_sound PositionalAudio with playbackRate scaled by current angular velocity (faster spin = higher pitch, clamp between 0.8 and 2.0).
+
+Set PositionalAudio parameters: refDistance 2, rolloffFactor 1, maxDistance 20.
+
+
+== WIN ANIMATION ==
+
+When the wheel stops on a winning segment, execute a GSAP timeline sequence in animation.js:
+
+1. Confetti particle system: Create a Points mesh with BufferGeometry containing 200+ particles (increase to 300 on desktop, reduce to 100 on mobile). Set initial positions clustered above the winning segment. Assign random velocities (spread x: -3 to 3, y: 5 to 15, z: -3 to 3). Apply gravity in the animation tick (velocity.y -= 9.8 * deltaTime). Use PointsMaterial with vertexColors, size 0.15, transparent true, opacity fading from 1.0 to 0.0 over 3 seconds. Randomize particle colors from a celebratory palette (gold, white, the winning segment color).
+
+2. Bloom activation on winning segment: Increase the winning segment's material emissiveIntensity from 0.0 to 2.0 using gsap.to over 0.5 seconds, then pulse between 1.5 and 2.0 with yoyo repeat. This makes the UnrealBloomPass highlight the winning segment.
+
+3. Camera zoom: Use gsap.timeline to animate the camera position from its current location to a closer position focused on the winning segment. Compute the target camera position by offsetting 2 units from the winning segment's world position along the camera's forward vector. Simultaneously animate the camera lookAt target to the winning segment center. Duration: 1.5 seconds, ease: "power2.inOut".
+
+4. Play win_sound via PositionalAudio attached to the winning segment position.
+
+
+== LOSE ANIMATION ==
+
+When the wheel stops on a non-winning segment, execute a GSAP timeline:
+
+1. Depth of field activation: If the EffectComposer has a BokehPass, animate its uniforms to activate DOF blur. Tween focus to the wheel distance, aperture from 0.0 to 0.025, and maxblur from 0.0 to 0.01 over 1 second.
+
+2. Ambient light reduction: Tween the ambient light intensity from its current value down to 0.1 over 1 second using gsap.to. This creates a dimming, muted atmosphere.
+
+3. Muted color grading: Reduce the renderer toneMappingExposure from 1.0 to 0.6 over 1 second to visually desaturate and darken the scene.
+
+4. Play lose_sound via PositionalAudio.
+
+
+== RESPIN LOGIC ==
+
+If window.GAME_CONFIG.respin_enabled is true and the outcome is a loss:
+
+After the lose animation completes (1.5 second delay), show a respin prompt by dispatching a "respinAvailable" CustomEvent on the window. The interaction module listens for a respin trigger (a second tap on the wheel or spin button).
+
+On respin, reset the wheel rotation to its current position, re-read a new sealed_outcome_token if provided via a "respinOutcome" CustomEvent, and execute a new spin animation to the new target. Only one respin is allowed per game session; track this with a hasRespun boolean flag.
+
+
+== GAME COMPLETE EVENT ==
+
+After the win or lose animation finishes (and after respin if applicable), dispatch a "gameComplete" CustomEvent on the window with detail containing:
+- outcome: "win" or "lose"
+- score: 0 (spin wheel does not use scoring)
+- duration_ms: total elapsed time from spin initiation to animation completion
+- interactions: number of spins performed (1 or 2 if respin occurred)
+- landed_segment_index: the index of the segment the wheel landed on
+- template_id: "spin_wheel"
+
+The event must bubble and must not be cancelable.
+
+
+== RESPONSIVE CAMERA ==
+
+In scene-setup.js, implement responsive camera adjustment in the resize handler:
+
+For portrait orientation (window.innerHeight > window.innerWidth): increase camera FOV to 60 and move camera position to [0, 4, 8] to fit the full wheel in the narrower viewport.
+
+For landscape orientation: use the default FOV 50 and position [0, 3, 6] from the scene config.
+
+Apply smooth camera transition on orientation change using gsap.to on camera.position and camera.fov with 0.5 second duration.
+
+
+== TOUCH INTERACTION ==
+
+In interaction.js, bind pointer events to support both tap-to-spin and button-to-spin:
+
+1. Register the wheel Group and an optional HTML spin button as interactive targets.
+2. On pointerdown on the wheel mesh (detected via Raycaster intersection), initiate the spin if the game state allows it.
+3. Prevent double-spin by checking a spinning boolean flag. Disable interaction immediately when spin starts, re-enable only after game complete or respin availability.
+4. On mobile, prevent default on touch events to stop browser scroll and pull-to-refresh.
+5. Show a visual "Tap to Spin" prompt until the first user gesture to ensure AudioContext is started (browser autoplay policy compliance).
+
+
+== ENVIRONMENT AND LIGHTING DETAILS ==
+
+If the environment_map asset slot has a mapping, load it via PMREMGenerator and apply as scene.environment for PBR reflections on the wheel rim and pointer.
+
+Set up the directional light at position [5, 10, 5] with castShadow true, shadow.mapSize 1024x1024, shadow.camera bounds covering the wheel radius. The wheel mesh must have receiveShadow true and castShadow true.
+
+Add a subtle SpotLight from above (position [0, 8, 0], angle Math.PI/6, penumbra 0.3, intensity 0.5) pointing at the wheel center to create a dramatic stage-lit effect.
+
+
+== BACKGROUND MUSIC ==
+
+If the background_music asset slot is mapped, create a non-positional Audio object attached to the AudioListener. Set loop to true, volume to 0.3. Start playback only after the first user gesture. Pause on document visibilitychange when hidden, resume when visible.

@@ -1,0 +1,146 @@
+template_id: spin_wheel
+version: "1.0.0"
+title: "Spin Wheel"
+description: "3D spin wheel game with physics-based deceleration, PBR materials, cinematic camera, and server-side outcome determination"
+
+config_schema:
+  type: object
+  required:
+    - segments
+    - spin_duration_ms
+  properties:
+    segments:
+      type: array
+      minItems: 4
+      maxItems: 12
+      items:
+        type: object
+        required:
+          - label
+          - color
+          - weight
+        properties:
+          label:
+            type: string
+          color:
+            type: string
+            pattern: "^#[0-9a-fA-F]{6}$"
+          weight:
+            type: number
+            minimum: 0
+            maximum: 1
+    spin_duration_ms:
+      type: integer
+      minimum: 2000
+      maximum: 10000
+    min_rotations:
+      type: integer
+      minimum: 3
+      maximum: 10
+    respin_enabled:
+      type: boolean
+    prize_tiers:
+      type: array
+      items:
+        type: object
+        required:
+          - tier_id
+          - segment_indices
+        properties:
+          tier_id:
+            type: string
+          segment_indices:
+            type: array
+            items:
+              type: integer
+
+asset_slots:
+  - slot_id: wheel_model
+    type: model_3d
+    required: true
+    formats:
+      - glb
+    description: "3D wheel geometry model"
+
+  - slot_id: wheel_texture
+    type: texture
+    required: false
+    formats:
+      - png
+      - jpg
+      - ktx2
+    description: "Optional texture overlay for the wheel surface"
+
+  - slot_id: pointer_model
+    type: model_3d
+    required: false
+    formats:
+      - glb
+    description: "Optional custom pointer/flapper mesh"
+
+  - slot_id: win_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played on winning outcome"
+
+  - slot_id: lose_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Sound effect played on losing outcome"
+
+  - slot_id: tick_sound
+    type: audio
+    required: true
+    formats:
+      - mp3
+      - ogg
+    description: "Tick sound triggered as each segment passes the pointer"
+
+  - slot_id: background_music
+    type: audio
+    required: false
+    formats:
+      - mp3
+      - ogg
+    description: "Optional looping background music track"
+
+  - slot_id: environment_map
+    type: environment_map
+    required: false
+    formats:
+      - hdr
+      - exr
+    description: "Optional HDR environment map for reflections and IBL"
+
+scene_config:
+  camera:
+    type: perspective
+    fov: 50
+    position: [0, 3, 6]
+    look_at: [0, 0, 0]
+  lighting:
+    ambient:
+      color: "#ffffff"
+      intensity: 0.3
+    directional:
+      - color: "#ffffff"
+        intensity: 1.0
+        position: [5, 10, 5]
+        cast_shadow: true
+  post_processing:
+    bloom:
+      enabled: true
+      strength: 0.6
+      threshold: 0.8
+    dof:
+      enabled: false
+    fxaa:
+      enabled: true
+
+entry_point: index.html

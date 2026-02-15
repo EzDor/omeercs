@@ -1,0 +1,166 @@
+You are generating Three.js r170+ code for a 3D scratch card game. The player scratches a metallic overlay to reveal a prize underneath. When the scratched percentage exceeds the configured threshold, the full reveal animation triggers automatically.
+
+Read all game configuration from window.GAME_CONFIG. The sealed prize outcome is in window.GAME_CONFIG.sealed_outcome_token. Asset mappings are in window.GAME_CONFIG.asset_mappings. Scratch threshold, brush size, reveal animation duration, and prize display settings are in window.GAME_CONFIG.settings.
+
+
+== CARD MESH CONSTRUCTION ==
+
+Create a 3D card using PlaneGeometry (aspect ratio approximately 1.6:1, e.g., 3.2 x 2.0) or BoxGeometry with minimal depth (0.02) for a card-like appearance. The card has two visual layers:
+
+Top layer (scratch layer): A MeshStandardMaterial with metalness 0.8, roughness 0.2, and the scratch_texture asset slot applied as the map. This material uses a custom onBeforeCompile hook or a ShaderMaterial that blends the scratch texture with an alpha mask from a WebGLRenderTarget. Where the mask is transparent, the scratch layer is invisible, revealing the layer beneath.
+
+Bottom layer (reveal layer): A separate PlaneGeometry mesh positioned at z = -0.001 behind the scratch layer, using MeshStandardMaterial with the reveal_texture asset slot as its map. This layer displays the prize content.
+
+If a card_model asset is provided, load it via GLTFLoader and use it instead of the procedural PlaneGeometry, but still apply the same two-layer material system to its primary mesh.
+
+
+== SCRATCH SHADER AND RENDER TARGET ==
+
+Create a WebGLRenderTarget at 512x512 resolution to serve as the scratch mask (u_mask). Initialize it to fully opaque (white), meaning the scratch layer is fully visible at start.
+
+Implement scratch erasure using a custom ShaderMaterial on the scratch layer. The fragment shader declares these uniforms:
+
+- u_mask (sampler2D): the render-to-texture alpha mask
+- u_brush_pos (vec2): current brush position in UV space, updated on each pointer interaction
+- u_brush_size (float): erasure radius in UV space, derived from brush_size config value (divide by the render target resolution)
+- u_scratch_map (sampler2D): the scratch texture from the asset slot
+
+The fragment shader samples u_mask at the current UV coordinate. Where the mask alpha is below a threshold (0.1), discard the fragment or set alpha to 0.0 to reveal the layer underneath. Otherwise, render the scratch texture with the metallic PBR properties.
+
+To update the mask, render a small quad (or use a separate scratch-update shader pass) into the WebGLRenderTarget each frame when the pointer is active. The update shader writes a transparent circle at u_brush_pos with radius u_brush_size, using a smoothstep falloff for soft brush edges. Use blending (gl.ONE, gl.ONE_MINUS_SRC_ALPHA) so that scratched areas accumulate and never re-appear.
+
+
+== RAYCASTER TOUCH-TO-UV MAPPING ==
+
+Create a Raycaster instance and a Vector2 for pointer coordinates. On pointerdown and pointermove events, normalize the pointer position to NDC (-1 to +1), update the raycaster from the camera, and intersect against the scratch layer mesh.
+
+When an intersection is found, read the uv property from the intersection result. This UV coordinate maps directly to the scratch mask texture space. Pass it to the shader as u_brush_pos.
+
+Track consecutive UV positions between frames. When the pointer moves, interpolate between the previous and current UV positions at intervals no larger than half the brush radius. This prevents gaps in the scratch path when the pointer moves quickly.
+
+On pointerup, stop the scratch update loop and the scratch sound.
+
+
+== SCRATCH PERCENTAGE CALCULATION ==
+
+Every 10 frames during active scratching, read back the scratch mask render target pixels using renderer.readRenderTargetPixels into a Uint8Array. Count pixels where the alpha channel is below 128 (scratched) versus total pixels. Compute percent_scratched = (scratched_count / total_pixel_count) * 100.
+
+Clamp percent_scratched between 0 and 100. Store it on the game state for the gameComplete event payload.
+
+Do not read pixels every frame. Use a frame counter that resets every 10 frames to throttle the readback for performance.
+
+
+== AUTO-REVEAL TRIGGER ==
+
+When percent_scratched exceeds the scratch_threshold_percent value from window.GAME_CONFIG.settings, trigger the reveal sequence:
+
+1. Disable further pointer interaction by removing pointer event listeners from the canvas.
+2. Stop the scratch sound if playing.
+3. Play the reveal_sound asset.
+4. Execute the reveal animation (described below).
+
+
+== SCRATCH DEBRIS PARTICLES ==
+
+Create a particle system using Points with a PointsMaterial (size 0.03, vertexColors true, transparent true, sizeAttenuation true). Allocate a BufferGeometry with position, velocity, color, and alpha attributes for up to 200 particles (100 on mobile).
+
+When the user scratches, emit 3-5 particles per frame from the current scratch position in 3D space (use the raycaster intersection point). Each particle gets:
+
+- Initial position: the 3D intersection point on the card surface
+- Initial velocity: random spread in x and z (range -0.5 to 0.5), upward y velocity (range 0.2 to 0.8)
+- Color: metallic silver (#C0C0C0) with slight random variation
+- Alpha: 1.0, fading to 0.0 over the particle lifetime (1.5 seconds)
+
+In the animation loop, update each active particle:
+- velocity.y -= 9.8 * deltaTime (gravity)
+- position += velocity * deltaTime
+- alpha -= deltaTime / 1.5
+
+When alpha reaches 0, mark the particle slot as available for reuse.
+
+
+== REVEAL ANIMATION ==
+
+Build a GSAP timeline for the reveal sequence with duration from reveal_animation_duration_ms config (default 3000ms):
+
+Phase 1 (0% to 30% of duration): Camera smooth zoom from current position to [0, 0, 2] using gsap.to on camera.position, with ease "power2.inOut". Simultaneously ramp the first directional light intensity from 0.8 to 1.5 and the second directional light from 0.6 to 1.2.
+
+Phase 2 (20% to 70% of duration): Dissolve the scratch layer by animating the scratch ShaderMaterial uniform u_dissolve from 0.0 to 1.0. In the fragment shader, when u_dissolve plus a noise pattern value exceeds 1.0, discard the fragment. This creates an organic dissolve effect. Simultaneously increase bloom strength from 0.4 to 1.2 via the UnrealBloomPass strength property.
+
+Phase 3 (60% to 100% of duration): If prize_display.text is configured, animate a 3D text mesh or canvas-to-texture plane fading in at the card center with scale animation from 0.5 to 1.0 using gsap.from with ease "elastic.out(1, 0.5)".
+
+On timeline complete, trigger the win celebration.
+
+
+== WIN CELEBRATION ==
+
+Create a confetti particle system separate from the scratch debris. Use Points with a PointsMaterial (size 0.05, vertexColors true). Allocate 300 particles (150 on mobile) with random positions above the card, random velocities spreading outward and downward, and random colors from a festive palette (gold #FFD700, red #FF4444, blue #4444FF, green #44FF44, white #FFFFFF).
+
+Apply an emissive pulse on the reveal layer material: animate emissiveIntensity from 0 to 0.8 and back to 0.3 using gsap.to with yoyo true and repeat 2.
+
+Play the win_sound asset if available.
+
+After 3 seconds, dispatch the gameComplete event.
+
+
+== AUDIO MANAGEMENT ==
+
+Create an AudioListener and attach it to the camera. Load all audio assets via AudioLoader.
+
+Scratch sound: Create a non-positional Audio object. On pointerdown when intersection is detected, call play() with loop = true. On pointerup or when auto-reveal triggers, call stop(). This creates a continuous scratch sound during active scratching.
+
+Reveal sound: Play once when the auto-reveal triggers.
+
+Win sound: Play once at the start of the win celebration.
+
+Background music: If the background_music asset is provided, create a non-positional Audio with loop = true and volume from window.GAME_CONFIG.audio.bgm.volume (default 0.3). Start on first user gesture.
+
+Pause all audio on document visibilitychange when hidden, resume when visible.
+
+
+== GAME COMPLETE EVENT ==
+
+Dispatch a "gameComplete" CustomEvent on the window object with detail containing:
+
+- outcome: "win" (scratch cards always reveal the sealed outcome)
+- score: 0 (scratch cards do not have a score mechanic)
+- duration_ms: elapsed time from first scratch to reveal completion
+- interactions: total number of pointer events processed during scratching
+- percent_scratched: the final scratch percentage at the time of auto-reveal
+- sealed_outcome_token: pass through from window.GAME_CONFIG.sealed_outcome_token
+
+The event must bubble and not be cancelable.
+
+
+== 60FPS TOUCH TRACKING ==
+
+Use requestAnimationFrame for the main render loop. Track a running flag that is checked each frame.
+
+Pointer events update a shared state object (isScratching, currentUV, previousUV) but do not directly trigger shader updates or particle emission. The animation loop reads this state each frame and performs the scratch mask update, particle emission, and percentage calculation only when isScratching is true.
+
+This decouples the high-frequency pointer events from the render loop, ensuring consistent 60fps without being bottlenecked by pointer event frequency.
+
+On mobile (detected by touch capability and viewport width below 768px), reduce the scratch mask render target to 256x256, particle counts to 50%, and cap pixel ratio at 1.5.
+
+
+== OUTPUT FILES ==
+
+Generate six JavaScript ES module files with these exact headers:
+
+// FILE: scene-setup.js
+Creates and returns Scene, PerspectiveCamera, WebGLRenderer, EffectComposer with UnrealBloomPass and FXAA. Sets up the two directional lights and ambient light from the manifest scene_config. Handles resize and WebGL context loss recovery.
+
+// FILE: game-logic.js
+Manages game state machine (IDLE, SCRATCHING, REVEALING, CELEBRATING, COMPLETE). Tracks percent_scratched, interaction count, elapsed time. Exposes initGame, updateGame, checkRevealCondition, getGameState, triggerReveal. Dispatches gameComplete event.
+
+// FILE: asset-loader.js
+Loads all assets from window.GAME_CONFIG.asset_mappings using GLTFLoader, TextureLoader, AudioLoader. Returns a Map keyed by slot_id. Implements retry logic with 2-second delay. Reports progress via LoadingManager.
+
+// FILE: interaction.js
+Implements the Raycaster-based pointer interaction system. Normalizes pointer coordinates, performs UV hit detection on the scratch layer, tracks UV path interpolation, manages isScratching state. Provides enable, disable, dispose methods.
+
+// FILE: animation.js
+Contains GSAP timeline builders for the reveal sequence and win celebration. Manages scratch debris particles and confetti particles. Exports createRevealTimeline, createCelebrationTimeline, updateParticles, tick functions.
+
+// FILE: main.js
+Entry point. Reads window.GAME_CONFIG, orchestrates startup (load assets, build scene, create card mesh, set up scratch shader and render target, bind interactions, start loop). Dispatches gameReady event. Exports destroy function for teardown.
