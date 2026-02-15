@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { RunEngineModule } from './run-engine/run-engine.module';
 import { AssetsModule } from './assets/assets.module';
 import { MediaModule } from './media/media.module';
+import { CampaignModule } from './campaign/campaign.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UnhandledExceptionFilter } from '@agentic-template/common/src/filters/unhandled-exception.filter';
@@ -32,6 +33,7 @@ import { GlobalHttpExceptionFilter } from '@agentic-template/common/src/filters/
     RunEngineModule,
     AssetsModule,
     MediaModule,
+    CampaignModule,
   ],
   controllers: [AppController],
   providers: [

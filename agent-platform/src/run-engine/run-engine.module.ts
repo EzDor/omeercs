@@ -22,6 +22,7 @@ import { LangGraphRunProcessor } from './processors/langgraph-run.processor';
 import { SkillsModule } from '../skills/skills.module';
 import { WorkflowOrchestrationModule } from '../workflow-orchestration/workflow-orchestration.module';
 import { PromptRegistryModule } from '../prompt-registry/prompt-registry.module';
+import { CampaignModule } from '../campaign/campaign.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { PromptRegistryModule } from '../prompt-registry/prompt-registry.module'
     SkillsModule,
     WorkflowOrchestrationModule,
     PromptRegistryModule,
+    CampaignModule,
   ],
   providers: [
     InputHasherService,

@@ -8,6 +8,7 @@ import { WorkflowRegistryService } from '../services/workflow-registry.service';
 import { LangGraphWorkflowBuilderService } from '../services/langgraph-workflow-builder.service';
 import { WorkflowEngineService } from '../../workflow-orchestration/services/workflow-engine.service';
 import { RunStateType } from '../interfaces/langgraph-run-state.interface';
+import { CampaignStatusService } from '../../campaign/campaign-status.service';
 
 @Processor(QueueNames.RUN_ORCHESTRATION, { concurrency: 1 })
 export class LangGraphRunProcessor extends WorkerHost {
@@ -19,6 +20,7 @@ export class LangGraphRunProcessor extends WorkerHost {
     private readonly langGraphBuilder: LangGraphWorkflowBuilderService,
     private readonly workflowEngineService: WorkflowEngineService,
     private readonly tenantClsService: TenantClsService,
+    private readonly campaignStatusService: CampaignStatusService,
   ) {
     super();
   }
@@ -29,8 +31,10 @@ export class LangGraphRunProcessor extends WorkerHost {
     this.logger.log(`[LangGraphRun] Starting run: runId=${runId}, tenantId=${tenantId}`);
 
     await this.tenantClsService.runWithTenant(tenantId, undefined, async () => {
+      let campaignIdFromRun: string | undefined;
       try {
         const run = await this.runEngineService.getRun(runId);
+        campaignIdFromRun = run?.context?.campaignId;
         if (!run) {
           throw new Error(`Run ${runId} not found`);
         }
@@ -76,9 +80,12 @@ export class LangGraphRunProcessor extends WorkerHost {
             failedStepId: failedStep?.stepId,
           });
           this.logger.error(`[LangGraphRun] Run failed: runId=${runId}, failedStep=${failedStep?.stepId || 'none'}`);
+          await this.updateCampaignStatus(campaignIdFromRun, 'failed', undefined, runId);
         } else {
           await this.runEngineService.updateRunStatus(runId, 'completed');
           this.logger.log(`[LangGraphRun] Run completed: runId=${runId}`);
+          const bundleUrl = this.extractBundleUrl(finalState);
+          await this.updateCampaignStatus(campaignIdFromRun, 'live', bundleUrl, runId);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -87,8 +94,29 @@ export class LangGraphRunProcessor extends WorkerHost {
           code: 'ORCHESTRATION_ERROR',
           message,
         });
+        await this.updateCampaignStatus(campaignIdFromRun, 'failed', undefined, runId);
         throw error;
       }
     });
+  }
+
+  private async updateCampaignStatus(campaignId: string | undefined, status: 'live' | 'failed', bundleUrl: string | undefined, runId: string): Promise<void> {
+    if (!campaignId) return;
+    try {
+      await this.campaignStatusService.updateStatusFromRun(campaignId, { status, bundleUrl, latestRunId: runId });
+    } catch (error) {
+      this.logger.error(`[LangGraphRun] Failed to update campaign ${campaignId} status: ${(error as Error).message}`);
+    }
+  }
+
+  private extractBundleUrl(state: RunStateType): string | undefined {
+    const stepResults = state.stepResults;
+    if (!stepResults) return undefined;
+    for (const [, result] of stepResults) {
+      if (result.data?.bundleUrl) {
+        return result.data.bundleUrl as string;
+      }
+    }
+    return undefined;
   }
 }

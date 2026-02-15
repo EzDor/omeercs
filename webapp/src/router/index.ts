@@ -34,6 +34,11 @@ const router = createRouter({
           name: 'game-creation',
           component: () => import('@/pages/GameCreationPage.vue'),
         },
+        {
+          path: '/campaigns',
+          name: 'campaigns',
+          component: () => import('@/pages/CampaignsPage.vue'),
+        },
       ],
     },
     {

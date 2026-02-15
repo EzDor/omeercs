@@ -31,6 +31,11 @@ const model = computed<MenuItem[]>(() => [
         icon: 'pi pi-fw pi-play',
         to: '/game-creation',
       },
+      {
+        label: t('menu.campaigns'),
+        icon: 'pi pi-fw pi-megaphone',
+        to: '/campaigns',
+      },
     ],
   },
 ]);
