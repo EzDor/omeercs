@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Request, HttpCode, HttpStatus, Logger, ParseUUIDPipe } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CampaignApiService } from './campaign-api.service';
 import { CreateCampaignRequest, UpdateCampaignRequest, BulkCampaignRequest, CampaignRunsQuery } from '@agentic-template/dto/src/campaign/campaign.dto';
 import { CampaignListQuery } from '@agentic-template/dto/src/campaign/campaign-list-query.dto';
@@ -40,10 +41,11 @@ export class CampaignController {
 
   @Delete(':campaignId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('campaignId', ParseUUIDPipe) id: string, @Request() req: AuthRequestDto) {
+  async remove(@Param('campaignId', ParseUUIDPipe) id: string, @Query('expectedVersion') expectedVersion: string | undefined, @Request() req: AuthRequestDto) {
     const { tenantId } = req.auth!;
     this.logger.log(`DELETE /campaigns/${id} - tenant: ${tenantId}`);
-    await this.campaignService.softDelete(tenantId, id);
+    const version = expectedVersion !== undefined ? parseInt(expectedVersion, 10) : undefined;
+    await this.campaignService.softDelete(tenantId, id, Number.isNaN(version) ? undefined : version);
   }
 
   @Post(':campaignId/duplicate')
@@ -77,6 +79,7 @@ export class CampaignController {
   }
 
   @Post('bulk-archive')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async bulkArchive(@Body() dto: BulkCampaignRequest, @Request() req: AuthRequestDto) {
     const { tenantId } = req.auth!;
     this.logger.log(`POST /campaigns/bulk-archive - tenant: ${tenantId}, count: ${dto.campaignIds.length}`);
@@ -84,6 +87,7 @@ export class CampaignController {
   }
 
   @Post('bulk-delete')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async bulkDelete(@Body() dto: BulkCampaignRequest, @Request() req: AuthRequestDto) {
     const { tenantId } = req.auth!;
     this.logger.log(`POST /campaigns/bulk-delete - tenant: ${tenantId}, count: ${dto.campaignIds.length}`);

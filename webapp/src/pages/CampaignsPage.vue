@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useCampaignStore } from '@/stores/campaign.store';
 
+const { t } = useI18n();
 const store = useCampaignStore();
+
+const PAGE_SIZE = 20;
 
 const showCreateDialog = ref(false);
 const newCampaignName = ref('');
@@ -10,75 +14,129 @@ const newCampaignTemplate = ref('spin-wheel');
 const statusFilter = ref('');
 const errorMessage = ref('');
 const successMessage = ref('');
+const currentPage = ref(0);
+const operationInProgress = ref<{ id: string; action: string } | null>(null);
 
 const templates = ['spin-wheel', 'scratch-card', 'quiz', 'memory-match'];
 
+const totalPages = computed(() => Math.max(1, Math.ceil(store.total / PAGE_SIZE)));
+const hasPreviousPage = computed(() => currentPage.value > 0);
+const hasNextPage = computed(() => currentPage.value < totalPages.value - 1);
+
+function isOperationActive(campaignId: string): boolean {
+  return operationInProgress.value?.id === campaignId;
+}
+
+function getOperationAction(campaignId: string): string | null {
+  if (operationInProgress.value?.id === campaignId) return operationInProgress.value.action;
+  return null;
+}
+
+async function fetchCurrentPage(): Promise<void> {
+  const query: { status?: string; limit: number; offset: number } = {
+    limit: PAGE_SIZE,
+    offset: currentPage.value * PAGE_SIZE,
+  };
+  if (statusFilter.value) query.status = statusFilter.value;
+  await store.fetchCampaigns(query);
+}
+
 onMounted(async () => {
-  await store.fetchCampaigns();
+  await fetchCurrentPage();
 });
 
 async function handleCreate(): Promise<void> {
   if (!newCampaignName.value.trim()) {
-    errorMessage.value = 'Please enter a campaign name';
+    errorMessage.value = t('campaigns.validationNameRequired');
     return;
   }
   try {
     await store.createCampaign({ name: newCampaignName.value, templateId: newCampaignTemplate.value });
     showCreateDialog.value = false;
     newCampaignName.value = '';
-    showSuccess('Campaign created');
+    showSuccess(t('campaigns.successCreated'));
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to create campaign';
+    errorMessage.value = err instanceof Error ? err.message : t('campaigns.errorCreate');
   }
 }
 
 async function handleGenerate(id: string): Promise<void> {
+  operationInProgress.value = { id, action: 'generate' };
   try {
     await store.generateCampaign(id);
-    showSuccess('Generation triggered');
+    showSuccess(t('campaigns.successGenerated'));
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to generate';
+    errorMessage.value = err instanceof Error ? err.message : t('campaigns.errorGenerate');
+  } finally {
+    operationInProgress.value = null;
   }
 }
 
 async function handleDuplicate(id: string): Promise<void> {
+  operationInProgress.value = { id, action: 'duplicate' };
   try {
     await store.duplicateCampaign(id);
-    showSuccess('Campaign duplicated');
+    showSuccess(t('campaigns.successDuplicated'));
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to duplicate';
+    errorMessage.value = err instanceof Error ? err.message : t('campaigns.errorDuplicate');
+  } finally {
+    operationInProgress.value = null;
   }
 }
 
 async function handleArchive(id: string): Promise<void> {
+  if (!window.confirm(t('campaigns.confirmArchive'))) return;
+  operationInProgress.value = { id, action: 'archive' };
   try {
     await store.archiveCampaign(id);
-    showSuccess('Campaign archived');
+    showSuccess(t('campaigns.successArchived'));
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to archive';
+    errorMessage.value = err instanceof Error ? err.message : t('campaigns.errorArchive');
+  } finally {
+    operationInProgress.value = null;
   }
 }
 
 async function handleRestore(id: string): Promise<void> {
+  operationInProgress.value = { id, action: 'restore' };
   try {
     await store.restoreCampaign(id);
-    showSuccess('Campaign restored');
+    showSuccess(t('campaigns.successRestored'));
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to restore';
+    errorMessage.value = err instanceof Error ? err.message : t('campaigns.errorRestore');
+  } finally {
+    operationInProgress.value = null;
   }
 }
 
-async function handleDelete(id: string): Promise<void> {
+async function handleDelete(campaign: { id: string; version: number }): Promise<void> {
+  if (!window.confirm(t('campaigns.confirmDelete'))) return;
+  operationInProgress.value = { id: campaign.id, action: 'delete' };
   try {
-    await store.deleteCampaign(id);
-    showSuccess('Campaign deleted');
+    await store.deleteCampaign(campaign.id, campaign.version);
+    showSuccess(t('campaigns.successDeleted'));
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to delete';
+    errorMessage.value = err instanceof Error ? err.message : t('campaigns.errorDelete');
+  } finally {
+    operationInProgress.value = null;
   }
 }
 
 async function handleFilterChange(): Promise<void> {
-  await store.fetchCampaigns(statusFilter.value ? { status: statusFilter.value } : undefined);
+  currentPage.value = 0;
+  await fetchCurrentPage();
+}
+
+async function handlePreviousPage(): Promise<void> {
+  if (!hasPreviousPage.value) return;
+  currentPage.value--;
+  await fetchCurrentPage();
+}
+
+async function handleNextPage(): Promise<void> {
+  if (!hasNextPage.value) return;
+  currentPage.value++;
+  await fetchCurrentPage();
 }
 
 function showSuccess(msg: string): void {
@@ -96,13 +154,25 @@ function formatDate(date: Date | string): string {
 function getStatusClass(status: string): string {
   return `status-${status}`;
 }
+
+const statusLabelMap: Record<string, string> = {
+  draft: 'campaigns.statusDraft',
+  generating: 'campaigns.statusGenerating',
+  live: 'campaigns.statusLive',
+  failed: 'campaigns.statusFailed',
+  archived: 'campaigns.statusArchived',
+};
+
+function getStatusLabel(status: string): string {
+  return t(statusLabelMap[status] || status);
+}
 </script>
 
 <template>
   <div class="campaigns-container">
     <header class="header">
-      <h1>Campaigns</h1>
-      <button class="create-button" @click="showCreateDialog = true">+ New Campaign</button>
+      <h1>{{ t('campaigns.title') }}</h1>
+      <button class="create-button" @click="showCreateDialog = true">{{ t('campaigns.newCampaign') }}</button>
     </header>
 
     <div v-if="successMessage" class="success-message">{{ successMessage }}</div>
@@ -110,63 +180,91 @@ function getStatusClass(status: string): string {
 
     <div class="filter-bar">
       <select v-model="statusFilter" @change="handleFilterChange">
-        <option value="">All statuses</option>
-        <option value="draft">Draft</option>
-        <option value="generating">Generating</option>
-        <option value="live">Live</option>
-        <option value="failed">Failed</option>
-        <option value="archived">Archived</option>
+        <option value="">{{ t('campaigns.allStatuses') }}</option>
+        <option value="draft">{{ t('campaigns.statusDraft') }}</option>
+        <option value="generating">{{ t('campaigns.statusGenerating') }}</option>
+        <option value="live">{{ t('campaigns.statusLive') }}</option>
+        <option value="failed">{{ t('campaigns.statusFailed') }}</option>
+        <option value="archived">{{ t('campaigns.statusArchived') }}</option>
       </select>
-      <span class="total-count">{{ store.total }} campaigns</span>
+      <span class="total-count">{{ t('campaigns.totalCount', { count: store.total }) }}</span>
     </div>
 
-    <div v-if="store.loading" class="loading">Loading...</div>
+    <div v-if="store.loading" class="loading">{{ t('campaigns.loading') }}</div>
 
-    <div v-else-if="store.campaigns.length === 0" class="empty-state">No campaigns yet. Create one to get started.</div>
+    <div v-else-if="store.campaigns.length === 0" class="empty-state">{{ t('campaigns.emptyState') }}</div>
 
     <table v-else class="campaigns-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Template</th>
-          <th>Status</th>
-          <th>Updated</th>
-          <th>Actions</th>
+          <th>{{ t('campaigns.columnName') }}</th>
+          <th>{{ t('campaigns.columnTemplate') }}</th>
+          <th>{{ t('campaigns.columnStatus') }}</th>
+          <th>{{ t('campaigns.columnUpdated') }}</th>
+          <th>{{ t('campaigns.columnActions') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="campaign in store.campaigns" :key="campaign.id">
           <td class="name-cell">{{ campaign.name }}</td>
           <td>{{ campaign.templateId }}</td>
-          <td><span :class="['status-badge', getStatusClass(campaign.status)]">{{ campaign.status }}</span></td>
+          <td>
+            <span :class="['status-badge', getStatusClass(campaign.status)]">{{ getStatusLabel(campaign.status) }}</span>
+          </td>
           <td class="date-cell">{{ formatDate(campaign.updatedAt) }}</td>
           <td class="actions-cell">
-            <button v-if="campaign.status === 'draft' || campaign.status === 'failed'" class="action-btn generate-btn" @click="handleGenerate(campaign.id)">Generate</button>
-            <button class="action-btn duplicate-btn" @click="handleDuplicate(campaign.id)">Duplicate</button>
-            <button v-if="campaign.status === 'live'" class="action-btn archive-btn" @click="handleArchive(campaign.id)">Archive</button>
-            <button v-if="campaign.status === 'archived'" class="action-btn restore-btn" @click="handleRestore(campaign.id)">Restore</button>
-            <button v-if="campaign.status === 'draft' || campaign.status === 'failed' || campaign.status === 'archived'" class="action-btn delete-btn" @click="handleDelete(campaign.id)">Delete</button>
+            <button
+              v-if="campaign.status === 'draft' || campaign.status === 'failed'"
+              class="action-btn generate-btn"
+              :disabled="isOperationActive(campaign.id)"
+              @click="handleGenerate(campaign.id)"
+            >
+              {{ getOperationAction(campaign.id) === 'generate' ? t('campaigns.actionGenerating') : t('campaigns.actionGenerate') }}
+            </button>
+            <button class="action-btn duplicate-btn" :disabled="isOperationActive(campaign.id)" @click="handleDuplicate(campaign.id)">
+              {{ getOperationAction(campaign.id) === 'duplicate' ? t('campaigns.actionDuplicating') : t('campaigns.actionDuplicate') }}
+            </button>
+            <button v-if="campaign.status === 'live'" class="action-btn archive-btn" :disabled="isOperationActive(campaign.id)" @click="handleArchive(campaign.id)">
+              {{ getOperationAction(campaign.id) === 'archive' ? t('campaigns.actionArchiving') : t('campaigns.actionArchive') }}
+            </button>
+            <button v-if="campaign.status === 'archived'" class="action-btn restore-btn" :disabled="isOperationActive(campaign.id)" @click="handleRestore(campaign.id)">
+              {{ getOperationAction(campaign.id) === 'restore' ? t('campaigns.actionRestoring') : t('campaigns.actionRestore') }}
+            </button>
+            <button
+              v-if="campaign.status === 'draft' || campaign.status === 'failed' || campaign.status === 'archived'"
+              class="action-btn delete-btn"
+              :disabled="isOperationActive(campaign.id)"
+              @click="handleDelete(campaign)"
+            >
+              {{ getOperationAction(campaign.id) === 'delete' ? t('campaigns.actionDeleting') : t('campaigns.actionDelete') }}
+            </button>
           </td>
         </tr>
       </tbody>
     </table>
 
+    <div v-if="store.campaigns.length > 0" class="pagination">
+      <button class="pagination-btn" :disabled="!hasPreviousPage" @click="handlePreviousPage">{{ t('campaigns.paginationPrevious') }}</button>
+      <span class="pagination-info">{{ t('campaigns.paginationInfo', { page: currentPage + 1, pages: totalPages }) }}</span>
+      <button class="pagination-btn" :disabled="!hasNextPage" @click="handleNextPage">{{ t('campaigns.paginationNext') }}</button>
+    </div>
+
     <div v-if="showCreateDialog" class="dialog-overlay" @click.self="showCreateDialog = false">
       <div class="dialog">
-        <h2>New Campaign</h2>
+        <h2>{{ t('campaigns.dialogTitle') }}</h2>
         <div class="form-group">
-          <label for="campaign-name">Name:</label>
-          <input id="campaign-name" v-model="newCampaignName" type="text" placeholder="My Campaign" @keyup.enter="handleCreate" />
+          <label for="campaign-name">{{ t('campaigns.labelName') }}</label>
+          <input id="campaign-name" v-model="newCampaignName" type="text" :placeholder="t('campaigns.placeholderName')" @keyup.enter="handleCreate" />
         </div>
         <div class="form-group">
-          <label for="campaign-template">Template:</label>
+          <label for="campaign-template">{{ t('campaigns.labelTemplate') }}</label>
           <select id="campaign-template" v-model="newCampaignTemplate">
-            <option v-for="t in templates" :key="t" :value="t">{{ t }}</option>
+            <option v-for="tmpl in templates" :key="tmpl" :value="tmpl">{{ tmpl }}</option>
           </select>
         </div>
         <div class="dialog-actions">
-          <button class="cancel-btn" @click="showCreateDialog = false">Cancel</button>
-          <button class="create-btn" @click="handleCreate">Create</button>
+          <button class="cancel-btn" @click="showCreateDialog = false">{{ t('common.cancel') }}</button>
+          <button class="create-btn" @click="handleCreate">{{ t('campaigns.newCampaign') }}</button>
         </div>
       </div>
     </div>
@@ -432,5 +530,42 @@ function getStatusClass(status: string): string {
 
 .create-btn:hover {
   background: #45a049;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+  padding: 10px 0;
+}
+
+.pagination-btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  color: #666;
+  font-size: 14px;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

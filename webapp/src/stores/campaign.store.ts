@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { campaignService } from '@/services/campaign.service';
 import type { CampaignResponse } from '@agentic-template/dto/src/campaign/campaign.dto';
+import type { CampaignConfig } from '@agentic-template/dto/src/campaign/campaign-config.interface';
 
 export const useCampaignStore = defineStore('campaign', () => {
   const campaigns = ref<CampaignResponse[]>([]);
@@ -10,7 +11,7 @@ export const useCampaignStore = defineStore('campaign', () => {
   const error = ref<string | null>(null);
   const total = ref(0);
 
-  const fetchCampaigns = async (query?: { status?: string; search?: string }): Promise<void> => {
+  const fetchCampaigns = async (query?: { status?: string; search?: string; limit?: number; offset?: number }): Promise<void> => {
     loading.value = true;
     error.value = null;
     try {
@@ -25,14 +26,14 @@ export const useCampaignStore = defineStore('campaign', () => {
     }
   };
 
-  const createCampaign = async (data: { name: string; templateId: string; config?: any }): Promise<CampaignResponse> => {
+  const createCampaign = async (data: { name: string; templateId: string; config?: CampaignConfig }): Promise<CampaignResponse> => {
     const campaign = await campaignService.create(data);
     campaigns.value.unshift(campaign);
     total.value++;
     return campaign;
   };
 
-  const updateCampaign = async (id: string, data: { name?: string; config?: any; expectedVersion?: number }): Promise<CampaignResponse> => {
+  const updateCampaign = async (id: string, data: { name?: string; config?: Partial<CampaignConfig>; expectedVersion?: number }): Promise<CampaignResponse> => {
     const updated = await campaignService.update(id, data);
     const idx = campaigns.value.findIndex((c) => c.id === id);
     if (idx !== -1) campaigns.value[idx] = updated;
@@ -40,8 +41,8 @@ export const useCampaignStore = defineStore('campaign', () => {
     return updated;
   };
 
-  const deleteCampaign = async (id: string): Promise<void> => {
-    await campaignService.remove(id);
+  const deleteCampaign = async (id: string, expectedVersion?: number): Promise<void> => {
+    await campaignService.remove(id, expectedVersion);
     campaigns.value = campaigns.value.filter((c) => c.id !== id);
     total.value--;
     if (selectedCampaign.value?.id === id) selectedCampaign.value = null;

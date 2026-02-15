@@ -4,9 +4,18 @@ import { Repository } from 'typeorm';
 import { Campaign, CampaignStatusType } from '@agentic-template/dao/src/entities/campaign.entity';
 import { Run } from '@agentic-template/dao/src/entities/run.entity';
 import { RunEngineApiService } from '../run-engine/services/run-engine-api.service';
-import type { CreateCampaignRequest, UpdateCampaignRequest, CampaignResponse, GenerateResponse, BulkOperationResponse, CampaignListResponse } from '@agentic-template/dto/src/campaign/campaign.dto';
+import type {
+  CreateCampaignRequest,
+  UpdateCampaignRequest,
+  CampaignResponse,
+  GenerateResponse,
+  BulkOperationResponse,
+  CampaignListResponse,
+} from '@agentic-template/dto/src/campaign/campaign.dto';
+import type { CampaignConfig } from '@agentic-template/dto/src/campaign/campaign-config.interface';
 import type { CampaignListQuery } from '@agentic-template/dto/src/campaign/campaign-list-query.dto';
 import type { CampaignRunsQuery } from '@agentic-template/dto/src/campaign/campaign.dto';
+import type { RunResponse } from '@agentic-template/dto/src/run-engine/run.dto';
 
 @Injectable()
 export class CampaignApiService {
@@ -79,7 +88,7 @@ export class CampaignApiService {
     }
 
     if (dto.name !== undefined) campaign.name = dto.name;
-    if (dto.config !== undefined) campaign.config = { ...campaign.config, ...dto.config } as any;
+    if (dto.config !== undefined) campaign.config = this.mergeConfig(campaign.config, dto.config);
     campaign.version += 1;
 
     const saved = await this.campaignRepo.save(campaign);
@@ -87,8 +96,12 @@ export class CampaignApiService {
     return this.toResponse(saved);
   }
 
-  async softDelete(tenantId: string, id: string): Promise<void> {
+  async softDelete(tenantId: string, id: string, expectedVersion?: number): Promise<void> {
     const campaign = await this.findCampaignOrFail(tenantId, id);
+
+    if (expectedVersion !== undefined && expectedVersion !== campaign.version) {
+      throw new ConflictException('Campaign was modified by another session. Please reload and try again.');
+    }
 
     if (campaign.status !== 'draft' && campaign.status !== 'failed' && campaign.status !== 'archived') {
       throw new UnprocessableEntityException(`Campaign cannot be deleted in '${campaign.status}' state. Archive it first.`);
@@ -106,7 +119,7 @@ export class CampaignApiService {
       userId,
       name: newName || `${source.name} (Copy)`,
       templateId: source.templateId,
-      config: source.config ? JSON.parse(JSON.stringify(source.config)) : undefined,
+      config: source.config ? structuredClone(source.config) : undefined,
       status: 'draft' as CampaignStatusType,
       version: 1,
     });
@@ -213,13 +226,10 @@ export class CampaignApiService {
     return { deleted, skipped, errors };
   }
 
-  async getCampaignRuns(tenantId: string, campaignId: string, query: CampaignRunsQuery): Promise<{ runs: any[]; total: number; limit: number; offset: number }> {
+  async getCampaignRuns(tenantId: string, campaignId: string, query: CampaignRunsQuery): Promise<{ runs: RunResponse[]; total: number; limit: number; offset: number }> {
     await this.findCampaignOrFail(tenantId, campaignId);
 
-    const qb = this.runRepo
-      .createQueryBuilder('run')
-      .where('run.tenantId = :tenantId', { tenantId })
-      .andWhere("run.context->>'campaignId' = :campaignId", { campaignId });
+    const qb = this.runRepo.createQueryBuilder('run').where('run.tenantId = :tenantId', { tenantId }).andWhere("run.context->>'campaignId' = :campaignId", { campaignId });
 
     if (query.status) {
       qb.andWhere('run.status = :status', { status: query.status });
@@ -232,7 +242,7 @@ export class CampaignApiService {
     qb.take(limit).skip(offset);
 
     const [runs, total] = await qb.getManyAndCount();
-    return { runs, total, limit, offset };
+    return { runs: runs.map((r) => this.toRunResponse(r)), total, limit, offset };
   }
 
   private async findCampaignOrFail(tenantId: string, id: string): Promise<Campaign> {
@@ -241,6 +251,40 @@ export class CampaignApiService {
       throw new NotFoundException(`Campaign ${id} not found`);
     }
     return campaign;
+  }
+
+  private mergeConfig(existing: CampaignConfig | undefined, updates: Partial<CampaignConfig>): CampaignConfig {
+    const base = existing || ({ theme: {}, game: {}, assets: [] } as unknown as CampaignConfig);
+    return {
+      theme: { ...base.theme, ...updates.theme },
+      game: { ...base.game, ...updates.game },
+      assets: updates.assets ?? base.assets ?? [],
+    };
+  }
+
+  private toRunResponse(run: Run): RunResponse {
+    return {
+      id: run.id,
+      workflowName: run.workflowName,
+      workflowVersion: run.workflowVersion,
+      triggerType: run.triggerType,
+      triggerPayload: run.triggerPayload,
+      status: run.status,
+      baseRunId: run.baseRunId,
+      error: run.error
+        ? {
+            code: run.error.code,
+            message: run.error.message,
+            failedStepId: run.error.failedStepId,
+            timestamp: new Date(run.error.timestamp),
+          }
+        : undefined,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      durationMs: run.durationMs,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+    };
   }
 
   private toResponse(campaign: Campaign): CampaignResponse {

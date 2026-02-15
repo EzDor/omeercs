@@ -1,10 +1,13 @@
-import { Controller, Get, Param, Header, Logger, NotFoundException, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, Header, Logger, NotFoundException, ParseUUIDPipe, Res } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Response } from 'express';
 import { Repository } from 'typeorm';
 import { Public } from '@agentic-template/common/src/auth/public.decorator';
 import { Campaign } from '@agentic-template/dao/src/entities/campaign.entity';
 import type { PublicCampaignResponse } from '@agentic-template/dto/src/campaign/campaign.dto';
+import type { ThemeConfig } from '@agentic-template/dto/src/campaign/campaign-config.interface';
 
 @Controller('play')
 @Public()
@@ -12,10 +15,15 @@ import type { PublicCampaignResponse } from '@agentic-template/dto/src/campaign/
 export class PublicPlayerController {
   private readonly logger = new Logger(PublicPlayerController.name);
 
+  private readonly allowedEmbedDomains: string;
+
   constructor(
     @InjectRepository(Campaign)
     private readonly campaignRepo: Repository<Campaign>,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.allowedEmbedDomains = configService.get<string>('ALLOWED_EMBED_DOMAINS', '*');
+  }
 
   @Get(':campaignId')
   @Header('Cache-Control', 'public, max-age=300')
@@ -26,9 +34,12 @@ export class PublicPlayerController {
 
   @Get(':campaignId/embed')
   @Header('Cache-Control', 'public, max-age=300')
-  @Header('X-Frame-Options', 'ALLOWALL')
-  @Header('Content-Security-Policy', 'frame-ancestors *')
-  async getEmbed(@Param('campaignId', ParseUUIDPipe) id: string): Promise<PublicCampaignResponse> {
+  async getEmbed(@Param('campaignId', ParseUUIDPipe) id: string, @Res({ passthrough: true }) res: Response): Promise<PublicCampaignResponse> {
+    const domains = this.allowedEmbedDomains;
+    res.setHeader('Content-Security-Policy', `frame-ancestors ${domains}`);
+    if (domains === '*') {
+      res.setHeader('X-Frame-Options', 'ALLOWALL');
+    }
     const campaign = await this.findLiveCampaign(id);
     return this.toPublicResponse(campaign);
   }
@@ -50,7 +61,7 @@ export class PublicPlayerController {
       templateId: campaign.templateId,
       bundleUrl: campaign.bundleUrl || '',
       config: {
-        theme: campaign.config?.theme || ({} as any),
+        theme: campaign.config?.theme || ({} as ThemeConfig),
         game: campaign.config?.game || {},
       },
     };
