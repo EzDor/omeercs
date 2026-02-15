@@ -16,7 +16,11 @@ const MANIFEST_SCHEMA = {
     version: { type: 'string', pattern: '^\\d+\\.\\d+\\.\\d+$' },
     title: { type: 'string', minLength: 1, maxLength: 100 },
     description: { type: 'string', minLength: 1, maxLength: 500 },
-    config_schema: { type: 'object', required: ['type', 'properties'], properties: { type: { const: 'object' }, required: { type: 'array', items: { type: 'string' } }, properties: { type: 'object' } } },
+    config_schema: {
+      type: 'object',
+      required: ['type', 'properties'],
+      properties: { type: { const: 'object' }, required: { type: 'array', items: { type: 'string' } }, properties: { type: 'object' } },
+    },
     asset_slots: {
       type: 'array',
       minItems: 1,
@@ -140,7 +144,11 @@ export class TemplateManifestLoaderService {
       return [];
     }
 
-    return fs.readdirSync(this.templatesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).filter((entry) => fs.existsSync(path.join(this.templatesDir, entry.name, 'manifest.yaml'))).map((entry) => entry.name);
+    return fs
+      .readdirSync(this.templatesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .filter((entry) => fs.existsSync(path.join(this.templatesDir, entry.name, 'manifest.yaml')))
+      .map((entry) => entry.name);
   }
 
   clearCache(): void {

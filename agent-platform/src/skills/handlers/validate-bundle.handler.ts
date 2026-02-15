@@ -157,20 +157,23 @@ export class ValidateBundleHandler implements SkillHandler<ValidateBundleInput, 
         errors.push(...consoleErrors.slice(0, 5));
       }
 
-      const gameReadyFired = await page.evaluate((timeout: number) => {
-        return new Promise<boolean>((resolve) => {
-          if ((window as any).__gameReady) {
-            resolve(true);
-            return;
-          }
-          const handler = () => {
-            resolve(true);
-            window.removeEventListener('gameReady', handler);
-          };
-          window.addEventListener('gameReady', handler);
-          setTimeout(() => resolve(false), timeout);
-        });
-      }, Math.min(timeoutMs - (Date.now() - startTime), 5000));
+      const gameReadyFired = await page.evaluate(
+        (timeout: number) => {
+          return new Promise<boolean>((resolve) => {
+            if ((window as any).__gameReady) {
+              resolve(true);
+              return;
+            }
+            const handler = () => {
+              resolve(true);
+              window.removeEventListener('gameReady', handler);
+            };
+            window.addEventListener('gameReady', handler);
+            setTimeout(() => resolve(false), timeout);
+          });
+        },
+        Math.min(timeoutMs - (Date.now() - startTime), 5000),
+      );
 
       const readyCheck: ValidationCheck = {
         name: 'game_ready_event',

@@ -164,7 +164,12 @@ export class GenerateThreejsCodeHandler implements SkillHandler<GenerateThreejsC
     }
 
     if (input.sealed_outcome_token) {
-      sections.push('', '## Sealed Outcome', 'The game config will contain a `sealed_outcome_token` field.', 'Use `window.GAME_CONFIG.sealed_outcome_token` to access the pre-determined outcome.');
+      sections.push(
+        '',
+        '## Sealed Outcome',
+        'The game config will contain a `sealed_outcome_token` field.',
+        'Use `window.GAME_CONFIG.sealed_outcome_token` to access the pre-determined outcome.',
+      );
     }
 
     sections.push('', '## Template Scene Config', '```json', JSON.stringify(input.template_manifest.scene_config, null, 2), '```');

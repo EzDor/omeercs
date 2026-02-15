@@ -126,10 +126,7 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       const optimizationsApplied = this.applyOptimizations(input.optimization, timings);
 
       const validateStart = Date.now();
-      const validateResult = await this.validateHandler.execute(
-        { bundle_dir: bundlePath, entry_point: 'index.html' },
-        context,
-      );
+      const validateResult = await this.validateHandler.execute({ bundle_dir: bundlePath, entry_point: 'index.html' }, context);
       timings['validate_bundle'] = Date.now() - validateStart;
 
       let validationOutput: ValidateBundleOutput | undefined;
@@ -253,7 +250,8 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
   private writeThreeJsRuntime(bundlePath: string): void {
     const libDir = path.join(bundlePath, 'lib');
     this.ensureDirectoryExists(libDir);
-    const placeholder = '// Three.js r170+ runtime will be injected at deploy time\n// This placeholder enables the bundle to reference the Three.js import map\nwindow.__THREE_LOADED = true;\n';
+    const placeholder =
+      '// Three.js r170+ runtime will be injected at deploy time\n// This placeholder enables the bundle to reference the Three.js import map\nwindow.__THREE_LOADED = true;\n';
     fs.writeFileSync(path.join(libDir, 'three.min.js'), placeholder);
   }
 
@@ -453,11 +451,21 @@ ${scriptTags}
 
   private categorizeAsset(assetType: string, relativePath: string, assetFiles: { images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] }): void {
     switch (assetType) {
-      case 'image': assetFiles.images.push(relativePath); break;
-      case 'audio': assetFiles.audio.push(relativePath); break;
-      case 'video': assetFiles.video.push(relativePath); break;
-      case 'model': assetFiles.models.push(relativePath); break;
-      case 'json': assetFiles.configs.push(relativePath); break;
+      case 'image':
+        assetFiles.images.push(relativePath);
+        break;
+      case 'audio':
+        assetFiles.audio.push(relativePath);
+        break;
+      case 'video':
+        assetFiles.video.push(relativePath);
+        break;
+      case 'model':
+        assetFiles.models.push(relativePath);
+        break;
+      case 'json':
+        assetFiles.configs.push(relativePath);
+        break;
     }
   }
 
@@ -516,11 +524,25 @@ ${scriptTags}
   private getContentType(filename: string): string {
     const ext = path.extname(filename).toLowerCase();
     const contentTypes: Record<string, string> = {
-      '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript', '.json': 'application/json',
-      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
-      '.svg': 'image/svg+xml', '.webp': 'image/webp', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
-      '.ogg': 'audio/ogg', '.mp4': 'video/mp4', '.webm': 'video/webm', '.glb': 'model/gltf-binary',
-      '.gltf': 'model/gltf+json', '.obj': 'model/obj', '.fbx': 'model/fbx',
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.js': 'application/javascript',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.ogg': 'audio/ogg',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.glb': 'model/gltf-binary',
+      '.gltf': 'model/gltf+json',
+      '.obj': 'model/obj',
+      '.fbx': 'model/fbx',
     };
     return contentTypes[ext] || 'application/octet-stream';
   }
