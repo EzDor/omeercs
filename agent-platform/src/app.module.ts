@@ -14,6 +14,7 @@ import { GlobalHttpExceptionFilter } from '@agentic-template/common/src/filters/
 import { ProvidersModule } from '@agentic-template/common/src/providers/providers.module';
 import { StorageModule } from '@agentic-template/common/src/storage/storage.module';
 import { PollingService } from '@agentic-template/common/src/providers/services/polling.service';
+import { CampaignModule } from './campaign/campaign.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { PollingService } from '@agentic-template/common/src/providers/services/
     StorageModule,
     RunEngineModule,
     PromptRegistryModule,
+    CampaignModule,
   ],
   controllers: [AppController],
   providers: [

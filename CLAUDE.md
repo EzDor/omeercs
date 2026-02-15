@@ -162,6 +162,8 @@ Agentic workflow system for specification-driven development. Contains templates
 - PostgreSQL 17 (pgvector) for entities; local filesystem (`ASSET_STORAGE_DIR`) for binary assets (010-core-media-integration)
 - TypeScript 5.x (strict mode), Node.js 20+ + NestJS 10, Three.js r170+, @anthropic-ai/sdk (Claude Agent SDK), GSAP, Ajv (JSON Schema validation), Puppeteer (headless validation), js-yaml (011-game-templates)
 - PostgreSQL 17 (pgvector) for entities; local filesystem (`ASSET_STORAGE_DIR`) for bundles and assets; existing `StorageService` with content-addressable storage (011-game-templates)
+- TypeScript 5.x (strict mode), Node.js 20+ + NestJS 10, TypeORM, BullMQ, class-validator, @nestjs/throttler (012-campaign-ui)
+- PostgreSQL 17 (pgvector), schema `app`; local filesystem (`ASSET_STORAGE_DIR`) for bundles (012-campaign-ui)
 
 ## Recent Changes
 - 010-core-media-integration: Added TypeScript 5.x (strict mode), Node.js 20+ + NestJS 10, TypeORM, BullMQ, class-validator, axios (HTTP downloads from providers)

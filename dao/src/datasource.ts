@@ -6,6 +6,7 @@ import { Run } from './entities/run.entity';
 import { RunStep } from './entities/run-step.entity';
 import { StepCache } from './entities/step-cache.entity';
 import { GenerationJob } from './entities/generation-job.entity';
+import { Campaign } from './entities/campaign.entity';
 
 function buildDatabaseUrl(): string {
   if (process.env.DATABASE_URL) {
@@ -41,7 +42,7 @@ const AppDataSource = new DataSource({
   type: 'postgres',
   url: buildDatabaseUrl(),
   schema: process.env.APP_SCHEMA || 'app',
-  entities: [ChatSession, ChatMessage, Artifact, Run, RunStep, StepCache, GenerationJob],
+  entities: [ChatSession, ChatMessage, Artifact, Run, RunStep, StepCache, GenerationJob, Campaign],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
   synchronize: false,
