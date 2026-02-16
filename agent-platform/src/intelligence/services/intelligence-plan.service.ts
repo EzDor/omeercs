@@ -1,4 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { LlmGenerationService } from '../../skills/skill-runner/services/llm-generation.service';
 import type { GenerationConfig, GenerationInput } from '../../skills/skill-runner/interfaces/generation-result.interface';
 
@@ -93,8 +94,14 @@ export interface PlanOutput {
 @Injectable()
 export class IntelligencePlanService {
   private readonly logger = new Logger(IntelligencePlanService.name);
+  private readonly llmModel: string;
 
-  constructor(private readonly llmGenerationService: LlmGenerationService) {}
+  constructor(
+    private readonly llmGenerationService: LlmGenerationService,
+    configService: ConfigService,
+  ) {
+    this.llmModel = configService.get<string>('INTELLIGENCE_LLM_MODEL', 'gemini/gemini-2.0-flash');
+  }
 
   async generatePlan(brief: string, constraints?: Record<string, unknown>): Promise<{ plan: PlanOutput; duration_ms: number; model: string; attempts: number }> {
     this.logger.log(`Generating plan for brief (${brief.length} chars)`);
@@ -106,7 +113,7 @@ export class IntelligencePlanService {
         constraints: constraints ? JSON.stringify(constraints) : 'No specific constraints provided.',
       },
       context: {
-        model: 'gemini/gemini-2.0-flash',
+        model: this.llmModel,
       },
     };
 
@@ -122,9 +129,8 @@ export class IntelligencePlanService {
     const result = await this.llmGenerationService.generate<PlanOutput>(input, config);
 
     if (!result.success || !result.data) {
-      const errors = result.validationErrors?.map((e) => e.message).join(', ') || 'Unknown generation error';
-      this.logger.error(`Plan generation failed: ${errors}`);
-      throw new InternalServerErrorException(`Plan generation failed: ${errors}`);
+      this.logger.error(`Plan generation failed: ${result.validationErrors?.map((e) => e.message).join(', ') || 'Unknown error'}`);
+      throw new InternalServerErrorException('Plan generation failed');
     }
 
     const durationMs = Date.now() - startTime;
@@ -133,7 +139,7 @@ export class IntelligencePlanService {
     return {
       plan: result.data,
       duration_ms: durationMs,
-      model: 'gemini/gemini-2.0-flash',
+      model: this.llmModel,
       attempts: result.attempts,
     };
   }

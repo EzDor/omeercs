@@ -1,4 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { LlmGenerationService } from '../../skills/skill-runner/services/llm-generation.service';
 import type { GenerationConfig, GenerationInput } from '../../skills/skill-runner/interfaces/generation-result.interface';
 
@@ -52,8 +53,14 @@ interface CopyOutput {
 @Injectable()
 export class CopyGenerationService {
   private readonly logger = new Logger(CopyGenerationService.name);
+  private readonly llmModel: string;
 
-  constructor(private readonly llmGenerationService: LlmGenerationService) {}
+  constructor(
+    private readonly llmGenerationService: LlmGenerationService,
+    configService: ConfigService,
+  ) {
+    this.llmModel = configService.get<string>('INTELLIGENCE_LLM_MODEL', 'gemini/gemini-2.0-flash');
+  }
 
   async generateCopy(
     campaignContext: Record<string, unknown>,
@@ -74,7 +81,7 @@ export class CopyGenerationService {
         constraints: constraints ? JSON.stringify(constraints) : 'No specific constraints.',
       },
       context: {
-        model: 'gemini/gemini-2.0-flash',
+        model: this.llmModel,
       },
     };
 
@@ -90,9 +97,8 @@ export class CopyGenerationService {
     const result = await this.llmGenerationService.generate<CopyOutput>(input, config);
 
     if (!result.success || !result.data) {
-      const errors = result.validationErrors?.map((e) => e.message).join(', ') || 'Unknown generation error';
-      this.logger.error(`Copy generation failed: ${errors}`);
-      throw new InternalServerErrorException(`Copy generation failed: ${errors}`);
+      this.logger.error(`Copy generation failed: ${result.validationErrors?.map((e) => e.message).join(', ') || 'Unknown error'}`);
+      throw new InternalServerErrorException('Copy generation failed');
     }
 
     const copies = this.validateVariationDistinctness(result.data.copies);
@@ -103,7 +109,7 @@ export class CopyGenerationService {
     return {
       copies,
       duration_ms: durationMs,
-      model: 'gemini/gemini-2.0-flash',
+      model: this.llmModel,
       attempts: result.attempts,
     };
   }

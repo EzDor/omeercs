@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Body, Param, Query, Request, HttpCode, HttpStatus, Logger, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, Request, HttpCode, HttpStatus, Logger, ParseUUIDPipe, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { IntelligenceApiService } from './intelligence-api.service';
 import { GeneratePlanRequest, AcceptPlanRequest } from '@agentic-template/dto/src/intelligence/plan-generation.dto';
@@ -60,10 +61,11 @@ export class IntelligenceController {
 
   @Post('theme/from-image')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async extractThemeFromImage(@Request() req: AuthRequestDto) {
+  @UseInterceptors(FileInterceptor('file'))
+  async extractThemeFromImage(@UploadedFile() file: Express.Multer.File, @Request() req: AuthRequestDto) {
     const { tenantId, userId } = req.auth!;
     this.logger.log(`POST /intelligence/theme/from-image - tenant: ${tenantId}`);
-    return this.intelligenceService.extractThemeFromImage(tenantId, userId, req);
+    return this.intelligenceService.extractThemeFromImage(tenantId, userId, file);
   }
 
   @Post('theme/validate')

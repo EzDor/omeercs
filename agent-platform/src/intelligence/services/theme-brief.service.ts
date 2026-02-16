@@ -1,4 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { LlmGenerationService } from '../../skills/skill-runner/services/llm-generation.service';
 import type { GenerationConfig, GenerationInput } from '../../skills/skill-runner/interfaces/generation-result.interface';
 
@@ -31,8 +32,14 @@ export interface ThemeOutput {
 @Injectable()
 export class ThemeBriefService {
   private readonly logger = new Logger(ThemeBriefService.name);
+  private readonly llmModel: string;
 
-  constructor(private readonly llmGenerationService: LlmGenerationService) {}
+  constructor(
+    private readonly llmGenerationService: LlmGenerationService,
+    configService: ConfigService,
+  ) {
+    this.llmModel = configService.get<string>('INTELLIGENCE_LLM_MODEL', 'gemini/gemini-2.0-flash');
+  }
 
   async extractTheme(brief: string): Promise<{ theme: ThemeOutput; duration_ms: number; model: string; attempts: number }> {
     this.logger.log(`Extracting theme from brief (${brief.length} chars)`);
@@ -41,7 +48,7 @@ export class ThemeBriefService {
     const input: GenerationInput = {
       variables: { brief },
       context: {
-        model: 'gemini/gemini-2.0-flash',
+        model: this.llmModel,
       },
     };
 
@@ -57,9 +64,8 @@ export class ThemeBriefService {
     const result = await this.llmGenerationService.generate<ThemeOutput>(input, config);
 
     if (!result.success || !result.data) {
-      const errors = result.validationErrors?.map((e) => e.message).join(', ') || 'Unknown generation error';
-      this.logger.error(`Theme extraction failed: ${errors}`);
-      throw new InternalServerErrorException(`Theme extraction failed: ${errors}`);
+      this.logger.error(`Theme extraction failed: ${result.validationErrors?.map((e) => e.message).join(', ') || 'Unknown error'}`);
+      throw new InternalServerErrorException('Theme extraction failed');
     }
 
     const durationMs = Date.now() - startTime;
@@ -68,7 +74,7 @@ export class ThemeBriefService {
     return {
       theme: result.data,
       duration_ms: durationMs,
-      model: 'gemini/gemini-2.0-flash',
+      model: this.llmModel,
       attempts: result.attempts,
     };
   }

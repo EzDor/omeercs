@@ -53,9 +53,9 @@ export class IntelligenceApiService {
 
     return {
       generation_id: saved.id,
-      plan: response.plan,
+      plan: response.plan as unknown as GeneratePlanResponse['plan'],
       duration_ms: saved.durationMs!,
-    } as unknown as GeneratePlanResponse;
+    };
   }
 
   async acceptPlan(tenantId: string, userId: string, generationId: string, dto: AcceptPlanRequest): Promise<AcceptPlanResponse> {
@@ -134,9 +134,9 @@ export class IntelligenceApiService {
 
     return {
       generation_id: saved.id,
-      plan: response.plan,
+      plan: response.plan as unknown as GeneratePlanResponse['plan'],
       duration_ms: saved.durationMs!,
-    } as unknown as GeneratePlanResponse;
+    };
   }
 
   async generateCopy(tenantId: string, userId: string, dto: GenerateCopyRequest): Promise<GenerateCopyResponse> {
@@ -260,20 +260,19 @@ export class IntelligenceApiService {
 
     return {
       generation_id: saved.id,
-      theme: enrichedTheme,
+      theme: enrichedTheme as ExtractThemeResponse['theme'],
       duration_ms: saved.durationMs!,
-    } as ExtractThemeResponse;
+    };
   }
 
-  async extractThemeFromImage(tenantId: string, userId: string, req: unknown): Promise<ExtractThemeResponse> {
+  async extractThemeFromImage(tenantId: string, userId: string, file: Express.Multer.File | undefined): Promise<ExtractThemeResponse> {
     const startTime = Date.now();
 
-    const request = req as { file?: { buffer: Buffer; originalname: string; size: number; mimetype: string } };
-    if (!request.file) {
+    if (!file) {
       throw new BadRequestException('Image file is required');
     }
 
-    const { buffer, originalname, size, mimetype } = request.file;
+    const { buffer, originalname, size, mimetype } = file;
     const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
     if (!allowedTypes.includes(mimetype)) {
       throw new BadRequestException('Unsupported image format. Use PNG, JPG, or WEBP');
@@ -313,9 +312,9 @@ export class IntelligenceApiService {
 
     return {
       generation_id: saved.id,
-      theme: enrichedTheme,
+      theme: enrichedTheme as ExtractThemeResponse['theme'],
       duration_ms: saved.durationMs!,
-    } as ExtractThemeResponse;
+    };
   }
 
   validateTheme(dto: ValidateThemeRequest): ValidateThemeResponse {
@@ -466,7 +465,7 @@ export class IntelligenceApiService {
 
       return (await response.json()) as T;
     } catch (error) {
-      if (error instanceof InternalServerErrorException) throw error;
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) throw error;
       this.logger.error(`Agent platform call error: ${(error as Error).message}`);
       throw new InternalServerErrorException('Intelligence service unavailable');
     }

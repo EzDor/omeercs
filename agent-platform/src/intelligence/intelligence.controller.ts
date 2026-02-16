@@ -1,9 +1,11 @@
 import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Public } from '@agentic-template/common/src/auth/public.decorator';
 import { IntelligencePlanService } from './services/intelligence-plan.service';
 import { CopyGenerationService } from './services/copy-generation.service';
 import { ThemeBriefService } from './services/theme-brief.service';
 import { ThemeImageService } from './services/theme-image.service';
 
+@Public()
 @Controller('internal/intelligence')
 export class IntelligenceController {
   private readonly logger = new Logger(IntelligenceController.name);
