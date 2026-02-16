@@ -13,5 +13,6 @@ import { PublicPlayerController } from './public-player.controller';
   imports: [ConfigModule, TenantClsModule, TypeOrmModule.forFeature([Campaign, Run]), RunEngineModule],
   controllers: [CampaignController, PublicPlayerController],
   providers: [CampaignApiService],
+  exports: [CampaignApiService],
 })
 export class CampaignModule {}

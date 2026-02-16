@@ -15,6 +15,7 @@ import { ProvidersModule } from '@agentic-template/common/src/providers/provider
 import { StorageModule } from '@agentic-template/common/src/storage/storage.module';
 import { PollingService } from '@agentic-template/common/src/providers/services/polling.service';
 import { CampaignModule } from './campaign/campaign.module';
+import { IntelligenceModule } from './intelligence/intelligence.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { CampaignModule } from './campaign/campaign.module';
     RunEngineModule,
     PromptRegistryModule,
     CampaignModule,
+    IntelligenceModule,
   ],
   controllers: [AppController],
   providers: [

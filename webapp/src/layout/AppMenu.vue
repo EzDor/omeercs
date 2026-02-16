@@ -15,7 +15,7 @@ interface MenuItem {
   items?: MenuItem[];
   visible?: boolean;
   disabled?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 const model = computed<MenuItem[]>(() => [
@@ -35,6 +35,11 @@ const model = computed<MenuItem[]>(() => [
         label: t('menu.campaigns'),
         icon: 'pi pi-fw pi-megaphone',
         to: '/campaigns',
+      },
+      {
+        label: t('menu.intelligence'),
+        icon: 'pi pi-fw pi-sparkles',
+        to: '/intelligence',
       },
     ],
   },

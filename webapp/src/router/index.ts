@@ -39,6 +39,11 @@ const router = createRouter({
           name: 'campaigns',
           component: () => import('@/pages/CampaignsPage.vue'),
         },
+        {
+          path: '/intelligence',
+          name: 'intelligence',
+          component: () => import('@/pages/IntelligenceTestPage.vue'),
+        },
       ],
     },
     {
