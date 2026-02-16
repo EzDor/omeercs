@@ -1,0 +1,157 @@
+skill_id: intelligence_plan
+version: "1.0.0"
+title: Intelligence Plan
+description: |
+  Generates a campaign intelligence plan from a marketing brief.
+  Recommends optimal game template, visual theme, prize structure, and asset requirements.
+  Uses structured LLM output with schema validation and automatic retry.
+
+tags:
+  - intelligence
+  - ai
+  - planning
+  - campaign
+
+template_type: LLM_JSON_GENERATION
+template_config:
+  prompt_id: intelligence_plan
+  prompt_version: "1.0.0"
+  model: gemini/gemini-2.0-flash
+  temperature: 0.5
+  retry_on_validation_failure: true
+
+input_schema:
+  type: object
+  required:
+    - brief
+  properties:
+    brief:
+      type: string
+      description: The marketing brief describing campaign goals, brand, audience, and requirements
+      minLength: 10
+      maxLength: 10000
+    constraints:
+      type: string
+      description: Optional JSON string with constraints (budget, timeline, excluded templates)
+
+output_schema:
+  type: object
+  required:
+    - summary
+    - recommended_template
+    - theme
+    - prize_tiers
+    - estimated_engagement
+    - asset_requirements
+    - warnings
+  properties:
+    summary:
+      type: string
+      description: Executive summary of the campaign intelligence plan
+    recommended_template:
+      type: object
+      required:
+        - template_id
+        - template_name
+        - reasoning
+        - confidence
+      properties:
+        template_id:
+          type: string
+          enum: [spin_wheel, scratch_card, quiz, memory_match]
+        template_name:
+          type: string
+        reasoning:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+    theme:
+      type: object
+      required:
+        - primary_color
+        - secondary_color
+        - accent_color
+        - background_color
+        - text_color
+        - mood
+      properties:
+        primary_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        secondary_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        accent_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        background_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        text_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        mood:
+          type: string
+          enum: [playful, premium, urgent, professional, natural, festive, minimal]
+    prize_tiers:
+      type: array
+      items:
+        type: object
+        required:
+          - tier
+          - suggestion
+          - probability
+          - estimated_cost
+        properties:
+          tier:
+            type: string
+            enum: [grand, secondary, consolation]
+          suggestion:
+            type: string
+          probability:
+            type: number
+            minimum: 0
+            maximum: 1
+          estimated_cost:
+            type: string
+    estimated_engagement:
+      type: string
+      enum: [high, medium, low]
+    asset_requirements:
+      type: array
+      items:
+        type: object
+        required:
+          - type
+          - purpose
+          - generation_prompt
+        properties:
+          type:
+            type: string
+            enum: [image, audio, video]
+          purpose:
+            type: string
+          generation_prompt:
+            type: string
+    warnings:
+      type: array
+      items:
+        type: string
+
+implementation:
+  type: ts_function
+  handler: null
+
+produces_artifacts: []
+
+policy:
+  max_runtime_sec: 60
+  network: allowlist
+  allowed_hosts:
+    - localhost:4000
+
+observability:
+  log_level_default: info
+  emit_metrics: true

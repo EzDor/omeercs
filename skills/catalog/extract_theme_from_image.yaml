@@ -1,0 +1,90 @@
+skill_id: extract_theme_from_image
+version: "1.0.0"
+title: Extract Theme from Image
+description: |
+  Extracts a color theme from an uploaded image using pixel analysis.
+  Uses sharp for image processing and k-means clustering for dominant color identification.
+  Maps extracted colors to palette roles (primary, secondary, accent, background, text)
+  and classifies the overall mood.
+
+tags:
+  - intelligence
+  - theme
+  - image
+  - design
+
+input_schema:
+  type: object
+  required:
+    - image_uri
+  properties:
+    image_uri:
+      type: string
+      description: URI to the image file (local path or storage URI)
+    max_colors:
+      type: number
+      description: Maximum number of dominant colors to extract (default 5)
+      minimum: 3
+      maximum: 10
+      default: 5
+
+output_schema:
+  type: object
+  required:
+    - primary_color
+    - secondary_color
+    - accent_color
+    - background_color
+    - text_color
+    - mood
+    - confidence
+    - palette
+  properties:
+    primary_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    secondary_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    accent_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    background_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    text_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    mood:
+      type: string
+      enum: [playful, premium, urgent, professional, natural, festive, minimal]
+    confidence:
+      type: number
+      minimum: 0
+      maximum: 1
+    palette:
+      type: array
+      items:
+        type: string
+        pattern: "^#[0-9A-Fa-f]{6}$"
+      minItems: 5
+      maxItems: 8
+
+implementation:
+  type: ts_function
+  handler: "@skills/extract-theme-from-image/handler"
+
+produces_artifacts: []
+
+policy:
+  max_runtime_sec: 30
+  network: none
+  fs:
+    read_prefixes:
+      - "/tmp/skills/"
+    write_prefixes:
+      - "/tmp/skills/output/"
+
+observability:
+  log_level_default: info
+  emit_metrics: true

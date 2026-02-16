@@ -1,0 +1,90 @@
+skill_id: extract_theme_from_brief
+version: "1.0.0"
+title: Extract Theme from Brief
+description: |
+  Extracts a cohesive color theme and mood from a text-based marketing brief.
+  Produces WCAG-compliant color roles, an extended palette, and mood classification.
+  Uses structured LLM output with schema validation and automatic retry.
+
+tags:
+  - intelligence
+  - ai
+  - theme
+  - design
+
+template_type: LLM_JSON_GENERATION
+template_config:
+  prompt_id: extract_theme_brief
+  prompt_version: "1.0.0"
+  model: gemini/gemini-2.0-flash
+  temperature: 0.6
+  retry_on_validation_failure: true
+
+input_schema:
+  type: object
+  required:
+    - brief
+  properties:
+    brief:
+      type: string
+      description: The marketing brief to extract theme information from
+      minLength: 10
+      maxLength: 10000
+
+output_schema:
+  type: object
+  required:
+    - primary_color
+    - secondary_color
+    - accent_color
+    - background_color
+    - text_color
+    - mood
+    - confidence
+    - palette
+  properties:
+    primary_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    secondary_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    accent_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    background_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    text_color:
+      type: string
+      pattern: "^#[0-9A-Fa-f]{6}$"
+    mood:
+      type: string
+      enum: [playful, premium, urgent, professional, natural, festive, minimal]
+    confidence:
+      type: number
+      minimum: 0
+      maximum: 1
+    palette:
+      type: array
+      items:
+        type: string
+        pattern: "^#[0-9A-Fa-f]{6}$"
+      minItems: 5
+      maxItems: 8
+
+implementation:
+  type: ts_function
+  handler: null
+
+produces_artifacts: []
+
+policy:
+  max_runtime_sec: 60
+  network: allowlist
+  allowed_hosts:
+    - localhost:4000
+
+observability:
+  log_level_default: info
+  emit_metrics: true

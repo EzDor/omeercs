@@ -127,3 +127,28 @@ skills:
     title: Assemble Campaign Manifest
     tags: [campaign, manifest, deployment, packaging, final, orchestration]
     status: active
+
+  # I) Intelligence features
+  - skill_id: intelligence_plan
+    version: "1.0.0"
+    title: Intelligence Plan
+    tags: [intelligence, ai, planning, campaign]
+    status: active
+
+  - skill_id: generate_campaign_copy
+    version: "1.0.0"
+    title: Generate Campaign Copy
+    tags: [intelligence, ai, copy, marketing]
+    status: active
+
+  - skill_id: extract_theme_from_brief
+    version: "1.0.0"
+    title: Extract Theme from Brief
+    tags: [intelligence, ai, theme, design]
+    status: active
+
+  - skill_id: extract_theme_from_image
+    version: "1.0.0"
+    title: Extract Theme from Image
+    tags: [intelligence, theme, image, design]
+    status: active

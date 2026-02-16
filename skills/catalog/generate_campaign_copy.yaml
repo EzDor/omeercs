@@ -1,0 +1,101 @@
+skill_id: generate_campaign_copy
+version: "1.0.0"
+title: Generate Campaign Copy
+description: |
+  Generates marketing copy variations for gamified campaign experiences.
+  Produces multiple distinct variations per copy type with tone matching and character limits.
+  Uses structured LLM output with schema validation and automatic retry.
+
+tags:
+  - intelligence
+  - ai
+  - copy
+  - marketing
+
+template_type: LLM_JSON_GENERATION
+template_config:
+  prompt_id: generate_copy
+  prompt_version: "1.0.0"
+  model: gemini/gemini-2.0-flash
+  temperature: 0.8
+  retry_on_validation_failure: true
+
+input_schema:
+  type: object
+  required:
+    - campaign_context
+    - copy_types
+    - tone
+    - variations_count
+  properties:
+    campaign_context:
+      type: string
+      description: JSON string with template_type, brand_name, product_name, campaign_goal, target_audience
+      minLength: 10
+      maxLength: 5000
+    copy_types:
+      type: string
+      description: Comma-separated list of copy types (headline, subheadline, cta_button, prize_description, win_message, lose_message, instructions, terms_summary)
+    tone:
+      type: string
+      description: The desired tone (playful, urgent, professional, luxury, friendly)
+    variations_count:
+      type: number
+      description: Number of distinct variations to generate per copy type
+      minimum: 1
+      maximum: 10
+    constraints:
+      type: string
+      description: Optional additional constraints or brand guidelines
+
+output_schema:
+  type: object
+  required:
+    - copies
+  properties:
+    copies:
+      type: array
+      items:
+        type: object
+        required:
+          - copy_type
+          - variations
+        properties:
+          copy_type:
+            type: string
+          variations:
+            type: array
+            items:
+              type: object
+              required:
+                - text
+                - character_count
+                - tone_match_score
+                - notes
+              properties:
+                text:
+                  type: string
+                character_count:
+                  type: number
+                tone_match_score:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                notes:
+                  type: string
+
+implementation:
+  type: ts_function
+  handler: null
+
+produces_artifacts: []
+
+policy:
+  max_runtime_sec: 60
+  network: allowlist
+  allowed_hosts:
+    - localhost:4000
+
+observability:
+  log_level_default: info
+  emit_metrics: true
