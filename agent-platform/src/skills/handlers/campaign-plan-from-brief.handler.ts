@@ -51,7 +51,7 @@ const CAMPAIGN_PLAN_OUTPUT_SCHEMA = {
         type: 'object',
         required: ['template_id', 'template_name', 'rationale'],
         properties: {
-          template_id: { type: 'string', description: 'ID of the selected game template' },
+          template_id: { type: 'string', enum: ['spin_wheel'], description: 'ID of the selected game template' },
           template_name: { type: 'string', description: 'Human-readable template name' },
           rationale: { type: 'string', description: 'Why this template was chosen' },
         },
@@ -96,11 +96,35 @@ const CAMPAIGN_PLAN_OUTPUT_SCHEMA = {
       },
       audio_specs: {
         type: 'object',
-        required: ['bgm_style', 'bgm_bpm', 'sfx_list'],
+        required: ['genre', 'bpm', 'sfx_list'],
         properties: {
-          bgm_style: { type: 'string' },
-          bgm_bpm: { type: 'number' },
-          sfx_list: { type: 'array', items: { type: 'string' } },
+          genre: {
+            type: 'string',
+            enum: ['electronic', 'ambient', 'orchestral', 'rock', 'pop', 'jazz', 'classical', 'cinematic', 'retro', 'chiptune', 'lofi', 'upbeat', 'calm', 'energetic', 'mysterious'],
+            description: 'Music genre for background music generation',
+          },
+          mood: {
+            type: 'string',
+            enum: ['happy', 'sad', 'tense', 'relaxed', 'epic', 'playful', 'dramatic', 'neutral'],
+            description: 'Mood for the background music',
+          },
+          bpm: { type: 'number', description: 'Beats per minute for the background music' },
+          sfx_list: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['name', 'intent'],
+              properties: {
+                name: { type: 'string', description: 'Sound effect name (e.g., "click_sound", "win_fanfare")' },
+                intent: {
+                  type: 'string',
+                  enum: ['jump', 'coin', 'click', 'win', 'lose', 'collect', 'powerup', 'explosion', 'hit', 'miss', 'countdown', 'start', 'game_over', 'level_up', 'bonus', 'notification', 'error', 'success', 'whoosh', 'pop', 'ding', 'buzz', 'custom'],
+                  description: 'The semantic intent of the sound effect',
+                },
+              },
+              additionalProperties: false,
+            },
+          },
         },
         additionalProperties: false,
       },
@@ -255,13 +279,9 @@ export class CampaignPlanFromBriefHandler implements SkillHandler<CampaignPlanFr
     }
 
     parts.push('## Available Game Templates');
-    parts.push('- spin_wheel: Classic spinning wheel game with configurable segments');
-    parts.push('- scratch_card: Digital scratch card revealing prizes');
-    parts.push('- slot_machine: Slot machine with customizable symbols');
-    parts.push('- memory_match: Memory card matching game');
-    parts.push('- catch_game: Falling objects catching game');
-    parts.push('- quiz: Interactive quiz with multiple choice questions');
+    parts.push('- spin_wheel: Classic spinning wheel game with configurable segments and prizes. Best for prize giveaways, promotional events, and engagement campaigns.');
     parts.push('');
+    parts.push('IMPORTANT: You MUST select "spin_wheel" as the template_id. It is currently the only fully implemented template.');
 
     parts.push('Please generate a comprehensive campaign plan based on the above information.');
 

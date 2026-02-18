@@ -27,6 +27,7 @@ import { ValidateGameBundleHandler } from '../handlers/validate-game-bundle.hand
 import { AssembleCampaignManifestHandler } from '../handlers/assemble-campaign-manifest.handler';
 import { GenerateThreejsCodeHandler } from '../handlers/generate-threejs-code.handler';
 import { ValidateBundleHandler } from '../handlers/validate-bundle.handler';
+import { ExtractThemeFromImageHandler } from '../handlers/extract-theme-from-image.handler';
 import { TemplateManifestLoaderService } from '../../template-system/services/template-manifest-loader.service';
 import { TemplateConfigValidatorService } from '../../template-system/services/template-config-validator.service';
 
@@ -409,6 +410,7 @@ export class SkillCatalogService implements OnModuleInit {
       { skillId: 'bundle_game_template', create: () => new BundleGameTemplateHandler(this.configService, this.templateManifestLoader, this.templateConfigValidator) },
       { skillId: 'validate_game_bundle', create: () => new ValidateGameBundleHandler(this.configService) },
       { skillId: 'assemble_campaign_manifest', create: () => new AssembleCampaignManifestHandler(this.configService) },
+      { skillId: 'extract_theme_from_image', create: () => new ExtractThemeFromImageHandler(this.configService) },
     ];
   }
 
@@ -445,7 +447,9 @@ export class SkillCatalogService implements OnModuleInit {
   }
 
   hasSkill(skillId: string): boolean {
-    return this.descriptors.has(skillId) && this.handlers.has(skillId);
+    const descriptor = this.descriptors.get(skillId);
+    if (!descriptor) return false;
+    return this.handlers.has(skillId) || descriptor.template_type !== undefined;
   }
 
   getHandler(skillId: string): SkillHandler | undefined {

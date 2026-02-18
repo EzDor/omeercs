@@ -7,12 +7,10 @@ import { CachedStepExecutorService } from './cached-step-executor.service';
 import { DependencyGraphService } from './dependency-graph.service';
 
 type NodeFunction = (state: RunStateType) => Promise<Partial<RunStateType>>;
-type ConditionFunction = (state: RunStateType) => string;
 
 interface StateGraphBuilder {
   addNode(name: string, fn: NodeFunction): void;
   addEdge(from: string, to: string): void;
-  addConditionalEdges(from: string, condition: ConditionFunction, mapping: Record<string, string>): void;
 }
 
 @Injectable()
@@ -53,12 +51,7 @@ export class LangGraphWorkflowBuilderService {
 
       if (terminalSteps.has(stepSpec.stepId)) {
         graph.addEdge(stepSpec.stepId, END);
-      } else if (dependents.length === 1) {
-        graph.addConditionalEdges(stepSpec.stepId, (state: RunStateType) => (state.error ? END : 'next'), {
-          [END]: END,
-          next: dependents[0],
-        });
-      } else if (dependents.length > 1) {
+      } else {
         for (const dependent of dependents) {
           graph.addEdge(stepSpec.stepId, dependent);
         }

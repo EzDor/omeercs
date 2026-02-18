@@ -80,7 +80,7 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
 
   constructor(private readonly configService: ConfigService) {
     this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
-    this.defaultModel = configService.get<string>('VISION_MODEL') || 'gpt-4o';
+    this.defaultModel = configService.get<string>('VISION_MODEL') || 'gemini-2.0-flash';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
   }
 
@@ -115,7 +115,6 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
                 type: 'image_url',
                 image_url: {
                   url: imageUrl,
-                  detail: 'high',
                 },
               },
             ],

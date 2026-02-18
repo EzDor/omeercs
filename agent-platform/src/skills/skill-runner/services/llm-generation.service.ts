@@ -10,7 +10,25 @@ import type { ChatCompletionRequest, ResponseFormat } from '@agentic-template/co
 import type { RegistryResult } from '@agentic-template/dto/src/prompt-registry/registry-result.interface';
 import type { RenderedPrompt } from '@agentic-template/dto/src/prompt-registry/prompt-template.interface';
 
-const STRUCTURED_OUTPUT_MODELS = ['claude-3-5-sonnet', 'claude-3-opus', 'claude-3-sonnet', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+const STRUCTURED_OUTPUT_MODELS = [
+  'claude-sonnet-4.5',
+  'claude-opus-4',
+  'claude-sonnet-4',
+  'claude-3.5-haiku',
+  'claude-3-haiku',
+  'gpt-4.1',
+  'gpt-4.1-mini',
+  'gpt-4.1-nano',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'o4-mini',
+  'o3',
+  'o3-mini',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-flash-latest',
+];
 
 const DEFAULT_MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;

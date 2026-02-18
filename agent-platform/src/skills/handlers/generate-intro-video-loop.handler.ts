@@ -16,11 +16,14 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
   private readonly outputDir: string;
   private readonly videoGenerationTimeout: number;
 
+  private readonly useStubProvider: boolean;
+
   constructor(private readonly configService: ConfigService) {
     this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
     this.defaultModel = configService.get<string>('VIDEO_GENERATION_MODEL') || 'runway-gen3';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.videoGenerationTimeout = configService.get<number>('VIDEO_GENERATION_TIMEOUT_MS') || 300000;
+    this.useStubProvider = configService.get<string>('VIDEO_PROVIDER_STUB') === 'true';
   }
 
   async execute(input: GenerateIntroVideoLoopInput, context: SkillExecutionContext): Promise<SkillResult<GenerateIntroVideoLoopOutput>> {
@@ -30,6 +33,10 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     this.logger.log(`Executing generate_intro_video_loop for tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
+      if (this.useStubProvider) {
+        return this.executeStub(input, context, startTime, timings);
+      }
+
       // Prepare image for video generation
       const prepareStart = Date.now();
       const imageData = this.prepareImageData(input.image_uri);
@@ -148,6 +155,40 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
         timings_ms: { total: totalTime, ...timings },
       });
     }
+  }
+
+  private executeStub(
+    input: GenerateIntroVideoLoopInput,
+    context: SkillExecutionContext,
+    startTime: number,
+    timings: Record<string, number>,
+  ): SkillResult<GenerateIntroVideoLoopOutput> {
+    this.logger.log(`Using stub video provider for intro video loop`);
+    const specs = this.normalizeSpecs(input.specs);
+    const outputPath = path.join(this.outputDir, context.executionId);
+    if (!fs.existsSync(outputPath)) {
+      fs.mkdirSync(outputPath, { recursive: true });
+    }
+    const filePath = path.join(outputPath, `intro-loop.${specs.format}`);
+    fs.writeFileSync(filePath, Buffer.alloc(1024));
+    const totalTime = Date.now() - startTime;
+
+    return skillSuccess(
+      {
+        video_uri: filePath,
+        duration_sec: specs.duration_sec,
+        width: specs.width,
+        height: specs.height,
+        fps: specs.fps,
+        format: specs.format,
+        codec: specs.codec,
+        file_size_bytes: 1024,
+        is_loopable: true,
+        generation_params: { source_image_uri: input.image_uri, motion_prompt: 'stub', model: 'stub-generator' },
+      },
+      [{ artifact_type: 'video/intro-loop', uri: filePath, metadata: { duration_sec: specs.duration_sec, width: specs.width, height: specs.height, is_loopable: true } }],
+      { timings_ms: { total: totalTime, ...timings }, provider_calls: [{ provider: 'stub', model: 'stub-generator', duration_ms: 0 }] },
+    );
   }
 
   private buildMotionPrompt(input: GenerateIntroVideoLoopInput): string {

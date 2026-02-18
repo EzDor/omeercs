@@ -26,10 +26,8 @@ input_schema:
     - brief
   properties:
     brief:
-      type: string
+      type: [string, object]
       description: The marketing brief to extract theme information from
-      minLength: 10
-      maxLength: 10000
 
 output_schema:
   type: object

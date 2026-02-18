@@ -29,10 +29,8 @@ input_schema:
     - variations_count
   properties:
     campaign_context:
-      type: string
-      description: JSON string with template_type, brand_name, product_name, campaign_goal, target_audience
-      minLength: 10
-      maxLength: 5000
+      type: [string, object]
+      description: JSON string or object with template_type, brand_name, product_name, campaign_goal, target_audience
     copy_types:
       type: string
       description: Comma-separated list of copy types (headline, subheadline, cta_button, prize_description, win_message, lose_message, instructions, terms_summary)

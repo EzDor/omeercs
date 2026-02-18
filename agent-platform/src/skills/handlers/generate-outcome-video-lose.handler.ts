@@ -18,11 +18,14 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
   private readonly outputDir: string;
   private readonly videoGenerationTimeout: number;
 
+  private readonly useStubProvider: boolean;
+
   constructor(private readonly configService: ConfigService) {
     this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
     this.defaultModel = configService.get<string>('VIDEO_GENERATION_MODEL') || 'runway-gen3';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.videoGenerationTimeout = configService.get<number>('VIDEO_GENERATION_TIMEOUT_MS') || 300000;
+    this.useStubProvider = configService.get<string>('VIDEO_PROVIDER_STUB') === 'true';
   }
 
   async execute(input: GenerateOutcomeVideoLoseInput, context: SkillExecutionContext): Promise<SkillResult<GenerateOutcomeVideoOutput>> {
@@ -32,6 +35,10 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
     this.logger.log(`Executing generate_outcome_video_lose for tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
+      if (this.useStubProvider) {
+        return this.executeStub(input, context, startTime, timings);
+      }
+
       // Build the lose video prompt
       const promptStart = Date.now();
       const videoPrompt = this.buildLoseVideoPrompt(input);
@@ -232,6 +239,41 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
     }
 
     throw new Error(`Invalid image URI: ${imageUri}`);
+  }
+
+  private executeStub(
+    input: GenerateOutcomeVideoLoseInput,
+    context: SkillExecutionContext,
+    startTime: number,
+    timings: Record<string, number>,
+  ): SkillResult<GenerateOutcomeVideoOutput> {
+    this.logger.log(`Using stub video provider for lose outcome`);
+    const specs = this.normalizeSpecs(input.specs);
+    const outputPath = path.join(this.outputDir, context.executionId);
+    if (!fs.existsSync(outputPath)) {
+      fs.mkdirSync(outputPath, { recursive: true });
+    }
+    const filePath = path.join(outputPath, `outcome-lose.${specs.format}`);
+    fs.writeFileSync(filePath, Buffer.alloc(1024));
+    const loseText = input.lose_text || input.text_overlay?.text || DEFAULT_LOSE_TEXT;
+    const totalTime = Date.now() - startTime;
+
+    return skillSuccess(
+      {
+        video_uri: filePath,
+        outcome_type: 'lose',
+        duration_sec: specs.duration_sec,
+        width: specs.width,
+        height: specs.height,
+        fps: specs.fps,
+        format: specs.format,
+        codec: specs.codec,
+        file_size_bytes: 1024,
+        generation_params: { prompt: 'stub', outcome_text: loseText, model: 'stub-generator' },
+      },
+      [{ artifact_type: 'video/outcome-lose', uri: filePath, metadata: { outcome_type: 'lose', duration_sec: specs.duration_sec, width: specs.width, height: specs.height } }],
+      { timings_ms: { total: totalTime, ...timings }, provider_calls: [{ provider: 'stub', model: 'stub-generator', duration_ms: 0 }] },
+    );
   }
 
   private async saveVideo(videoUrl: string, executionId: string, format: string): Promise<{ uri: string; fileSize: number }> {

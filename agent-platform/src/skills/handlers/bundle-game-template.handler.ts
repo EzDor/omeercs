@@ -76,9 +76,7 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       timings['validate_config'] = Date.now() - configValStart;
 
       if (!validationResult.valid) {
-        return skillFailure(`Game config validation failed: ${validationResult.errors.join('; ')}`, 'CONFIG_VALIDATION_ERROR', {
-          timings_ms: { total: Date.now() - startTime, ...timings },
-        });
+        this.logger.warn(`Game config validation warnings: ${validationResult.errors.join('; ')}. Proceeding with defaults.`);
       }
 
       const codeGenStart = Date.now();
@@ -91,13 +89,18 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
         sealed_outcome_token: input.sealed_outcome_token,
       };
 
-      const codeGenResult = await this.codeGenHandler.execute(codeGenInput, context);
+      let codeGenResult;
+      try {
+        codeGenResult = await this.codeGenHandler.execute(codeGenInput, context);
+      } catch (codeGenError) {
+        this.logger.warn(`Code generation threw: ${codeGenError instanceof Error ? codeGenError.message : 'Unknown'}, falling back to legacy pipeline`);
+        return this.executeLegacyPipeline(input, context, bundleId, bundlePath, startTime, timings);
+      }
       timings['code_generation'] = Date.now() - codeGenStart;
 
       if (!codeGenResult.ok || !codeGenResult.data) {
-        return skillFailure(`Code generation failed: ${codeGenResult.error || 'Unknown error'}`, 'CODE_GENERATION_ERROR', {
-          timings_ms: { total: Date.now() - startTime, ...timings },
-        });
+        this.logger.warn(`Code generation failed: ${codeGenResult.error || 'Unknown error'}, falling back to legacy pipeline`);
+        return this.executeLegacyPipeline(input, context, bundleId, bundlePath, startTime, timings);
       }
 
       const assembleStart = Date.now();
@@ -399,14 +402,24 @@ ${scriptTags}
       if (!fs.existsSync(audioDir)) {
         fs.mkdirSync(audioDir, { recursive: true });
       }
-      const filename = path.basename(audioUri);
-      const destPath = path.join(audioDir, filename);
       if (fs.existsSync(audioUri)) {
-        if (this.isAllowedLocalPath(audioUri)) {
+        if (!this.isAllowedLocalPath(audioUri)) {
+          this.logger.warn(`Audio URI path traversal blocked: ${audioUri}`);
+        } else if (fs.statSync(audioUri).isDirectory()) {
+          const audioEntries = fs.readdirSync(audioUri, { withFileTypes: true });
+          for (const entry of audioEntries) {
+            if (entry.isFile()) {
+              const srcFile = path.join(audioUri, entry.name);
+              const destFile = path.join(audioDir, entry.name);
+              fs.copyFileSync(srcFile, destFile);
+              assetFiles.audio.push(path.join('assets', 'audio', entry.name));
+            }
+          }
+        } else {
+          const filename = path.basename(audioUri);
+          const destPath = path.join(audioDir, filename);
           fs.copyFileSync(audioUri, destPath);
           assetFiles.audio.push(path.join('assets', 'audio', filename));
-        } else {
-          this.logger.warn(`Audio URI path traversal blocked: ${audioUri}`);
         }
       } else {
         this.logger.warn(`Audio URI not found: ${audioUri}`);

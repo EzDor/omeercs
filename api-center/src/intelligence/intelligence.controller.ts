@@ -62,7 +62,7 @@ export class IntelligenceController {
   @Post('theme/from-image')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('file'))
-  async extractThemeFromImage(@UploadedFile() file: Express.Multer.File, @Request() req: AuthRequestDto) {
+  async extractThemeFromImage(@UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number }, @Request() req: AuthRequestDto) {
     const { tenantId, userId } = req.auth!;
     this.logger.log(`POST /intelligence/theme/from-image - tenant: ${tenantId}`);
     return this.intelligenceService.extractThemeFromImage(tenantId, userId, file);

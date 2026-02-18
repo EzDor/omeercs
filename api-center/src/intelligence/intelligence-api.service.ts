@@ -265,7 +265,7 @@ export class IntelligenceApiService {
     };
   }
 
-  async extractThemeFromImage(tenantId: string, userId: string, file: Express.Multer.File | undefined): Promise<ExtractThemeResponse> {
+  async extractThemeFromImage(tenantId: string, userId: string, file: { buffer: Buffer; originalname: string; mimetype: string; size: number } | undefined): Promise<ExtractThemeResponse> {
     const startTime = Date.now();
 
     if (!file) {

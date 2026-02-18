@@ -8,7 +8,6 @@ import * as yaml from 'js-yaml';
 import Ajv from 'ajv';
 
 const MANIFEST_SCHEMA = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
   required: ['template_id', 'version', 'title', 'description', 'config_schema', 'asset_slots', 'scene_config', 'entry_point'],
   properties: {

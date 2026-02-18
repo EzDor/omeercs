@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { GenerationJob } from '@agentic-template/dao/src/entities/generation-job.entity';
 import { StabilityAdapter } from './adapters/stability.adapter';
 import { StubAudioAdapter } from './adapters/stub-audio.adapter';
+import { StubImageAdapter } from './adapters/stub-image.adapter';
 import { NanoBananaVideoAdapter } from './adapters/nano-banana-video.adapter';
 import { NanoBananaSfxAdapter } from './adapters/nano-banana-sfx.adapter';
 import { SunoBgmAdapter } from './adapters/suno-bgm.adapter';
@@ -21,6 +22,7 @@ import { PollingService } from './services/polling.service';
   providers: [
     StabilityAdapter,
     StubAudioAdapter,
+    StubImageAdapter,
     NanoBananaVideoAdapter,
     NanoBananaSfxAdapter,
     SunoBgmAdapter,

@@ -196,24 +196,24 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
     width: number,
     height: number,
   ): Promise<{ uri: string; width: number; height: number; format: string; fileSize: number }> {
-    // Validate URL origin (SSRF prevention)
-    this.validateImageUrl(imageUrl);
-
-    // Ensure output directory exists (async mkdir with recursive handles existence check)
     const outputPath = path.join(this.outputDir, executionId);
     await fs.mkdir(outputPath, { recursive: true });
 
-    // Download the image
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download image: ${response.statusText}`);
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
     const filename = `intro-frame.${format}`;
     const filePath = path.join(outputPath, filename);
 
-    await fs.writeFile(filePath, buffer);
+    if (this.isLocalPath(imageUrl)) {
+      await fs.copyFile(imageUrl, filePath);
+    } else {
+      this.validateImageUrl(imageUrl);
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download image: ${response.statusText}`);
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      await fs.writeFile(filePath, buffer);
+    }
+
     const stats = await fs.stat(filePath);
 
     return {
@@ -223,6 +223,10 @@ export class GenerateIntroImageHandler implements SkillHandler<GenerateIntroImag
       format,
       fileSize: stats.size,
     };
+  }
+
+  private isLocalPath(uri: string): boolean {
+    return uri.startsWith('/') || uri.startsWith('./');
   }
 
   private validateImageUrl(url: string): void {

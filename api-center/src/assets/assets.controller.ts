@@ -1,5 +1,5 @@
-import { Controller, Get, Param, Res, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get, Param, Req, Res, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { Public } from '@agentic-template/common/src/auth/public.decorator';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
@@ -41,8 +41,10 @@ export class AssetsController {
 
   @Public()
   @Get(':runId/*')
-  serveAsset(@Param('runId') runId: string, @Param() params: Record<string, string>, @Res() res: Response): void {
-    const filePath = params['0'] || 'index.html';
+  serveAsset(@Param('runId') runId: string, @Req() req: Request, @Res() res: Response): void {
+    const prefix = `/api/assets/${runId}/`;
+    const decodedPath = decodeURIComponent(req.path);
+    const filePath = decodedPath.startsWith(prefix) ? decodedPath.slice(prefix.length) || 'index.html' : 'index.html';
 
     if (!this.isValidRunId(runId)) {
       throw new BadRequestException('Invalid run ID format');
@@ -83,18 +85,7 @@ export class AssetsController {
       throw new BadRequestException('Invalid run ID format');
     }
 
-    const indexPath = path.join(this.outputDir, runId, 'bundle', 'index.html');
-    const normalizedPath = path.normalize(indexPath);
-
-    if (!normalizedPath.startsWith(this.outputDir)) {
-      throw new BadRequestException('Access denied');
-    }
-
-    if (!fs.existsSync(normalizedPath)) {
-      throw new NotFoundException(`Run bundle not found for: ${runId}`);
-    }
-
-    return this.streamFile(normalizedPath, res);
+    res.redirect(301, `/api/assets/${runId}/index.html`);
   }
 
   private streamFile(filePath: string, res: Response): void {

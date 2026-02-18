@@ -25,44 +25,18 @@ steps:
       max_attempts: 2
       backoff_ms: 1000
 
-  # Step 2: Intro Image Generation
-  - step_id: intro_image
-    skill_id: generate_intro_image
-    depends_on: [plan]
-    description: Generate intro image based on campaign plan
+  # Step 2: Intelligence Plan (parallel with plan)
+  - step_id: intel_plan
+    skill_id: intelligence_plan
+    depends_on: []
+    description: Generate template recommendation, theme, and prize tiers from brief
     input_selector:
-      style_guide:
-        source: step_output
-        step_id: plan
-        path: data.style_guide
-      brand_assets:
+      brief:
         source: trigger
-        path: brand_assets
-      scene_description:
-        source: step_output
-        step_id: plan
-        path: data.intro_scene
-    cache_policy:
-      enabled: true
-      scope: run_only
-    retry_policy:
-      max_attempts: 2
-      backoff_ms: 2000
-
-  # Step 3: Button Segmentation
-  - step_id: intro_button_segmentation
-    skill_id: segment_start_button
-    depends_on: [intro_image]
-    description: Detect and segment start button in intro image
-    input_selector:
-      image_url:
-        source: step_output
-        step_id: intro_image
-        path: outputArtifactIds[0]
-      button_style:
-        source: step_output
-        step_id: plan
-        path: data.ui_style
+        path: brief
+      constraints:
+        source: trigger
+        path: constraints
     cache_policy:
       enabled: true
       scope: run_only
@@ -70,23 +44,120 @@ steps:
       max_attempts: 2
       backoff_ms: 1000
 
-  # Step 4: Intro Video Loop
+  # Step 3: Extract Theme from Brief (parallel with plan)
+  - step_id: intel_theme_brief
+    skill_id: extract_theme_from_brief
+    depends_on: []
+    description: Extract color theme from brief text
+    input_selector:
+      brief:
+        source: trigger
+        path: brief
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 1000
+
+  # Step 4: Generate Campaign Copy (after plan)
+  - step_id: intel_copy
+    skill_id: generate_campaign_copy
+    depends_on: [plan]
+    description: Generate copy variations for headline, CTA, win/lose messages
+    input_selector:
+      campaign_context:
+        source: step_output
+        step_id: plan
+        path: data
+      copy_types:
+        source: constants
+        value: "headline,subheadline,cta_button,win_message,lose_message,instructions"
+      tone:
+        source: trigger
+        path: tone
+      variations_count:
+        source: constants
+        value: 3
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 1000
+
+  # Step 5: Intro Image Generation
+  - step_id: intro_image
+    skill_id: generate_intro_image
+    depends_on: [plan]
+    description: Generate intro image based on campaign plan
+    input_selector:
+      prompt:
+        source: step_output
+        step_id: plan
+        path: data.video_prompts[0].prompt
+      brand_assets:
+        source: trigger
+        path: brand_assets
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 2000
+
+  # Step 6: Extract Theme from Image (after intro image)
+  - step_id: intel_theme_image
+    skill_id: extract_theme_from_image
+    depends_on: [intro_image]
+    description: Extract color theme from generated intro image
+    input_selector:
+      image_uri:
+        source: step_output
+        step_id: intro_image
+        path: data.image_uri
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 1000
+
+  # Step 7: Button Segmentation
+  - step_id: intro_button_segmentation
+    skill_id: segment_start_button
+    depends_on: [intro_image]
+    description: Detect and segment start button in intro image
+    input_selector:
+      image_uri:
+        source: step_output
+        step_id: intro_image
+        path: data.image_uri
+      button_hint:
+        source: step_output
+        step_id: plan
+        path: data.copy.cta_text
+    cache_policy:
+      enabled: true
+      scope: run_only
+    retry_policy:
+      max_attempts: 2
+      backoff_ms: 1000
+
+  # Step 8: Intro Video Loop
   - step_id: intro_video
     skill_id: generate_intro_video_loop
     depends_on: [intro_image]
     description: Generate looping intro video from intro image
     input_selector:
-      source_image:
+      image_uri:
         source: step_output
         step_id: intro_image
-        path: outputArtifactIds[0]
-      animation_style:
+        path: data.image_uri
+      motion_prompt:
         source: step_output
         step_id: plan
-        path: data.animation_style
-      duration_sec:
-        source: trigger
-        path: constraints.intro_duration_sec
+        path: data.video_prompts[0].style_notes
     cache_policy:
       enabled: true
       scope: run_only
@@ -94,7 +165,7 @@ steps:
       max_attempts: 2
       backoff_ms: 3000
 
-  # Step 5: Background Music
+  # Step 9: Background Music
   - step_id: bgm
     skill_id: generate_bgm_track
     depends_on: [plan]
@@ -103,14 +174,10 @@ steps:
       style:
         source: step_output
         step_id: plan
-        path: data.audio_style
+        path: data.audio_specs
       duration_sec:
-        source: trigger
-        path: constraints.duration_sec
-      mood:
-        source: step_output
-        step_id: plan
-        path: data.mood
+        source: constants
+        value: 30
     cache_policy:
       enabled: true
       scope: run_only
@@ -118,20 +185,16 @@ steps:
       max_attempts: 2
       backoff_ms: 2000
 
-  # Step 6: Sound Effects Pack
+  # Step 10: Sound Effects Pack
   - step_id: sfx
     skill_id: generate_sfx_pack
     depends_on: [plan]
     description: Generate sound effects pack for game
     input_selector:
-      game_type:
-        source: step_output
-        step_id: plan
-        path: data.game_type
       sfx_list:
         source: step_output
         step_id: plan
-        path: data.required_sfx
+        path: data.audio_specs.sfx_list
     cache_policy:
       enabled: true
       scope: run_only
@@ -139,23 +202,27 @@ steps:
       max_attempts: 2
       backoff_ms: 2000
 
-  # Step 7: Audio Mix
+  # Step 11: Audio Mix
   - step_id: audio_mix
     skill_id: mix_audio_for_game
     depends_on: [bgm, sfx]
     description: Mix and normalize audio tracks
     input_selector:
-      bgm_track:
+      bgm_uri:
         source: step_output
         step_id: bgm
-        path: outputArtifactIds[0]
-      sfx_pack:
+        path: data.audio_uri
+      sfx_manifest:
         source: step_output
         step_id: sfx
-        path: outputArtifactIds
-      target_loudness:
+        path: data
+      loudness_targets:
         source: constants
-        value: -14
+        value:
+          standard: lufs_14
+          bgm_lufs: -14
+          sfx_lufs: -12
+          true_peak_dbfs: -1
     cache_policy:
       enabled: true
       scope: run_only
@@ -163,23 +230,24 @@ steps:
       max_attempts: 2
       backoff_ms: 1000
 
-  # Step 8: Game Configuration
+  # Step 12: Game Configuration
   - step_id: game_config
     skill_id: game_config_from_template
     depends_on: [plan]
     description: Generate game configuration from template
     input_selector:
-      game_type:
+      template_id:
         source: step_output
         step_id: plan
-        path: data.game_type
+        path: data.game_template.template_id
+      theme:
+        source: step_output
+        step_id: plan
+        path: data.theme
       difficulty:
-        source: trigger
-        path: constraints.difficulty
-      parameters:
         source: step_output
         step_id: plan
-        path: data.game_parameters
+        path: data.difficulty
     cache_policy:
       enabled: true
       scope: run_only
@@ -187,24 +255,24 @@ steps:
       max_attempts: 2
       backoff_ms: 1000
 
-  # Step 9: Game Bundle
+  # Step 13: Game Bundle
   - step_id: bundle_game
     skill_id: bundle_game_template
     depends_on: [audio_mix, game_config]
     description: Bundle game template with assets
     input_selector:
+      template_id:
+        source: step_output
+        step_id: plan
+        path: data.game_template.template_id
       game_config:
         source: step_output
         step_id: game_config
         path: data
-      audio_assets:
+      audio_uri:
         source: step_output
         step_id: audio_mix
-        path: outputArtifactIds
-      template_id:
-        source: step_output
-        step_id: plan
-        path: data.template_id
+        path: data.output_dir
     cache_policy:
       enabled: true
       scope: run_only
@@ -212,23 +280,20 @@ steps:
       max_attempts: 2
       backoff_ms: 2000
 
-  # Step 10: Win Outcome Video
+  # Step 14: Win Outcome Video
   - step_id: outcome_win
     skill_id: generate_outcome_video_win
     depends_on: [plan]
     description: Generate win outcome video
     input_selector:
-      style_guide:
+      win_text:
         source: step_output
         step_id: plan
-        path: data.style_guide
-      outcome_text:
+        path: data.copy.win_message
+      prompt:
         source: step_output
         step_id: plan
-        path: data.win_message
-      brand_assets:
-        source: trigger
-        path: brand_assets
+        path: data.video_prompts[1].prompt
     cache_policy:
       enabled: true
       scope: run_only
@@ -236,23 +301,20 @@ steps:
       max_attempts: 2
       backoff_ms: 3000
 
-  # Step 11: Lose Outcome Video
+  # Step 15: Lose Outcome Video
   - step_id: outcome_lose
     skill_id: generate_outcome_video_lose
     depends_on: [plan]
     description: Generate lose outcome video
     input_selector:
-      style_guide:
+      lose_text:
         source: step_output
         step_id: plan
-        path: data.style_guide
-      outcome_text:
+        path: data.copy.lose_message
+      prompt:
         source: step_output
         step_id: plan
-        path: data.lose_message
-      brand_assets:
-        source: trigger
-        path: brand_assets
+        path: data.video_prompts[2].prompt
     cache_policy:
       enabled: true
       scope: run_only
@@ -260,42 +322,61 @@ steps:
       max_attempts: 2
       backoff_ms: 3000
 
-  # Step 12: Campaign Manifest
+  # Step 16: Campaign Manifest
   - step_id: manifest
     skill_id: assemble_campaign_manifest
-    depends_on: [intro_button_segmentation, intro_video, bundle_game, outcome_win, outcome_lose]
+    depends_on: [intro_button_segmentation, intro_video, bundle_game, outcome_win, outcome_lose, intel_plan, intel_theme_brief, intel_copy, intel_theme_image]
     description: Assemble final campaign manifest with all assets
     input_selector:
       campaign_id:
         source: trigger
         path: campaign_id
+      campaign_name:
+        source: trigger
+        path: campaign_name
+      intro_video_uri:
+        source: step_output
+        step_id: intro_video
+        path: data.video_uri
+      win_video_uri:
+        source: step_output
+        step_id: outcome_win
+        path: data.video_uri
+      lose_video_uri:
+        source: step_output
+        step_id: outcome_lose
+        path: data.video_uri
+      game_bundle_uri:
+        source: step_output
+        step_id: bundle_game
+        path: data.bundle_uri
+      button_bounds:
+        source: step_output
+        step_id: intro_button_segmentation
+        path: data.bounds
       intro_image:
         source: step_output
         step_id: intro_image
-        path: outputArtifactIds[0]
-      button_segmentation:
-        source: step_output
-        step_id: intro_button_segmentation
-        path: data
-      intro_video:
-        source: step_output
-        step_id: intro_video
-        path: outputArtifactIds[0]
-      game_bundle:
-        source: step_output
-        step_id: bundle_game
-        path: outputArtifactIds[0]
-      outcome_win:
-        source: step_output
-        step_id: outcome_win
-        path: outputArtifactIds[0]
-      outcome_lose:
-        source: step_output
-        step_id: outcome_lose
-        path: outputArtifactIds[0]
+        path: data.image_uri
       plan_data:
         source: step_output
         step_id: plan
+        path: data
+      intel_plan_data:
+        source: step_output
+        step_id: intel_plan
+        path: data
+      intel_theme_brief_data:
+        source: step_output
+        step_id: intel_theme_brief
+        path: data
+      intel_copy_data:
+        source: step_output
+        step_id: intel_copy
+        path: data
+      intel_theme_image_data:
+        source: step_output
+        step_id: intel_theme_image
         path: data
     cache_policy:
       enabled: false
@@ -304,22 +385,23 @@ steps:
       max_attempts: 1
       backoff_ms: 1000
 
-  # Step 13: QA Validation
+  # Step 17: QA Validation
   - step_id: qa_bundle
     skill_id: validate_game_bundle
     depends_on: [bundle_game]
     description: Validate game bundle for quality and completeness
     input_selector:
-      bundle_url:
+      bundle_uri:
         source: step_output
         step_id: bundle_game
-        path: outputArtifactIds[0]
-      validation_rules:
+        path: data.bundle_uri
+      checks:
         source: constants
         value:
-          check_audio: true
-          check_textures: true
-          max_bundle_size_mb: 50
+          verify_structure: true
+          verify_manifest: true
+          verify_assets: true
+          verify_config: true
     cache_policy:
       enabled: false
       scope: run_only
@@ -327,21 +409,21 @@ steps:
       max_attempts: 1
       backoff_ms: 1000
 
-  # Step 14: Smoke Review (Optional)
+  # Step 18: Smoke Review
   - step_id: review_smoke
     skill_id: review_asset_quality
     depends_on: [manifest]
     description: Optional smoke test review of final campaign
     input_selector:
-      manifest:
-        source: step_output
-        step_id: manifest
-        path: data
-      review_criteria:
+      artifact_refs:
         source: constants
         value:
-          check_brand_consistency: true
-          check_technical_quality: true
+          - uri: "campaign_manifest"
+            type: json
+            name: "Campaign Manifest"
+      rubric_id:
+        source: constants
+        value: general
     cache_policy:
       enabled: false
       scope: run_only

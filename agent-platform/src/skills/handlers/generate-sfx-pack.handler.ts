@@ -20,11 +20,14 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
   private readonly outputDir: string;
   private readonly audioGenerationTimeout: number;
 
+  private readonly useStubProvider: boolean;
+
   constructor(private readonly configService: ConfigService) {
     this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
     this.defaultModel = configService.get<string>('SFX_GENERATION_MODEL') || 'audiogen';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.audioGenerationTimeout = configService.get<number>('AUDIO_GENERATION_TIMEOUT_MS') || 300000;
+    this.useStubProvider = configService.get<string>('AUDIO_PROVIDER_STUB') === 'true';
   }
 
   async execute(input: GenerateSfxPackInput, context: SkillExecutionContext): Promise<SkillResult<GenerateSfxPackOutput>> {
@@ -34,6 +37,10 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
     this.logger.log(`Executing generate_sfx_pack for tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
+      if (this.useStubProvider) {
+        return this.executeStub(input, context, startTime, timings);
+      }
+
       const specs = this.normalizeSpecs(input.specs);
       const model = input.provider || this.defaultModel;
 
@@ -206,6 +213,96 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
         timings_ms: { total: totalTime, ...timings },
       });
     }
+  }
+
+  private executeStub(
+    input: GenerateSfxPackInput,
+    context: SkillExecutionContext,
+    startTime: number,
+    timings: Record<string, number>,
+  ): SkillResult<GenerateSfxPackOutput> {
+    this.logger.log(`Using stub audio provider for SFX pack`);
+    const specs = this.normalizeSpecs(input.specs);
+    const outputPath = path.join(this.outputDir, context.executionId, 'sfx');
+    if (!fs.existsSync(outputPath)) {
+      fs.mkdirSync(outputPath, { recursive: true });
+    }
+
+    const generatedSfx: GeneratedSfx[] = [];
+    let totalSize = 0;
+
+    for (const sfxRequest of input.sfx_list) {
+      const sfxDuration = sfxRequest.duration_sec || DEFAULT_SFX_DURATION;
+      const filename = `${sfxRequest.name}.${specs.format}`;
+      const filePath = path.join(outputPath, filename);
+      const wavBuffer = this.generateSilentWav(sfxDuration);
+      fs.writeFileSync(filePath, wavBuffer);
+      totalSize += wavBuffer.length;
+      generatedSfx.push({
+        name: sfxRequest.name,
+        intent: sfxRequest.intent,
+        uri: filePath,
+        duration_sec: sfxDuration,
+        file_size_bytes: wavBuffer.length,
+      });
+    }
+
+    const manifestPath = path.join(outputPath, 'manifest.json');
+    fs.writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        version: '1.0.0',
+        created_at: new Date().toISOString(),
+        style_theme: input.style?.theme,
+        format: specs.format,
+        sample_rate: DEFAULT_SAMPLE_RATE,
+        sfx_files: generatedSfx.map((sfx) => ({ name: sfx.name, intent: sfx.intent, filename: path.basename(sfx.uri), duration_sec: sfx.duration_sec, file_size_bytes: sfx.file_size_bytes })),
+      }),
+    );
+
+    const totalTime = Date.now() - startTime;
+
+    return skillSuccess(
+      {
+        manifest_uri: manifestPath,
+        pack_uri: outputPath,
+        sfx_files: generatedSfx,
+        total_count: generatedSfx.length,
+        total_size_bytes: totalSize,
+        format: specs.format,
+        generation_params: { style_theme: input.style?.theme, requested_sfx: input.sfx_list.map((s) => s.name), model: 'stub-generator' },
+      },
+      [
+        { artifact_type: 'audio/sfx-pack', uri: outputPath, metadata: { total_count: generatedSfx.length, format: specs.format } },
+        { artifact_type: 'json/sfx-manifest', uri: manifestPath, metadata: { sfx_names: generatedSfx.map((s) => s.name) } },
+      ],
+      { timings_ms: { total: totalTime, ...timings }, provider_calls: [{ provider: 'stub', model: 'stub-generator', duration_ms: 0 }] },
+    );
+  }
+
+  private generateSilentWav(durationSec: number): Buffer {
+    const sampleRate = DEFAULT_SAMPLE_RATE;
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const bytesPerSample = bitsPerSample / 8;
+    const numSamples = Math.floor(durationSec * sampleRate);
+    const dataSize = numSamples * numChannels * bytesPerSample;
+    const header = Buffer.alloc(44);
+    let offset = 0;
+    header.write('RIFF', offset); offset += 4;
+    header.writeUInt32LE(36 + dataSize, offset); offset += 4;
+    header.write('WAVE', offset); offset += 4;
+    header.write('fmt ', offset); offset += 4;
+    header.writeUInt32LE(16, offset); offset += 4;
+    header.writeUInt16LE(1, offset); offset += 2;
+    header.writeUInt16LE(numChannels, offset); offset += 2;
+    header.writeUInt32LE(sampleRate, offset); offset += 4;
+    header.writeUInt32LE(sampleRate * numChannels * bytesPerSample, offset); offset += 4;
+    header.writeUInt16LE(numChannels * bytesPerSample, offset); offset += 2;
+    header.writeUInt16LE(bitsPerSample, offset);
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+    return Buffer.concat([header, Buffer.alloc(dataSize)]);
   }
 
   private buildSfxPrompt(sfxRequest: SfxRequest, styleTheme?: string): string {

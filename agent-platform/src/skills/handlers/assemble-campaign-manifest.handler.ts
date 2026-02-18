@@ -25,11 +25,11 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
 
     this.logger.log(`Executing assemble_campaign_manifest for campaign ${input.campaign_id}, tenant ${context.tenantId}, execution ${context.executionId}`);
 
-    // Yield to event loop for proper async behavior
     await Promise.resolve();
 
     try {
-      // Create output directory
+      const normalizedInput = this.normalizeInput(input);
+
       const setupStart = Date.now();
       const manifestDir = path.join(this.outputDir, context.executionId);
       if (!fs.existsSync(manifestDir)) {
@@ -37,26 +37,23 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
       }
       timings['setup'] = Date.now() - setupStart;
 
-      // Validate assets
       const validationStart = Date.now();
-      const assetValidation = this.validateAssets(input);
+      const assetValidation = this.validateAssets(normalizedInput);
       timings['validate_assets'] = Date.now() - validationStart;
 
-      // Build asset references
       const assetsStart = Date.now();
-      const assetRefs = this.buildAssetRefs(input);
+      const assetRefs = this.buildAssetRefs(normalizedInput);
       timings['build_asset_refs'] = Date.now() - assetsStart;
 
-      // Build manifest
       const manifestStart = Date.now();
       const now = new Date().toISOString();
       const manifest: CampaignManifest = {
         manifest_version: MANIFEST_VERSION,
-        campaign_id: input.campaign_id,
-        campaign_name: input.campaign_name,
+        campaign_id: normalizedInput.campaign_id,
+        campaign_name: normalizedInput.campaign_name,
         created_at: now,
         updated_at: now,
-        version: input.version || DEFAULT_CAMPAIGN_VERSION,
+        version: normalizedInput.version || DEFAULT_CAMPAIGN_VERSION,
 
         assets: {
           intro_video: assetRefs.intro_video,
@@ -68,10 +65,10 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
 
         interaction: {
           button: {
-            bounds: input.button_config.bounds,
-            mask_polygon: input.button_config.mask_polygon,
-            hover_effect: input.button_config.hover_effect || 'glow',
-            click_sound_uri: input.button_config.click_sound_uri,
+            bounds: normalizedInput.button_config!.bounds,
+            mask_polygon: normalizedInput.button_config!.mask_polygon,
+            hover_effect: normalizedInput.button_config!.hover_effect || 'glow',
+            click_sound_uri: normalizedInput.button_config!.click_sound_uri,
           },
           game_container: {
             entry_point: 'index.html',
@@ -84,47 +81,47 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
           intro_to_game_trigger: 'button_click',
           game_to_outcome_trigger: 'game_complete',
           outcome_redirect:
-            input.outcome_videos.win_redirect_url || input.outcome_videos.lose_redirect_url
+            normalizedInput.outcome_videos?.win_redirect_url || normalizedInput.outcome_videos?.lose_redirect_url
               ? {
-                  win_url: input.outcome_videos.win_redirect_url,
-                  lose_url: input.outcome_videos.lose_redirect_url,
-                  delay_ms: input.outcome_videos.auto_redirect_delay_ms || 3000,
+                  win_url: normalizedInput.outcome_videos.win_redirect_url,
+                  lose_url: normalizedInput.outcome_videos.lose_redirect_url,
+                  delay_ms: normalizedInput.outcome_videos.auto_redirect_delay_ms || 3000,
                 }
               : undefined,
         },
 
         rules: {
           active: true,
-          start_date: input.rules?.start_date,
-          end_date: input.rules?.end_date,
-          max_plays_per_user: input.rules?.max_plays_per_user,
-          global_win_rate: input.rules?.global_win_rate,
-          require_login: input.rules?.require_login || false,
-          allowed_regions: input.rules?.allowed_regions,
-          excluded_regions: input.rules?.excluded_regions,
-          rate_limiting: input.rules?.rate_limiting,
+          start_date: normalizedInput.rules?.start_date,
+          end_date: normalizedInput.rules?.end_date,
+          max_plays_per_user: normalizedInput.rules?.max_plays_per_user,
+          global_win_rate: normalizedInput.rules?.global_win_rate,
+          require_login: normalizedInput.rules?.require_login || false,
+          allowed_regions: normalizedInput.rules?.allowed_regions,
+          excluded_regions: normalizedInput.rules?.excluded_regions,
+          rate_limiting: normalizedInput.rules?.rate_limiting,
         },
 
         analytics: {
-          enabled: !!input.analytics,
-          tracking_id: input.analytics?.tracking_id,
-          events: this.buildAnalyticsEvents(input.analytics),
+          enabled: !!normalizedInput.analytics,
+          tracking_id: normalizedInput.analytics?.tracking_id,
+          events: this.buildAnalyticsEvents(normalizedInput.analytics),
         },
 
-        branding: input.branding
+        branding: normalizedInput.branding
           ? {
-              brand_name: input.branding.brand_name,
-              logo_uri: input.branding.logo_uri,
+              brand_name: normalizedInput.branding.brand_name,
+              logo_uri: normalizedInput.branding.logo_uri,
               colors: {
-                primary: input.branding.primary_color,
-                secondary: input.branding.secondary_color,
+                primary: normalizedInput.branding.primary_color,
+                secondary: normalizedInput.branding.secondary_color,
               },
-              font_family: input.branding.font_family,
+              font_family: normalizedInput.branding.font_family,
             }
           : undefined,
 
-        metadata: input.metadata || {},
-        checksum: '', // Will be computed after
+        metadata: normalizedInput.metadata || {},
+        checksum: '',
       };
 
       // Compute manifest checksum
@@ -161,8 +158,8 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
           artifact_type: 'json/campaign-manifest',
           uri: manifestPath,
           metadata: {
-            campaign_id: input.campaign_id,
-            campaign_name: input.campaign_name,
+            campaign_id: normalizedInput.campaign_id,
+            campaign_name: normalizedInput.campaign_name,
             version: manifest.version,
             deployment_ready: deploymentReady,
           },
@@ -182,6 +179,37 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
     }
   }
 
+  private normalizeInput(input: AssembleCampaignManifestInput): AssembleCampaignManifestInput {
+    const normalized = { ...input };
+
+    if (!normalized.outcome_videos) {
+      normalized.outcome_videos = {
+        win_video_uri: normalized.win_video_uri || '',
+        lose_video_uri: normalized.lose_video_uri || '',
+      };
+    }
+
+    if (!normalized.button_config) {
+      const bounds = normalized.button_bounds as { x?: number; y?: number; width?: number; height?: number } | undefined;
+      normalized.button_config = {
+        bounds: {
+          x: bounds?.x ?? 0,
+          y: bounds?.y ?? 0,
+          width: bounds?.width ?? 200,
+          height: bounds?.height ?? 60,
+        },
+        hover_effect: 'glow',
+      };
+    }
+
+    if (!normalized.campaign_name) {
+      const planData = normalized.plan_data as Record<string, unknown> | undefined;
+      normalized.campaign_name = (planData?.theme as string) || 'Campaign';
+    }
+
+    return normalized;
+  }
+
   private validateAssets(input: AssembleCampaignManifestInput): { allValid: boolean; missingAssets: string[]; warnings: string[] } {
     const missingAssets: string[] = [];
     const warnings: string[] = [];
@@ -191,19 +219,16 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
       missingAssets.push(`intro_video: ${input.intro_video_uri}`);
     }
 
-    // Check outcome videos
-    if (!this.isValidAssetUri(input.outcome_videos.win_video_uri)) {
-      missingAssets.push(`win_video: ${input.outcome_videos.win_video_uri}`);
+    if (!this.isValidAssetUri(input.outcome_videos?.win_video_uri || '')) {
+      missingAssets.push(`win_video: ${input.outcome_videos?.win_video_uri}`);
     }
-    if (!this.isValidAssetUri(input.outcome_videos.lose_video_uri)) {
-      missingAssets.push(`lose_video: ${input.outcome_videos.lose_video_uri}`);
+    if (!this.isValidAssetUri(input.outcome_videos?.lose_video_uri || '')) {
+      missingAssets.push(`lose_video: ${input.outcome_videos?.lose_video_uri}`);
     }
 
-    // Check game bundle
     if (!this.isValidAssetUri(input.game_bundle_uri)) {
       missingAssets.push(`game_bundle: ${input.game_bundle_uri}`);
     } else if (this.isLocalPath(input.game_bundle_uri)) {
-      // Check for required bundle files
       const bundlePath = input.game_bundle_uri;
       const requiredFiles = ['index.html', 'game_config.json'];
       for (const file of requiredFiles) {
@@ -214,8 +239,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
       }
     }
 
-    // Check optional assets
-    if (input.button_config.click_sound_uri && !this.isValidAssetUri(input.button_config.click_sound_uri)) {
+    if (input.button_config?.click_sound_uri && !this.isValidAssetUri(input.button_config.click_sound_uri)) {
       warnings.push(`Click sound not found: ${input.button_config.click_sound_uri}`);
     }
 
@@ -223,8 +247,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
       warnings.push(`Brand logo not found: ${input.branding.logo_uri}`);
     }
 
-    // Validate button bounds
-    if (!input.button_config.bounds || input.button_config.bounds.width <= 0 || input.button_config.bounds.height <= 0) {
+    if (!input.button_config?.bounds || input.button_config.bounds.width <= 0 || input.button_config.bounds.height <= 0) {
       warnings.push('Invalid button bounds: width and height must be positive');
     }
 
@@ -270,7 +293,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
     const additional: ManifestAssetRef[] = [];
 
     // Add click sound if present
-    if (input.button_config.click_sound_uri) {
+    if (input.button_config?.click_sound_uri) {
       additional.push({
         uri: input.button_config.click_sound_uri,
         type: 'audio',
@@ -279,7 +302,6 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
       });
     }
 
-    // Add logo if present
     if (input.branding?.logo_uri) {
       additional.push({
         uri: input.branding.logo_uri,
@@ -288,6 +310,9 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
         required: false,
       });
     }
+
+    const winVideoUri = input.outcome_videos?.win_video_uri || '';
+    const loseVideoUri = input.outcome_videos?.lose_video_uri || '';
 
     return {
       intro_video: {
@@ -298,17 +323,17 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
         required: true,
       },
       win_video: {
-        uri: input.outcome_videos.win_video_uri,
+        uri: winVideoUri,
         type: 'video',
-        size_bytes: this.getFileSize(input.outcome_videos.win_video_uri),
-        checksum: this.computeChecksum(input.outcome_videos.win_video_uri),
+        size_bytes: this.getFileSize(winVideoUri),
+        checksum: this.computeChecksum(winVideoUri),
         required: true,
       },
       lose_video: {
-        uri: input.outcome_videos.lose_video_uri,
+        uri: loseVideoUri,
         type: 'video',
-        size_bytes: this.getFileSize(input.outcome_videos.lose_video_uri),
-        checksum: this.computeChecksum(input.outcome_videos.lose_video_uri),
+        size_bytes: this.getFileSize(loseVideoUri),
+        checksum: this.computeChecksum(loseVideoUri),
         required: true,
       },
       game_bundle: {

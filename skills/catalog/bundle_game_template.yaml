@@ -26,7 +26,7 @@ input_schema:
   properties:
     template_id:
       type: string
-      enum: [spin_wheel, quiz, scratch_card, memory_match]
+      enum: [spin_wheel, scratch_card, slot_machine, memory_match, catch_game, quiz]
       description: ID of the game template to bundle
     game_config:
       type: object
