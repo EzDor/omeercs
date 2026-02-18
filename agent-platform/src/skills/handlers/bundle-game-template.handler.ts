@@ -24,18 +24,16 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
   private readonly logger = new Logger(BundleGameTemplateHandler.name);
   private readonly outputDir: string;
   private readonly templatesDir: string;
-  private readonly codeGenHandler: GenerateThreejsCodeHandler;
-  private readonly validateHandler: ValidateBundleHandler;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly manifestLoader: TemplateManifestLoaderService,
     private readonly configValidator: TemplateConfigValidatorService,
+    private readonly codeGenHandler: GenerateThreejsCodeHandler,
+    private readonly validateHandler: ValidateBundleHandler,
   ) {
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.templatesDir = configService.get<string>('GAME_TEMPLATES_DIR') || GAME_TEMPLATES_PATH;
-    this.codeGenHandler = new GenerateThreejsCodeHandler(configService);
-    this.validateHandler = new ValidateBundleHandler(configService);
   }
 
   async execute(input: BundleGameTemplateInput, context: SkillExecutionContext): Promise<SkillResult<BundleGameTemplateOutput>> {

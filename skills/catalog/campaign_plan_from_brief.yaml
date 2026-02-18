@@ -143,6 +143,7 @@ output_schema:
             type: object
     video_prompts:
       type: array
+      minItems: 3
       items:
         type: object
         required: [type, prompt, style_notes, duration_sec]

@@ -27,6 +27,9 @@ export class ImageProviderRegistry {
       this.providers.set('nano-banana-image', nanoBananaImageAdapter);
     }
     const useStub = this.configService.get<string>('IMAGE_PROVIDER_STUB') === 'true';
+    if (useStub && this.configService.get<string>('NODE_ENV') === 'production') {
+      throw new Error('Stub image provider must not be used in production');
+    }
     this.defaultProviderId = useStub ? 'stub' : (configService.get<string>('DEFAULT_IMAGE_PROVIDER') || 'stability');
     this.logger.log(`Registered ${this.providers.size} image provider(s): ${Array.from(this.providers.keys()).join(', ')} (default: ${this.defaultProviderId})`);
   }

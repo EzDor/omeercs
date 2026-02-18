@@ -25,8 +25,6 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
 
     this.logger.log(`Executing assemble_campaign_manifest for campaign ${input.campaign_id}, tenant ${context.tenantId}, execution ${context.executionId}`);
 
-    await Promise.resolve();
-
     try {
       const normalizedInput = this.normalizeInput(input);
 
@@ -283,6 +281,13 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
     return !uri.startsWith('http://') && !uri.startsWith('https://');
   }
 
+  private isAllowedLocalPath(uri: string): boolean {
+    if (!this.isLocalPath(uri)) return false;
+    const resolved = path.resolve(uri);
+    const allowedBase = path.resolve(this.outputDir) + path.sep;
+    return resolved.startsWith(allowedBase);
+  }
+
   private buildAssetRefs(input: AssembleCampaignManifestInput): {
     intro_video: ManifestAssetRef;
     win_video: ManifestAssetRef;
@@ -347,7 +352,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
   }
 
   private getFileSize(uri: string): number | undefined {
-    if (!this.isLocalPath(uri)) return undefined;
+    if (!this.isAllowedLocalPath(uri)) return undefined;
 
     try {
       const stats = fs.statSync(uri);
@@ -358,7 +363,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
   }
 
   private getDirSize(uri: string): number | undefined {
-    if (!this.isLocalPath(uri)) return undefined;
+    if (!this.isAllowedLocalPath(uri)) return undefined;
 
     try {
       const stats = fs.statSync(uri);
@@ -385,7 +390,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
   }
 
   private computeChecksum(uri: string): string | undefined {
-    if (!this.isLocalPath(uri)) return undefined;
+    if (!this.isAllowedLocalPath(uri)) return undefined;
 
     try {
       const stats = fs.statSync(uri);

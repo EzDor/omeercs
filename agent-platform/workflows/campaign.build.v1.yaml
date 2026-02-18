@@ -126,7 +126,7 @@ steps:
   # Step 7: Button Segmentation
   - step_id: intro_button_segmentation
     skill_id: segment_start_button
-    depends_on: [intro_image]
+    depends_on: [intro_image, plan]
     description: Detect and segment start button in intro image
     input_selector:
       image_uri:
@@ -147,7 +147,7 @@ steps:
   # Step 8: Intro Video Loop
   - step_id: intro_video
     skill_id: generate_intro_video_loop
-    depends_on: [intro_image]
+    depends_on: [intro_image, plan]
     description: Generate looping intro video from intro image
     input_selector:
       image_uri:

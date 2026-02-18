@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GenerationJob } from '@agentic-template/dao/src/entities/generation-job.entity';
 import { StabilityAdapter } from './adapters/stability.adapter';
@@ -22,7 +22,11 @@ import { PollingService } from './services/polling.service';
   providers: [
     StabilityAdapter,
     StubAudioAdapter,
-    StubImageAdapter,
+    {
+      provide: StubImageAdapter,
+      useFactory: (configService: ConfigService) => new StubImageAdapter(configService.get<string>('SKILLS_OUTPUT_DIR')),
+      inject: [ConfigService],
+    },
     NanoBananaVideoAdapter,
     NanoBananaSfxAdapter,
     SunoBgmAdapter,

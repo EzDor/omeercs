@@ -56,7 +56,7 @@ output_schema:
       properties:
         template_id:
           type: string
-          enum: [spin_wheel, scratch_card, slot_machine, memory_match, catch_game, quiz]
+          enum: [spin_wheel]
         template_name:
           type: string
         reasoning:

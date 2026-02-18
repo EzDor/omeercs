@@ -407,7 +407,17 @@ export class SkillCatalogService implements OnModuleInit {
       { skillId: 'optimize_3d_asset', create: () => new Optimize3DAssetHandler(this.configService) },
       { skillId: 'generate_threejs_code', create: () => new GenerateThreejsCodeHandler(this.configService) },
       { skillId: 'validate_bundle', create: () => new ValidateBundleHandler(this.configService) },
-      { skillId: 'bundle_game_template', create: () => new BundleGameTemplateHandler(this.configService, this.templateManifestLoader, this.templateConfigValidator) },
+      {
+        skillId: 'bundle_game_template',
+        create: () =>
+          new BundleGameTemplateHandler(
+            this.configService,
+            this.templateManifestLoader,
+            this.templateConfigValidator,
+            new GenerateThreejsCodeHandler(this.configService),
+            new ValidateBundleHandler(this.configService),
+          ),
+      },
       { skillId: 'validate_game_bundle', create: () => new ValidateGameBundleHandler(this.configService) },
       { skillId: 'assemble_campaign_manifest', create: () => new AssembleCampaignManifestHandler(this.configService) },
       { skillId: 'extract_theme_from_image', create: () => new ExtractThemeFromImageHandler(this.configService) },

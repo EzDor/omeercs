@@ -22,12 +22,17 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
 
   private readonly useStubProvider: boolean;
 
+  private readonly ALLOWED_AUDIO_DOMAINS = ['storage.googleapis.com', 'replicate.delivery', 'api.stability.ai', 'stability.ai', 'api.elevenlabs.io'];
+
   constructor(private readonly configService: ConfigService) {
     this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
     this.defaultModel = configService.get<string>('SFX_GENERATION_MODEL') || 'audiogen';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.audioGenerationTimeout = configService.get<number>('AUDIO_GENERATION_TIMEOUT_MS') || 300000;
     this.useStubProvider = configService.get<string>('AUDIO_PROVIDER_STUB') === 'true';
+    if (this.useStubProvider && configService.get<string>('NODE_ENV') === 'production') {
+      throw new Error('Stub audio provider must not be used in production');
+    }
   }
 
   async execute(input: GenerateSfxPackInput, context: SkillExecutionContext): Promise<SkillResult<GenerateSfxPackOutput>> {
@@ -99,8 +104,12 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
           }
 
           // Save the SFX file
-          const filename = variations > 1 ? `${sfxRequest.name}_${varIndex + 1}.${specs.format}` : `${sfxRequest.name}.${specs.format}`;
-          const filePath = path.join(outputPath, filename);
+          const safeName = this.sanitizeFilename(sfxRequest.name);
+          const safeFormat = this.sanitizeFormat(specs.format);
+          const filename = variations > 1 ? `${safeName}_${varIndex + 1}.${safeFormat}` : `${safeName}.${safeFormat}`;
+          const filePath = path.join(outputPath, path.basename(filename));
+
+          this.validateAudioUrl(audioUrl);
 
           const fileResponse = await fetch(audioUrl);
           if (!fileResponse.ok) {
@@ -215,12 +224,7 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
     }
   }
 
-  private executeStub(
-    input: GenerateSfxPackInput,
-    context: SkillExecutionContext,
-    startTime: number,
-    timings: Record<string, number>,
-  ): SkillResult<GenerateSfxPackOutput> {
+  private executeStub(input: GenerateSfxPackInput, context: SkillExecutionContext, startTime: number, timings: Record<string, number>): SkillResult<GenerateSfxPackOutput> {
     this.logger.log(`Using stub audio provider for SFX pack`);
     const specs = this.normalizeSpecs(input.specs);
     const outputPath = path.join(this.outputDir, context.executionId, 'sfx');
@@ -233,8 +237,10 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
 
     for (const sfxRequest of input.sfx_list) {
       const sfxDuration = sfxRequest.duration_sec || DEFAULT_SFX_DURATION;
-      const filename = `${sfxRequest.name}.${specs.format}`;
-      const filePath = path.join(outputPath, filename);
+      const safeName = this.sanitizeFilename(sfxRequest.name);
+      const safeFormat = this.sanitizeFormat(specs.format);
+      const filename = `${safeName}.${safeFormat}`;
+      const filePath = path.join(outputPath, path.basename(filename));
       const wavBuffer = this.generateSilentWav(sfxDuration);
       fs.writeFileSync(filePath, wavBuffer);
       totalSize += wavBuffer.length;
@@ -256,7 +262,13 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
         style_theme: input.style?.theme,
         format: specs.format,
         sample_rate: DEFAULT_SAMPLE_RATE,
-        sfx_files: generatedSfx.map((sfx) => ({ name: sfx.name, intent: sfx.intent, filename: path.basename(sfx.uri), duration_sec: sfx.duration_sec, file_size_bytes: sfx.file_size_bytes })),
+        sfx_files: generatedSfx.map((sfx) => ({
+          name: sfx.name,
+          intent: sfx.intent,
+          filename: path.basename(sfx.uri),
+          duration_sec: sfx.duration_sec,
+          file_size_bytes: sfx.file_size_bytes,
+        })),
       }),
     );
 
@@ -289,20 +301,38 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
     const dataSize = numSamples * numChannels * bytesPerSample;
     const header = Buffer.alloc(44);
     let offset = 0;
-    header.write('RIFF', offset); offset += 4;
-    header.writeUInt32LE(36 + dataSize, offset); offset += 4;
-    header.write('WAVE', offset); offset += 4;
-    header.write('fmt ', offset); offset += 4;
-    header.writeUInt32LE(16, offset); offset += 4;
-    header.writeUInt16LE(1, offset); offset += 2;
-    header.writeUInt16LE(numChannels, offset); offset += 2;
-    header.writeUInt32LE(sampleRate, offset); offset += 4;
-    header.writeUInt32LE(sampleRate * numChannels * bytesPerSample, offset); offset += 4;
-    header.writeUInt16LE(numChannels * bytesPerSample, offset); offset += 2;
+    header.write('RIFF', offset);
+    offset += 4;
+    header.writeUInt32LE(36 + dataSize, offset);
+    offset += 4;
+    header.write('WAVE', offset);
+    offset += 4;
+    header.write('fmt ', offset);
+    offset += 4;
+    header.writeUInt32LE(16, offset);
+    offset += 4;
+    header.writeUInt16LE(1, offset);
+    offset += 2;
+    header.writeUInt16LE(numChannels, offset);
+    offset += 2;
+    header.writeUInt32LE(sampleRate, offset);
+    offset += 4;
+    header.writeUInt32LE(sampleRate * numChannels * bytesPerSample, offset);
+    offset += 4;
+    header.writeUInt16LE(numChannels * bytesPerSample, offset);
+    offset += 2;
     header.writeUInt16LE(bitsPerSample, offset);
     header.write('data', 36);
     header.writeUInt32LE(dataSize, 40);
     return Buffer.concat([header, Buffer.alloc(dataSize)]);
+  }
+
+  private validateAudioUrl(url: string): void {
+    const parsed = new URL(url);
+    const isAllowed = this.ALLOWED_AUDIO_DOMAINS.some((domain) => parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`));
+    if (!isAllowed) {
+      throw new Error(`Audio URL from untrusted domain: ${parsed.hostname}`);
+    }
   }
 
   private buildSfxPrompt(sfxRequest: SfxRequest, styleTheme?: string): string {
@@ -362,6 +392,14 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
     }
 
     return parts.join(', ');
+  }
+
+  private sanitizeFilename(name: string): string {
+    return name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 100);
+  }
+
+  private sanitizeFormat(format: string): string {
+    return format.replace(/[^a-z0-9]/g, '').substring(0, 10);
   }
 
   private normalizeSpecs(specs?: GenerateSfxPackInput['specs']): {

@@ -6,6 +6,7 @@ import { GenerateIntroVideoLoopInput, GenerateIntroVideoLoopOutput } from '@agen
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 @Injectable()
@@ -18,12 +19,17 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
 
   private readonly useStubProvider: boolean;
 
+  private readonly ALLOWED_VIDEO_DOMAINS = ['runway-cdn.com', 'storage.googleapis.com', 'replicate.delivery', 'api.stability.ai', 'stability.ai'];
+
   constructor(private readonly configService: ConfigService) {
     this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
     this.defaultModel = configService.get<string>('VIDEO_GENERATION_MODEL') || 'runway-gen3';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.videoGenerationTimeout = configService.get<number>('VIDEO_GENERATION_TIMEOUT_MS') || 300000;
     this.useStubProvider = configService.get<string>('VIDEO_PROVIDER_STUB') === 'true';
+    if (this.useStubProvider && configService.get<string>('NODE_ENV') === 'production') {
+      throw new Error('Stub video provider must not be used in production');
+    }
   }
 
   async execute(input: GenerateIntroVideoLoopInput, context: SkillExecutionContext): Promise<SkillResult<GenerateIntroVideoLoopOutput>> {
@@ -157,20 +163,18 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     }
   }
 
-  private executeStub(
+  private async executeStub(
     input: GenerateIntroVideoLoopInput,
     context: SkillExecutionContext,
     startTime: number,
     timings: Record<string, number>,
-  ): SkillResult<GenerateIntroVideoLoopOutput> {
+  ): Promise<SkillResult<GenerateIntroVideoLoopOutput>> {
     this.logger.log(`Using stub video provider for intro video loop`);
     const specs = this.normalizeSpecs(input.specs);
     const outputPath = path.join(this.outputDir, context.executionId);
-    if (!fs.existsSync(outputPath)) {
-      fs.mkdirSync(outputPath, { recursive: true });
-    }
+    await fsPromises.mkdir(outputPath, { recursive: true });
     const filePath = path.join(outputPath, `intro-loop.${specs.format}`);
-    fs.writeFileSync(filePath, Buffer.alloc(1024));
+    await fsPromises.writeFile(filePath, Buffer.alloc(1024));
     const totalTime = Date.now() - startTime;
 
     return skillSuccess(
@@ -253,13 +257,21 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     };
   }
 
+  private validateLocalPath(uri: string): void {
+    const resolved = path.resolve(uri);
+    const allowedBase = path.resolve(this.outputDir) + path.sep;
+    if (!resolved.startsWith(allowedBase)) {
+      throw new Error(`Access denied: path outside allowed directory`);
+    }
+  }
+
   private prepareImageData(imageUri: string): { value: string; isUrl: boolean } {
-    // If it's already a URL, return as-is
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
       return { value: imageUri, isUrl: true };
     }
 
-    // If it's a local file, convert to base64
+    this.validateLocalPath(imageUri);
+
     if (fs.existsSync(imageUri)) {
       const buffer = fs.readFileSync(imageUri);
       const base64 = buffer.toString('base64');
@@ -271,14 +283,20 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     throw new Error(`Invalid image URI: ${imageUri}`);
   }
 
-  private async saveVideo(videoUrl: string, executionId: string, format: string): Promise<{ uri: string; fileSize: number }> {
-    // Ensure output directory exists
-    const outputPath = path.join(this.outputDir, executionId);
-    if (!fs.existsSync(outputPath)) {
-      fs.mkdirSync(outputPath, { recursive: true });
+  private validateVideoUrl(url: string): void {
+    const parsed = new URL(url);
+    const isAllowed = this.ALLOWED_VIDEO_DOMAINS.some((domain) => parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`));
+    if (!isAllowed) {
+      throw new Error(`Video URL from untrusted domain: ${parsed.hostname}`);
     }
+  }
 
-    // Download the video
+  private async saveVideo(videoUrl: string, executionId: string, format: string): Promise<{ uri: string; fileSize: number }> {
+    this.validateVideoUrl(videoUrl);
+
+    const outputPath = path.join(this.outputDir, executionId);
+    await fsPromises.mkdir(outputPath, { recursive: true });
+
     const response = await fetch(videoUrl);
     if (!response.ok) {
       throw new Error(`Failed to download video: ${response.statusText}`);
@@ -288,9 +306,9 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     const filename = `intro-loop.${format}`;
     const filePath = path.join(outputPath, filename);
 
-    fs.writeFileSync(filePath, buffer);
+    await fsPromises.writeFile(filePath, buffer);
 
-    const stats = fs.statSync(filePath);
+    const stats = await fsPromises.stat(filePath);
 
     return {
       uri: filePath,

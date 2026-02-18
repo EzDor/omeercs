@@ -59,6 +59,7 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - WEBAPP_URL=${WEBAPP_URL:-http://localhost:5173}
       - SKILLS_OUTPUT_DIR=/tmp/skills/output
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     volumes:
       - ./api-center:/app/api-center
       - ./dao:/app/dao
@@ -124,6 +125,8 @@ services:
       - AUDIO_PROVIDER_STUB=${AUDIO_PROVIDER_STUB:-false}
       - IMAGE_PROVIDER_STUB=${IMAGE_PROVIDER_STUB:-false}
       - VIDEO_PROVIDER_STUB=${VIDEO_PROVIDER_STUB:-false}
+      - SKILLS_OUTPUT_DIR=/tmp/skills/output
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     volumes:
       - ./agent-platform:/app/agent-platform
       - ./dao:/app/dao

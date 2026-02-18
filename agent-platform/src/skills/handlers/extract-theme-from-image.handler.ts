@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import sharp from 'sharp';
 import * as fs from 'fs';
+import * as path from 'path';
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 
@@ -84,9 +85,17 @@ export class ExtractThemeFromImageHandler implements SkillHandler<ExtractThemeIn
   }
 
   private resolveImagePath(uri: string): string {
-    if (uri.startsWith('/')) return uri;
-    if (uri.startsWith('storage://')) return uri.replace('storage://', `${this.storageDir}/`);
-    return `${this.storageDir}/${uri}`;
+    let resolved: string;
+    if (uri.startsWith('storage://')) {
+      resolved = path.resolve(this.storageDir, uri.replace('storage://', ''));
+    } else {
+      resolved = path.resolve(this.storageDir, uri);
+    }
+    const allowedBase = path.resolve(this.storageDir) + path.sep;
+    if (!resolved.startsWith(allowedBase)) {
+      throw new Error('Image path outside allowed directory');
+    }
+    return resolved;
   }
 
   private extractDominantColors(data: Buffer, width: number, height: number, channels: number, maxColors: number): ThemeColor[] {

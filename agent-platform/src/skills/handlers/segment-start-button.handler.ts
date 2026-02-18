@@ -237,13 +237,21 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
     return parts.join(' ');
   }
 
+  private validateLocalPath(uri: string): void {
+    const resolved = path.resolve(uri);
+    const allowedBase = path.resolve(this.outputDir) + path.sep;
+    if (!resolved.startsWith(allowedBase)) {
+      throw new Error(`Access denied: path outside allowed directory`);
+    }
+  }
+
   private prepareImageUrl(imageUri: string): string {
-    // If it's already a URL, return as-is
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
       return imageUri;
     }
 
-    // If it's a local file, convert to base64 data URL
+    this.validateLocalPath(imageUri);
+
     if (fs.existsSync(imageUri)) {
       const buffer = fs.readFileSync(imageUri);
       const base64 = buffer.toString('base64');

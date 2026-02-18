@@ -11,8 +11,8 @@ export class StubImageAdapter implements ImageProviderAdapter {
   private readonly logger = new Logger(StubImageAdapter.name);
   private readonly outputDir: string;
 
-  constructor() {
-    this.outputDir = process.env.SKILLS_OUTPUT_DIR || '/tmp/skills/output';
+  constructor(outputDir?: string) {
+    this.outputDir = outputDir || '/tmp/skills/output';
     this.ensureOutputDir();
   }
 
