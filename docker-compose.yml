@@ -58,11 +58,14 @@ services:
       - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://litellm-proxy:4000}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - WEBAPP_URL=${WEBAPP_URL:-http://localhost:5173}
+      - SKILLS_OUTPUT_DIR=/tmp/skills/output
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     volumes:
       - ./api-center:/app/api-center
       - ./dao:/app/dao
       - ./dto:/app/dto
       - ./common:/app/common
+      - skills-output:/tmp/skills/output
     networks:
       - agentic-template-network
     depends_on:
@@ -118,13 +121,20 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}
       - CLAUDE_MAX_TOKENS=${CLAUDE_MAX_TOKENS:-8192}
+      - GAME_TEMPLATES_DIR=/app/templates/games
       - AUDIO_PROVIDER_STUB=${AUDIO_PROVIDER_STUB:-false}
+      - IMAGE_PROVIDER_STUB=${IMAGE_PROVIDER_STUB:-false}
+      - VIDEO_PROVIDER_STUB=${VIDEO_PROVIDER_STUB:-false}
+      - SKILLS_OUTPUT_DIR=/tmp/skills/output
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     volumes:
       - ./agent-platform:/app/agent-platform
       - ./dao:/app/dao
       - ./dto:/app/dto
       - ./common:/app/common
       - ./skills:/app/skills
+      - ./templates:/app/templates
+      - skills-output:/tmp/skills/output
     networks:
       - agentic-template-network
     depends_on:
@@ -206,3 +216,4 @@ networks:
 volumes:
   postgres-data:
   valkey-data:
+  skills-output:

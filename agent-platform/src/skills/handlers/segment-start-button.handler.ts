@@ -80,7 +80,7 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
 
   constructor(private readonly configService: ConfigService) {
     this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
-    this.defaultModel = configService.get<string>('VISION_MODEL') || 'gpt-4o';
+    this.defaultModel = configService.get<string>('VISION_MODEL') || 'gemini-2.0-flash';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
   }
 
@@ -115,7 +115,6 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
                 type: 'image_url',
                 image_url: {
                   url: imageUrl,
-                  detail: 'high',
                 },
               },
             ],
@@ -238,13 +237,21 @@ export class SegmentStartButtonHandler implements SkillHandler<SegmentStartButto
     return parts.join(' ');
   }
 
+  private validateLocalPath(uri: string): void {
+    const resolved = path.resolve(uri);
+    const allowedBase = path.resolve(this.outputDir) + path.sep;
+    if (!resolved.startsWith(allowedBase)) {
+      throw new Error(`Access denied: path outside allowed directory`);
+    }
+  }
+
   private prepareImageUrl(imageUri: string): string {
-    // If it's already a URL, return as-is
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
       return imageUri;
     }
 
-    // If it's a local file, convert to base64 data URL
+    this.validateLocalPath(imageUri);
+
     if (fs.existsSync(imageUri)) {
       const buffer = fs.readFileSync(imageUri);
       const base64 = buffer.toString('base64');

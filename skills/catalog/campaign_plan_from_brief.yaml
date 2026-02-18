@@ -143,6 +143,7 @@ output_schema:
             type: object
     video_prompts:
       type: array
+      minItems: 3
       items:
         type: object
         required: [type, prompt, style_notes, duration_sec]
@@ -158,16 +159,26 @@ output_schema:
             type: number
     audio_specs:
       type: object
-      required: [bgm_style, bgm_bpm, sfx_list]
+      required: [genre, bpm, sfx_list]
       properties:
-        bgm_style:
+        genre:
           type: string
-        bgm_bpm:
+          enum: [electronic, ambient, orchestral, rock, pop, jazz, classical, cinematic, retro, chiptune, lofi, upbeat, calm, energetic, mysterious]
+        mood:
+          type: string
+          enum: [happy, sad, tense, relaxed, epic, playful, dramatic, neutral]
+        bpm:
           type: number
         sfx_list:
           type: array
           items:
-            type: string
+            type: object
+            required: [name, intent]
+            properties:
+              name:
+                type: string
+              intent:
+                type: string
     copy:
       type: object
       required: [intro_headline, intro_subtext, win_message, lose_message, cta_text]

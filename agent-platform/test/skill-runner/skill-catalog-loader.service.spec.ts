@@ -8,6 +8,8 @@ import { SkillCatalogService } from '../../src/skills/services/skill-catalog.ser
 import { SkillDescriptor } from '@agentic-template/dto/src/skills/skill-descriptor.interface';
 import { ImageProviderRegistry } from '@agentic-template/common/src/providers/registries/image-provider.registry';
 import { AudioProviderRegistry } from '@agentic-template/common/src/providers/registries/audio-provider.registry';
+import { TemplateManifestLoaderService } from '../../src/template-system/services/template-manifest-loader.service';
+import { TemplateConfigValidatorService } from '../../src/template-system/services/template-config-validator.service';
 
 describe('SkillCatalogService - Catalog Loading', () => {
   let service: SkillCatalogService;
@@ -109,6 +111,14 @@ describe('SkillCatalogService - Catalog Loading', () => {
             getDefaultProvider: jest.fn(),
             hasProvider: jest.fn(),
           },
+        },
+        {
+          provide: TemplateManifestLoaderService,
+          useValue: { loadManifest: jest.fn() },
+        },
+        {
+          provide: TemplateConfigValidatorService,
+          useValue: { validate: jest.fn(), validateConfig: jest.fn() },
         },
       ],
     }).compile();

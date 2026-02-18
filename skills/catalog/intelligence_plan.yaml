@@ -26,13 +26,11 @@ input_schema:
     - brief
   properties:
     brief:
-      type: string
+      type: [string, object]
       description: The marketing brief describing campaign goals, brand, audience, and requirements
-      minLength: 10
-      maxLength: 10000
     constraints:
-      type: string
-      description: Optional JSON string with constraints (budget, timeline, excluded templates)
+      type: [string, object]
+      description: Optional JSON string or object with constraints (budget, timeline, excluded templates)
 
 output_schema:
   type: object
@@ -58,7 +56,7 @@ output_schema:
       properties:
         template_id:
           type: string
-          enum: [spin_wheel, scratch_card, quiz, memory_match]
+          enum: [spin_wheel]
         template_name:
           type: string
         reasoning:

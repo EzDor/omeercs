@@ -61,24 +61,25 @@ export function buildPayload(workflowName: WorkflowName, options: PayloadOptions
 function buildCampaignBuildPayload(campaignName: string): Record<string, unknown> {
   return {
     campaign_id: randomUUID(),
-    brief: {
-      campaign_name: campaignName,
-      brand_name: 'Test Brand',
-      objective: 'Engage users with an interactive game experience',
-      target_audience: 'Adults 18-45',
-      tone: 'Fun and exciting',
-      key_messages: ['Win big prizes', 'Easy to play'],
-    },
-    brand_assets: {
-      logo_url: 'https://example.com/logo.png',
-      primary_color: '#FF5733',
-      secondary_color: '#33FF57',
-      font_family: 'Arial',
-    },
+    campaign_name: campaignName,
+    brief: `Campaign: ${campaignName}
+Brand: Test Brand
+Objective: Engage users with an interactive game experience
+Target Audience: Adults 18-45
+Tone: Fun and exciting
+Key Messages: Win big prizes, Easy to play`,
+    tone: 'Fun and exciting',
+    brand_assets: [
+      { uri: 'https://example.com/logo.png', type: 'logo', description: 'Test Brand logo' },
+      { uri: '#FF5733', type: 'color_palette', description: 'Primary brand color' },
+      { uri: '#33FF57', type: 'color_palette', description: 'Secondary brand color' },
+    ],
     constraints: {
+      max_game_duration_sec: 30,
       duration_sec: 30,
       intro_duration_sec: 5,
       difficulty: 'medium',
+      target_audience: 'Adults 18-45',
       max_bundle_size_mb: 50,
     },
   };

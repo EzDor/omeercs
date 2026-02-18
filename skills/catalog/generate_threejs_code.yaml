@@ -27,7 +27,7 @@ input_schema:
   properties:
     template_id:
       type: string
-      enum: [spin_wheel, quiz, scratch_card, memory_match]
+      enum: [spin_wheel, scratch_card, slot_machine, memory_match, catch_game, quiz]
       description: Template to generate code for
     template_manifest:
       type: object

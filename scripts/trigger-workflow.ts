@@ -6,7 +6,7 @@ interface CliOptions {
   workflow: WorkflowName;
   template: TemplateName;
   baseRun?: string;
-  tenantId: string;
+  token: string;
   name: string;
   apiUrl: string;
   pollInterval: number;
@@ -91,7 +91,6 @@ function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
   const options: Partial<CliOptions> = {
     template: 'spin_wheel',
-    tenantId: 'dev-tenant',
     name: 'Test Campaign',
     apiUrl: 'http://localhost:3001',
     pollInterval: 2000,
@@ -123,8 +122,9 @@ function parseArgs(): CliOptions {
         options.name = nextArg;
         i++;
         break;
-      case '--tenant-id':
-        options.tenantId = nextArg;
+      case '-k':
+      case '--token':
+        options.token = nextArg;
         i++;
         break;
       case '--api-url':
@@ -148,6 +148,12 @@ function parseArgs(): CliOptions {
 
   if (!options.workflow) {
     console.error(color('Error: --workflow is required', 'red'));
+    printUsage();
+    process.exit(1);
+  }
+
+  if (!options.token) {
+    console.error(color('Error: --token is required (Clerk JWT)', 'red'));
     printUsage();
     process.exit(1);
   }
@@ -181,13 +187,13 @@ ${color('Usage:', 'cyan')}
 
 ${color('Required:', 'cyan')}
   -w, --workflow     Workflow name to trigger
+  -k, --token        Clerk JWT token for authentication
 
 ${color('Options:', 'cyan')}
   -t, --template     Game template (default: spin_wheel)
                      Valid: ${VALID_TEMPLATES.join(', ')}
   -b, --base-run     Base run ID (required for update workflows)
   -n, --name         Campaign name (default: Test Campaign)
-  --tenant-id        Tenant ID (default: dev-tenant)
   --api-url          API base URL (default: http://localhost:3001)
   --poll-interval    Polling interval in ms (default: 2000)
   --max-poll-time    Max polling time in ms (default: 300000)
@@ -198,24 +204,25 @@ ${color('Available Workflows:', 'cyan')}
 
 ${color('Examples:', 'cyan')}
   ${color('# Minimal build with spin_wheel template', 'dim')}
-  pnpm trigger -w campaign.build.minimal -t spin_wheel -n "My Campaign"
+  pnpm trigger -w campaign.build.minimal -t spin_wheel -n "My Campaign" --token "<clerk-jwt>"
 
   ${color('# Full build from brief', 'dim')}
-  pnpm trigger -w campaign.build -n "Big Campaign"
+  pnpm trigger -w campaign.build -n "Big Campaign" --token "<clerk-jwt>"
 
   ${color('# Update audio on existing run', 'dim')}
-  pnpm trigger -w campaign.update_audio -b <run-id>
+  pnpm trigger -w campaign.update_audio -b <run-id> --token "<clerk-jwt>"
 
   ${color('# Replace 3D asset', 'dim')}
-  pnpm trigger -w campaign.replace_3d_asset -b <run-id>
+  pnpm trigger -w campaign.replace_3d_asset -b <run-id> --token "<clerk-jwt>"
 `);
 }
 
-async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+async function fetchJson<T>(url: string, token: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
@@ -228,12 +235,9 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
   return response.json();
 }
 
-async function triggerWorkflow(apiUrl: string, tenantId: string, workflowName: string, payload: Record<string, unknown>): Promise<TriggerResponse> {
-  return fetchJson<TriggerResponse>(`${apiUrl}/api/runs`, {
+async function triggerWorkflow(apiUrl: string, token: string, workflowName: string, payload: Record<string, unknown>): Promise<TriggerResponse> {
+  return fetchJson<TriggerResponse>(`${apiUrl}/api/runs`, token, {
     method: 'POST',
-    headers: {
-      'x-tenant-id': tenantId,
-    },
     body: JSON.stringify({
       workflowName,
       workflowVersion: '1.0.0',
@@ -242,28 +246,16 @@ async function triggerWorkflow(apiUrl: string, tenantId: string, workflowName: s
   });
 }
 
-async function getRun(apiUrl: string, tenantId: string, runId: string): Promise<RunResponse> {
-  return fetchJson<RunResponse>(`${apiUrl}/api/runs/${runId}`, {
-    headers: {
-      'x-tenant-id': tenantId,
-    },
-  });
+async function getRun(apiUrl: string, token: string, runId: string): Promise<RunResponse> {
+  return fetchJson<RunResponse>(`${apiUrl}/api/runs/${runId}`, token);
 }
 
-async function getRunSteps(apiUrl: string, tenantId: string, runId: string): Promise<RunStepsResponse> {
-  return fetchJson<RunStepsResponse>(`${apiUrl}/api/runs/${runId}/steps`, {
-    headers: {
-      'x-tenant-id': tenantId,
-    },
-  });
+async function getRunSteps(apiUrl: string, token: string, runId: string): Promise<RunStepsResponse> {
+  return fetchJson<RunStepsResponse>(`${apiUrl}/api/runs/${runId}/steps`, token);
 }
 
-async function getRunArtifacts(apiUrl: string, tenantId: string, runId: string): Promise<ArtifactsResponse> {
-  return fetchJson<ArtifactsResponse>(`${apiUrl}/api/runs/${runId}/artifacts`, {
-    headers: {
-      'x-tenant-id': tenantId,
-    },
-  });
+async function getRunArtifacts(apiUrl: string, token: string, runId: string): Promise<ArtifactsResponse> {
+  return fetchJson<ArtifactsResponse>(`${apiUrl}/api/runs/${runId}/artifacts`, token);
 }
 
 function getStepStatusIcon(status: StepResponse['status']): string {
@@ -327,12 +319,12 @@ function renderProgress(run: RunResponse, steps: StepResponse[]): number {
   return lines.length;
 }
 
-async function pollUntilComplete(apiUrl: string, tenantId: string, runId: string, pollInterval: number, maxPollTime: number): Promise<{ run: RunResponse; steps: StepResponse[] }> {
+async function pollUntilComplete(apiUrl: string, token: string, runId: string, pollInterval: number, maxPollTime: number): Promise<{ run: RunResponse; steps: StepResponse[] }> {
   const startTime = Date.now();
   let lastLineCount = 0;
 
   while (true) {
-    const [run, stepsResponse] = await Promise.all([getRun(apiUrl, tenantId, runId), getRunSteps(apiUrl, tenantId, runId)]);
+    const [run, stepsResponse] = await Promise.all([getRun(apiUrl, token, runId), getRunSteps(apiUrl, token, runId)]);
 
     if (lastLineCount > 0) {
       clearLines(lastLineCount);
@@ -362,9 +354,11 @@ async function main(): Promise<void> {
   console.log('');
 
   console.log(`Workflow:  ${color(options.workflow, 'bright')}`);
-  console.log(`Template:  ${options.template}`);
+  if (options.workflow === 'campaign.build.minimal') {
+    console.log(`Template:  ${options.template}`);
+  }
   console.log(`Name:      ${options.name}`);
-  console.log(`Tenant:    ${options.tenantId}`);
+  console.log(`Token:     ***${options.token.slice(-6)}`);
   console.log(`API:       ${options.apiUrl}`);
   if (options.baseRun) {
     console.log(`Base Run:  ${options.baseRun}`);
@@ -379,12 +373,12 @@ async function main(): Promise<void> {
     });
 
     console.log(color('Triggering workflow...', 'dim'));
-    const triggerResponse = await triggerWorkflow(options.apiUrl, options.tenantId, options.workflow, payload);
+    const triggerResponse = await triggerWorkflow(options.apiUrl, options.token, options.workflow, payload);
 
     console.log(`Run ID: ${color(triggerResponse.runId, 'bright')}`);
     console.log('');
 
-    const { run, steps } = await pollUntilComplete(options.apiUrl, options.tenantId, triggerResponse.runId, options.pollInterval, options.maxPollTime);
+    const { run, steps } = await pollUntilComplete(options.apiUrl, options.token, triggerResponse.runId, options.pollInterval, options.maxPollTime);
 
     console.log('');
     console.log(color('═══════════════════════════════════════════════', 'cyan'));
@@ -410,7 +404,7 @@ async function main(): Promise<void> {
     console.log(`Cache hits: ${cacheHits}/${steps.length} (${Math.round((cacheHits / steps.length) * 100)}%)`);
 
     try {
-      const artifactsResponse = await getRunArtifacts(options.apiUrl, options.tenantId, triggerResponse.runId);
+      const artifactsResponse = await getRunArtifacts(options.apiUrl, options.token, triggerResponse.runId);
       if (artifactsResponse.artifacts.length > 0) {
         console.log('');
         console.log(color('Artifacts:', 'bright'));

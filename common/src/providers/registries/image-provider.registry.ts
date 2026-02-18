@@ -4,6 +4,7 @@ import { ImageProviderAdapter } from '@agentic-template/dto/src/providers/interf
 import { ProviderInfo } from '@agentic-template/dto/src/providers/interfaces/provider-registry.interface';
 import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { ProviderError } from '../errors/provider.error';
+import { StubImageAdapter } from '../adapters/stub-image.adapter';
 import { StabilityAdapter } from '../adapters/stability.adapter';
 import { NanoBananaImageAdapter } from '../adapters/nano-banana-image.adapter';
 
@@ -14,16 +15,22 @@ export class ImageProviderRegistry {
   private readonly defaultProviderId: string;
 
   constructor(
+    private readonly stubImageAdapter: StubImageAdapter,
     private readonly stabilityAdapter: StabilityAdapter,
     @Optional() private readonly nanoBananaImageAdapter: NanoBananaImageAdapter,
     private readonly configService: ConfigService,
   ) {
     this.providers = new Map();
+    this.providers.set('stub', stubImageAdapter);
     this.providers.set('stability', stabilityAdapter);
     if (nanoBananaImageAdapter) {
       this.providers.set('nano-banana-image', nanoBananaImageAdapter);
     }
-    this.defaultProviderId = configService.get<string>('DEFAULT_IMAGE_PROVIDER') || 'stability';
+    const useStub = this.configService.get<string>('IMAGE_PROVIDER_STUB') === 'true';
+    if (useStub && this.configService.get<string>('NODE_ENV') === 'production') {
+      throw new Error('Stub image provider must not be used in production');
+    }
+    this.defaultProviderId = useStub ? 'stub' : (configService.get<string>('DEFAULT_IMAGE_PROVIDER') || 'stability');
     this.logger.log(`Registered ${this.providers.size} image provider(s): ${Array.from(this.providers.keys()).join(', ')} (default: ${this.defaultProviderId})`);
   }
 

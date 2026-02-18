@@ -19,6 +19,7 @@ import type { CopyType } from '@agentic-template/dto/src/intelligence/intelligen
 export class IntelligenceApiService {
   private readonly logger = new Logger(IntelligenceApiService.name);
   private readonly agentPlatformUrl: string;
+  private readonly internalApiKey: string;
 
   constructor(
     @InjectRepository(AiGeneration)
@@ -27,6 +28,7 @@ export class IntelligenceApiService {
     private readonly configService: ConfigService,
   ) {
     this.agentPlatformUrl = this.configService.get<string>('AGENT_PLATFORM_URL', 'http://localhost:3002');
+    this.internalApiKey = this.configService.get<string>('INTERNAL_API_KEY', '');
   }
 
   async generatePlan(tenantId: string, userId: string, dto: GeneratePlanRequest): Promise<GeneratePlanResponse> {
@@ -265,7 +267,11 @@ export class IntelligenceApiService {
     };
   }
 
-  async extractThemeFromImage(tenantId: string, userId: string, file: Express.Multer.File | undefined): Promise<ExtractThemeResponse> {
+  async extractThemeFromImage(
+    tenantId: string,
+    userId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number } | undefined,
+  ): Promise<ExtractThemeResponse> {
     const startTime = Date.now();
 
     if (!file) {
@@ -279,6 +285,10 @@ export class IntelligenceApiService {
     }
     if (size > 10 * 1024 * 1024) {
       throw new BadRequestException('Image must be under 10MB');
+    }
+    const detectedMime = this.detectImageMimeFromBuffer(buffer);
+    if (!detectedMime || !allowedTypes.includes(detectedMime)) {
+      throw new BadRequestException('File content does not match a supported image format');
     }
 
     const response = await this.callAgentPlatform<{ theme: Record<string, unknown>; duration_ms: number }>('/internal/intelligence/theme/from-image', {
@@ -447,12 +457,35 @@ export class IntelligenceApiService {
     return generation;
   }
 
+  private detectImageMimeFromBuffer(buffer: Buffer): string | null {
+    if (buffer.length < 4) return null;
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return 'image/png';
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+    if (
+      buffer.length >= 12 &&
+      buffer[0] === 0x52 &&
+      buffer[1] === 0x49 &&
+      buffer[2] === 0x46 &&
+      buffer[3] === 0x46 &&
+      buffer[8] === 0x57 &&
+      buffer[9] === 0x45 &&
+      buffer[10] === 0x42 &&
+      buffer[11] === 0x50
+    )
+      return 'image/webp';
+    return null;
+  }
+
   private async callAgentPlatform<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const url = `${this.agentPlatformUrl}${path}`;
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (this.internalApiKey) {
+        headers['x-internal-api-key'] = this.internalApiKey;
+      }
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(30000),
       });

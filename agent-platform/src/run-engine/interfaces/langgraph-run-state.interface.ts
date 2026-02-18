@@ -50,7 +50,7 @@ export const RunStateAnnotation = Annotation.Root({
   }),
 
   error: Annotation<string | null>({
-    reducer: (current: string | null, update: string | null) => update ?? current,
+    reducer: (_current: string | null, update: string | null) => update,
     default: () => null,
   }),
 });

@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Res, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get, Param, Req, Res, NotFoundException, Logger, BadRequestException, ForbiddenException, Query } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { Public } from '@agentic-template/common/src/auth/public.decorator';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html',
@@ -29,33 +30,63 @@ const CONTENT_TYPES: Record<string, string> = {
   '.ttf': 'font/ttf',
 };
 
+const DEFAULT_SIGNED_URL_TTL_SEC = 3600;
+
 @Controller('assets')
 export class AssetsController {
   private readonly logger = new Logger(AssetsController.name);
   private readonly outputDir: string;
+  private readonly signingSecret: string;
+  private readonly signedUrlTtlSec: number;
 
   constructor(private readonly configService: ConfigService) {
     this.outputDir = this.configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
+    this.signingSecret = this.configService.get<string>('ASSET_SIGNING_SECRET', '');
+    this.signedUrlTtlSec = this.configService.get<number>('ASSET_SIGNED_URL_TTL_SEC') || DEFAULT_SIGNED_URL_TTL_SEC;
     this.logger.log(`Assets controller serving from: ${this.outputDir}`);
   }
 
   @Public()
+  @Get('sign/:runId')
+  signUrl(@Param('runId') runId: string): { url: string; expires_at: string } {
+    if (!this.isValidRunId(runId)) {
+      throw new BadRequestException('Invalid run ID format');
+    }
+    if (!this.signingSecret) {
+      throw new BadRequestException('Asset signing not configured');
+    }
+
+    const expires = Math.floor(Date.now() / 1000) + this.signedUrlTtlSec;
+    const sig = this.computeSignature(runId, expires);
+
+    return {
+      url: `/api/assets/${runId}?expires=${expires}&sig=${sig}`,
+      expires_at: new Date(expires * 1000).toISOString(),
+    };
+  }
+
+  @Public()
   @Get(':runId/*')
-  serveAsset(@Param('runId') runId: string, @Param() params: Record<string, string>, @Res() res: Response): void {
-    const filePath = params['0'] || 'index.html';
+  serveAsset(@Param('runId') runId: string, @Req() req: Request, @Res() res: Response, @Query('expires') expires?: string, @Query('sig') sig?: string): void {
+    const prefix = `/api/assets/${runId}/`;
+    const decodedPath = decodeURIComponent(req.path);
+    const filePath = decodedPath.startsWith(prefix) ? decodedPath.slice(prefix.length) || 'index.html' : 'index.html';
 
     if (!this.isValidRunId(runId)) {
       throw new BadRequestException('Invalid run ID format');
     }
+
+    this.validateSignedAccess(runId, expires, sig, req);
 
     if (this.containsPathTraversal(filePath)) {
       throw new BadRequestException('Invalid file path');
     }
 
     const fullPath = path.join(this.outputDir, runId, 'bundle', filePath);
-    const normalizedPath = path.normalize(fullPath);
+    const normalizedPath = path.resolve(fullPath);
+    const allowedBase = path.resolve(this.outputDir) + path.sep;
 
-    if (!normalizedPath.startsWith(this.outputDir)) {
+    if (!normalizedPath.startsWith(allowedBase)) {
       throw new BadRequestException('Access denied');
     }
 
@@ -78,23 +109,43 @@ export class AssetsController {
 
   @Public()
   @Get(':runId')
-  serveRunIndex(@Param('runId') runId: string, @Res() res: Response): void {
+  serveRunIndex(@Param('runId') runId: string, @Req() req: Request, @Res() res: Response, @Query('expires') expires?: string, @Query('sig') sig?: string): void {
     if (!this.isValidRunId(runId)) {
       throw new BadRequestException('Invalid run ID format');
     }
 
-    const indexPath = path.join(this.outputDir, runId, 'bundle', 'index.html');
-    const normalizedPath = path.normalize(indexPath);
+    this.validateSignedAccess(runId, expires, sig, req);
 
-    if (!normalizedPath.startsWith(this.outputDir)) {
-      throw new BadRequestException('Access denied');
+    const redirectUrl = sig ? `/api/assets/${runId}/index.html?expires=${expires}&sig=${sig}` : `/api/assets/${runId}/index.html`;
+    res.redirect(301, redirectUrl);
+  }
+
+  private validateSignedAccess(runId: string, expires?: string, sig?: string, req?: Request): void {
+    if (!this.signingSecret) {
+      return;
     }
 
-    if (!fs.existsSync(normalizedPath)) {
-      throw new NotFoundException(`Run bundle not found for: ${runId}`);
+    if (!expires || !sig) {
+      throw new ForbiddenException('Signed URL required for asset access');
     }
 
-    return this.streamFile(normalizedPath, res);
+    const expiresNum = parseInt(expires, 10);
+    if (isNaN(expiresNum) || expiresNum < Math.floor(Date.now() / 1000)) {
+      this.logger.warn(`Expired signed URL for runId=${runId}, ip=${req?.ip}`);
+      throw new ForbiddenException('Signed URL has expired');
+    }
+
+    const expectedSig = this.computeSignature(runId, expiresNum);
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
+      this.logger.warn(`Invalid signature for runId=${runId}, ip=${req?.ip}`);
+      throw new ForbiddenException('Invalid signature');
+    }
+
+    this.logger.debug(`Signed asset access: runId=${runId}, ip=${req?.ip}`);
+  }
+
+  private computeSignature(runId: string, expires: number): string {
+    return crypto.createHmac('sha256', this.signingSecret).update(`${runId}:${expires}`).digest('hex').substring(0, 32);
   }
 
   private streamFile(filePath: string, res: Response): void {
@@ -103,9 +154,11 @@ export class AssetsController {
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+
+    const corsOrigin = this.configService.get<string>('WEBAPP_URL') || '*';
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
 
     const stream = fs.createReadStream(filePath);
     stream.on('error', (err) => {

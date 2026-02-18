@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GenerationJob } from '@agentic-template/dao/src/entities/generation-job.entity';
 import { StabilityAdapter } from './adapters/stability.adapter';
 import { StubAudioAdapter } from './adapters/stub-audio.adapter';
+import { StubImageAdapter } from './adapters/stub-image.adapter';
 import { NanoBananaVideoAdapter } from './adapters/nano-banana-video.adapter';
 import { NanoBananaSfxAdapter } from './adapters/nano-banana-sfx.adapter';
 import { SunoBgmAdapter } from './adapters/suno-bgm.adapter';
@@ -21,6 +22,11 @@ import { PollingService } from './services/polling.service';
   providers: [
     StabilityAdapter,
     StubAudioAdapter,
+    {
+      provide: StubImageAdapter,
+      useFactory: (configService: ConfigService) => new StubImageAdapter(configService.get<string>('SKILLS_OUTPUT_DIR')),
+      inject: [ConfigService],
+    },
     NanoBananaVideoAdapter,
     NanoBananaSfxAdapter,
     SunoBgmAdapter,

@@ -9,9 +9,10 @@ import { SchemaValidatorService } from './services/schema-validator.service';
 import { LlmGenerationService } from './services/llm-generation.service';
 import { SkillCatalogService } from '../services/skill-catalog.service';
 import { PromptRegistryModule } from '../../prompt-registry/prompt-registry.module';
+import { TemplateSystemModule } from '../../template-system/template-system.module';
 
 @Module({
-  imports: [ConfigModule, PromptRegistryModule, ProvidersModule],
+  imports: [ConfigModule, PromptRegistryModule, ProvidersModule, TemplateSystemModule],
   providers: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService, SkillCatalogService],
   exports: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService],
 })

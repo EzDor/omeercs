@@ -1,11 +1,13 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Logger, UseGuards } from '@nestjs/common';
 import { Public } from '@agentic-template/common/src/auth/public.decorator';
+import { InternalApiKeyGuard } from '@agentic-template/common/src/auth/internal-api-key.guard';
 import { IntelligencePlanService } from './services/intelligence-plan.service';
 import { CopyGenerationService } from './services/copy-generation.service';
 import { ThemeBriefService } from './services/theme-brief.service';
 import { ThemeImageService } from './services/theme-image.service';
 
 @Public()
+@UseGuards(InternalApiKeyGuard)
 @Controller('internal/intelligence')
 export class IntelligenceController {
   private readonly logger = new Logger(IntelligenceController.name);

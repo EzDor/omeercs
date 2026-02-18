@@ -163,8 +163,16 @@ export class AssembleCampaignManifestInput {
 
   @ValidateNested()
   @Type(() => OutcomeVideoConfig)
-  @IsNotEmpty()
-  outcome_videos: OutcomeVideoConfig;
+  @IsOptional()
+  outcome_videos?: OutcomeVideoConfig;
+
+  @IsString()
+  @IsOptional()
+  win_video_uri?: string;
+
+  @IsString()
+  @IsOptional()
+  lose_video_uri?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -172,8 +180,12 @@ export class AssembleCampaignManifestInput {
 
   @ValidateNested()
   @Type(() => ButtonConfig)
-  @IsNotEmpty()
-  button_config: ButtonConfig;
+  @IsOptional()
+  button_config?: ButtonConfig;
+
+  @IsObject()
+  @IsOptional()
+  button_bounds?: Record<string, unknown>;
 
   @ValidateNested()
   @Type(() => CampaignRules)
@@ -197,6 +209,30 @@ export class AssembleCampaignManifestInput {
   @IsObject()
   @IsOptional()
   metadata?: Record<string, unknown>;
+
+  @IsObject()
+  @IsOptional()
+  plan_data?: Record<string, unknown>;
+
+  @IsObject()
+  @IsOptional()
+  intel_plan_data?: Record<string, unknown>;
+
+  @IsObject()
+  @IsOptional()
+  intel_theme_brief_data?: Record<string, unknown>;
+
+  @IsObject()
+  @IsOptional()
+  intel_copy_data?: Record<string, unknown>;
+
+  @IsObject()
+  @IsOptional()
+  intel_theme_image_data?: Record<string, unknown>;
+
+  @IsString()
+  @IsOptional()
+  intro_image?: string;
 }
 
 /**

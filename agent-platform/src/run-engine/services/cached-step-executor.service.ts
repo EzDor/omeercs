@@ -149,6 +149,7 @@ export class CachedStepExecutorService {
     return {
       stepResults: new Map([[stepId, stepResult]]),
       artifacts: new Map([[stepId, artifactIds]]),
+      error: null,
     };
   }
 
