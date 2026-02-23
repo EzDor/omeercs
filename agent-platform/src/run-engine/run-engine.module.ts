@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config';
 import { QueueNames } from '@agentic-template/common/src/queues/queue-names';
 import { TenantClsModule } from '@agentic-template/common/src/tenant/tenant-cls.module';
 
@@ -14,19 +13,15 @@ import { DependencyGraphService } from './services/dependency-graph.service';
 import { WorkflowRegistryService } from './services/workflow-registry.service';
 import { RunEngineService } from './services/run-engine.service';
 import { StepCacheService } from './services/step-cache.service';
-import { InputSelectorInterpreterService } from './services/input-selector-interpreter.service';
-import { WorkflowYamlLoaderService } from './services/workflow-yaml-loader.service';
 import { CachedStepExecutorService } from './services/cached-step-executor.service';
 import { LangGraphWorkflowBuilderService } from './services/langgraph-workflow-builder.service';
 import { LangGraphRunProcessor } from './processors/langgraph-run.processor';
 import { SkillsModule } from '../skills/skills.module';
 import { WorkflowOrchestrationModule } from '../workflow-orchestration/workflow-orchestration.module';
-import { PromptRegistryModule } from '../prompt-registry/prompt-registry.module';
 import { CampaignModule } from '../campaign/campaign.module';
 
 @Module({
   imports: [
-    ConfigModule,
     TenantClsModule,
     TypeOrmModule.forFeature([Run, RunStep, StepCache, Artifact]),
     BullModule.registerQueue({
@@ -37,7 +32,6 @@ import { CampaignModule } from '../campaign/campaign.module';
     }),
     SkillsModule,
     WorkflowOrchestrationModule,
-    PromptRegistryModule,
     CampaignModule,
   ],
   providers: [
@@ -46,12 +40,10 @@ import { CampaignModule } from '../campaign/campaign.module';
     WorkflowRegistryService,
     RunEngineService,
     StepCacheService,
-    InputSelectorInterpreterService,
-    WorkflowYamlLoaderService,
     CachedStepExecutorService,
     LangGraphWorkflowBuilderService,
     LangGraphRunProcessor,
   ],
-  exports: [RunEngineService, WorkflowRegistryService, InputHasherService, DependencyGraphService, StepCacheService, WorkflowYamlLoaderService],
+  exports: [RunEngineService, WorkflowRegistryService, InputHasherService, DependencyGraphService, StepCacheService],
 })
 export class RunEngineModule {}

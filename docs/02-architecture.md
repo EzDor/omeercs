@@ -41,7 +41,7 @@ The system follows a **decoupled microservices** pattern where the API server ne
 │  └──────────┬────────────┴──────────────────────────────────┘  │
 │             │                                                   │
 │  ┌──────────▼───────────┐                                      │
-│  │     Run Engine       │  Loads YAML workflows, builds        │
+│  │     Run Engine       │  TypeScript workflow definitions,     │
 │  │                      │  LangGraph state machines,           │
 │  │  ┌────────────────┐  │  executes steps with caching         │
 │  │  │ Workflow Builder│  │                                      │
@@ -137,7 +137,7 @@ Used by the **Workflow Orchestration** system for LangGraph workflows with Postg
 
 ### Why Two Systems?
 
-- **Run Engine**: Optimized for the campaign build pipeline. Provides YAML-defined workflows, input-based caching, dependency graphs, and artifact tracking. Purpose-built for deterministic multi-step generation.
+- **Run Engine**: Optimized for the campaign build pipeline. Provides TypeScript-defined workflows, input-based caching, dependency graphs, and artifact tracking. Purpose-built for deterministic multi-step generation.
 - **Workflow Orchestration**: General-purpose LangGraph execution with checkpointing. Used for chat workflows and other conversational/iterative patterns.
 
 ## Data Flow: Campaign Build (End to End)
@@ -161,9 +161,9 @@ This is the complete flow when a user clicks "Generate Campaign":
        ↓
 5. Agent Platform: LangGraphRunProcessor picks up the job
        ↓
-6. WorkflowYamlLoaderService:
-   - Loads campaign.build.v1.yaml
-   - Compiles input selectors (YAML DSL → TypeScript functions)
+6. WorkflowRegistryService:
+   - Provides the pre-registered WorkflowSpec for campaign.build
+   - WorkflowSpec contains native TypeScript input selector functions
    - Returns WorkflowSpec with typed steps
        ↓
 7. RunEngineService:

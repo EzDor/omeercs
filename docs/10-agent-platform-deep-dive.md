@@ -10,11 +10,11 @@ This document walks through every subsystem in detail, following the code paths 
 
 ```
 agent-platform/src/
-├── run-engine/                    # YAML workflow execution system
+├── run-engine/                    # TypeScript workflow execution system
 │   ├── interfaces/                # TypeScript types for workflows, steps, state
-│   ├── services/                  # Core services (9 files)
+│   ├── services/                  # Core services
 │   ├── processors/                # BullMQ job processors
-│   ├── schemas/                   # JSON Schemas for YAML validation
+│   ├── workflow-definitions/      # TypeScript WorkflowSpec definitions and input helpers
 │   └── run-engine.module.ts
 ├── skills/                        # Skill execution system
 │   ├── handlers/                  # 20 handler implementations
@@ -58,14 +58,10 @@ When the agent platform boots, these `OnModuleInit` hooks fire in dependency ord
    ├── Loads config and rubric templates
    └── Result: In-memory registry of versioned prompts
 
-3. WorkflowYamlLoaderService.onModuleInit()
-   ├── Reads agent-platform/workflows/index.yaml
-   ├── Loads each active workflow YAML file
-   ├── Validates against JSON Schema
-   ├── Validates skill references (every skill_id must exist in catalog)
-   ├── Compiles input selectors (YAML DSL → TypeScript functions)
-   ├── Validates no cyclic dependencies
-   ├── Registers compiled WorkflowSpec in WorkflowRegistryService
+3. WorkflowRegistryService.onModuleInit()
+   ├── Imports ALL_WORKFLOWS array from workflow-definitions/all-workflows.ts
+   ├── For each WorkflowSpec: validates no cyclic dependencies via DependencyGraphService
+   ├── Registers each WorkflowSpec in the in-memory registry
    └── Result: 7 workflows registered and ready to execute
 
 4. BullMQ processors start listening:
@@ -133,9 +129,6 @@ export class LangGraphRunProcessor extends WorkerHost {
 ```typescript
 // agent-platform/src/run-engine/services/langgraph-workflow-builder.service.ts
 buildGraph(workflow: WorkflowSpec): StateGraph<RunStateType> {
-  // Validate no cycles first
-  const validation = this.dependencyGraphService.validateNoCycles(workflow.steps);
-
   const stateGraph = new StateGraph(RunStateAnnotation);
 
   // Each step becomes a node
@@ -270,40 +263,28 @@ private async executeWithRetry(stepSpec, input, runStepId): Promise<SkillResult>
 }
 ```
 
-### 4. Workflow YAML Loading and Compilation
+### 4. Workflow TypeScript Registration
 
-`WorkflowYamlLoaderService` performs extensive validation when loading workflows:
+`WorkflowRegistryService` registers pre-defined TypeScript workflows at startup:
 
 ```
-For each workflow YAML file:
-  1. Path traversal check (prevent ../../../etc/passwd attacks)
-  2. Parse YAML with JSON_SCHEMA mode
-  3. Validate name/version match between index and file
-  4. Validate against JSON Schema (agent-platform/src/run-engine/schemas/)
-  5. Validate every skill_id reference exists in the SkillCatalogService
-  6. Compile input selectors (YAML DSL → executable TypeScript functions)
-  7. Validate no cyclic dependencies in the step graph
-  8. Register in WorkflowRegistryService
+For each WorkflowSpec in ALL_WORKFLOWS:
+  1. Validate no cyclic dependencies via DependencyGraphService.validateNoCycles()
+  2. Register the WorkflowSpec in the in-memory Map<workflowName, Map<version, WorkflowSpec>>
 ```
 
-**Input selector compilation** converts declarative YAML into functions:
+Workflows are defined as TypeScript `WorkflowSpec` objects in `agent-platform/src/run-engine/workflow-definitions/`. Input selectors are composed from helper functions defined in `input-helpers.ts`:
 
-```yaml
-# YAML
-input_selector:
-  prompt:
-    source: step_output
-    step_id: plan
-    path: data.video_prompts[0].prompt
-```
-
-Becomes a TypeScript function:
 ```typescript
-(context: RunContext) => {
-  const stepOutput = context.stepOutputs.get('plan');
-  return getNestedValue(stepOutput, 'data.video_prompts[0].prompt');
-}
+inputSelector: inputSelector({
+  prompt: fromStep('plan', 'data.video_prompts[0].prompt'),
+  brand_assets: fromTrigger('brand_assets'),
+  target_loudness: constant(-14),
+  style: merge(fromBaseRun('plan', 'data.mood'), fromTrigger('overrides.mood')),
+})
 ```
+
+Each helper (`fromTrigger`, `fromStep`, `fromBaseRun`, `constant`, `merge`) returns a `FieldResolver` function `(ctx: RunContext) => unknown` that resolves at runtime. The `inputSelector` function composes them into a step-level resolver.
 
 ## Skill Runner: Complete Code Path
 
@@ -636,7 +617,6 @@ private validateImageUrl(url: string): void {
 
 ### Path Traversal Prevention
 
-- Workflow YAML loader validates file paths stay within the workflows directory
 - `AssembleCampaignManifestHandler` validates local paths resolve under `SKILLS_OUTPUT_DIR`
 - `StorageService` in common validates all paths before writing
 

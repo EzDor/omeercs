@@ -380,62 +380,70 @@ Generate a structured plan with:
 
 ## Run Engine & Agents
 
-### Workflow Definition (YAML)
+### Workflow Definition (TypeScript)
 
-```yaml
-workflow_name: campaign.build.minimal
-version: "1.0.0"
+```typescript
+import type { WorkflowSpec } from '../interfaces/workflow-spec.interface';
+import { inputSelector, fromTrigger, fromStep, constant } from './input-helpers';
 
-steps:
-  - step_id: game_config
-    skill_id: game_config_from_template
-    depends_on: []
-    input_selector:
-      template_id:
-        source: trigger
-        path: template_id
-      theme:
-        source: trigger
-        path: theme
-    cache_policy:
-      enabled: true
-      scope: global
-    retry_policy:
-      max_attempts: 2
-      backoff_ms: 1000
-
-  - step_id: bgm
-    skill_id: generate_bgm_track
-    depends_on: []
-    input_selector:
-      style:
-        source: trigger
-        path: audio.style
-
-  - step_id: bundle_game
-    skill_id: bundle_game_template
-    depends_on: [game_config, bgm]
-    input_selector:
-      game_config:
-        source: step_output
-        step_id: game_config
-        path: data
-      audio_uri:
-        source: step_output
-        step_id: bgm
-        path: audio_uri
+export const campaignBuildMinimalWorkflow: WorkflowSpec = {
+  workflowName: 'campaign.build.minimal',
+  version: '1.0.0',
+  description: 'Minimal campaign build for reference implementation testing - 4 steps',
+  steps: [
+    {
+      stepId: 'game_config',
+      skillId: 'game_config_from_template',
+      dependsOn: [],
+      description: 'Generate game configuration from template',
+      inputSelector: inputSelector({
+        template_id: fromTrigger('template_id'),
+        theme: fromTrigger('theme'),
+        difficulty: fromTrigger('difficulty'),
+        color_scheme: fromTrigger('color_scheme'),
+        copy: fromTrigger('copy'),
+      }),
+      cachePolicy: { enabled: true, scope: 'global' },
+      retryPolicy: { maxAttempts: 2, backoffMs: 1000 },
+    },
+    {
+      stepId: 'bgm',
+      skillId: 'generate_bgm_track',
+      dependsOn: [],
+      description: 'Generate background music track',
+      inputSelector: inputSelector({
+        style: fromTrigger('audio.style'),
+        duration_sec: fromTrigger('audio.duration_sec'),
+        loopable: constant(true),
+      }),
+      cachePolicy: { enabled: true, scope: 'global' },
+      retryPolicy: { maxAttempts: 2, backoffMs: 2000 },
+    },
+    {
+      stepId: 'bundle_game',
+      skillId: 'bundle_game_template',
+      dependsOn: ['game_config', 'bgm'],
+      description: 'Bundle game template with assets',
+      inputSelector: inputSelector({
+        game_config: fromStep('game_config', 'data'),
+        audio_uri: fromStep('bgm', 'audio_uri'),
+        template_id: fromTrigger('template_id'),
+      }),
+      cachePolicy: { enabled: true, scope: 'run_only' },
+      retryPolicy: { maxAttempts: 2, backoffMs: 2000 },
+    },
+  ],
+};
 ```
 
 ### LangGraph Execution
 
 ```
-1. WorkflowYamlLoaderService parses YAML
+1. WorkflowRegistryService provides pre-registered WorkflowSpec
    ↓
-2. InputSelectorInterpreterService compiles selectors
+2. LangGraphWorkflowBuilderService builds StateGraph
    ↓
-3. LangGraphWorkflowBuilderService builds StateGraph
-   ↓
-4. For each step → Create node function:
+3. For each step → Create node function:
 
    async (state: RunStateType) => {
      context = buildRunContext(state)
@@ -444,9 +452,9 @@ steps:
      return buildSuccessUpdate(stepId, result)
    }
    ↓
-5. Connect nodes via edges (depends_on)
+4. Connect nodes via edges (dependsOn)
    ↓
-6. WorkflowEngineService.executeWorkflow(graph, initialState)
+5. WorkflowEngineService.executeWorkflow(graph, initialState)
 ```
 
 ### State Flow Between Steps
@@ -467,14 +475,15 @@ RunStateType {
 }
 ```
 
-### Input Selector Sources
+### Input Selector Helpers
 
-| Source | Description | Example Path |
-|--------|-------------|--------------|
-| `trigger` | Initial payload | `template_id`, `audio.style` |
-| `step_output` | Previous step result | `data.bundle_uri` |
-| `constants` | Literal values | `value: true` |
-| `registry` | Prompt templates | `prompt_id: campaign_plan` |
+| Helper | Description | Example |
+|--------|-------------|---------|
+| `fromTrigger(path)` | From the original trigger payload | `fromTrigger('template_id')`, `fromTrigger('audio.style')` |
+| `fromStep(stepId, path)` | From a completed step's output | `fromStep('plan', 'data.bundle_uri')` |
+| `fromBaseRun(stepId, path)` | From a previous run's step output | `fromBaseRun('plan', 'data.audio_style')` |
+| `constant(value)` | Literal values | `constant(true)`, `constant({ bgm_lufs: -14 })` |
+| `merge(...resolvers)` | Merge multiple resolved objects | `merge(fromBaseRun('plan', 'data.mood'), fromTrigger('overrides'))` |
 
 ### Caching Strategy
 
@@ -663,7 +672,7 @@ curl http://localhost:3001/api/dev/runs/{runId}
 
 | Purpose | Location |
 |---------|----------|
-| Workflow definitions | `agent-platform/workflows/*.yaml` |
+| Workflow definitions | `agent-platform/src/run-engine/workflow-definitions/*.workflow.ts` |
 | Skill catalog | `skills/catalog/index.yaml` |
 | Skill handlers | `agent-platform/src/skills/handlers/` |
 | Run engine | `agent-platform/src/run-engine/` |

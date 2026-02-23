@@ -25,11 +25,6 @@ export class LangGraphWorkflowBuilderService {
   buildGraph(workflow: WorkflowSpec): StateGraph<RunStateType> {
     this.logger.log(`Building LangGraph for workflow: ${workflow.workflowName} v${workflow.version}`);
 
-    const validation = this.dependencyGraphService.validateNoCycles(workflow.steps);
-    if (!validation.valid) {
-      throw new Error(`Workflow has cycles: ${validation.error}`);
-    }
-
     const stateGraph = new StateGraph(RunStateAnnotation);
     const graph = stateGraph as unknown as StateGraphBuilder;
 

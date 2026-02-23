@@ -2,18 +2,18 @@
 
 ## Overview
 
-The Run Engine is the heart of the agent platform. It takes a YAML workflow definition, compiles it into a LangGraph state machine, and executes each step — handling dependency ordering, input resolution, caching, retries, and artifact tracking.
+The Run Engine is the heart of the agent platform. It takes a TypeScript workflow definition, builds a LangGraph state machine, and executes each step — handling dependency ordering, input resolution, caching, retries, and artifact tracking.
 
 **Location**: `agent-platform/src/run-engine/`
 
 ## How a Workflow Executes
 
 ```
-YAML Workflow File
+TypeScript Workflow Definitions
        ↓
-WorkflowYamlLoaderService     ← Parses YAML, compiles input selectors
+WorkflowRegistryService       ← Registers WorkflowSpec objects at startup, validates dependencies
        ↓
-WorkflowSpec (TypeScript)     ← In-memory compiled workflow
+WorkflowSpec (TypeScript)     ← Pre-built workflow with native input selector functions
        ↓
 DependencyGraphService        ← Topological sort, cycle detection
        ↓
@@ -26,90 +26,88 @@ CachedStepExecutorService     ← Runs each node: cache check → skill executio
 RunEngineService              ← Persists Run and RunStep status to database
 ```
 
-## Workflow YAML Format
+## Workflow TypeScript Format
 
-Workflows are defined in `agent-platform/workflows/` as YAML files. Here's the anatomy of a workflow:
+Workflows are defined as `WorkflowSpec` objects in `agent-platform/src/run-engine/workflow-definitions/`. Here's the anatomy of a workflow:
 
-```yaml
-workflow_name: campaign.build          # Unique identifier
-version: "1.0.0"                       # Semantic version
-description: End-to-end campaign build # Human-readable description
+```typescript
+import type { WorkflowSpec } from '../interfaces/workflow-spec.interface';
+import { inputSelector, fromTrigger, fromStep, fromBaseRun, constant, merge } from './input-helpers';
 
-steps:
-  - step_id: plan                      # Unique step identifier within this workflow
-    skill_id: campaign_plan_from_brief # Which skill to execute (from skill catalog)
-    depends_on: []                     # No dependencies = runs immediately
-    description: Generate campaign plan
-    input_selector:                    # How to resolve this step's inputs
-      brief:
-        source: trigger                # From the workflow trigger payload
-        path: brief
-      constraints:
-        source: trigger
-        path: constraints
-    cache_policy:
-      enabled: true                    # Enable input-based caching
-      scope: run_only                  # Cache is valid only within this run
-    retry_policy:
-      max_attempts: 2                  # Retry once on failure
-      backoff_ms: 1000                 # Wait 1 second before retrying
-
-  - step_id: intro_image
-    skill_id: generate_intro_image
-    depends_on: [plan]                 # Waits for 'plan' step to complete
-    input_selector:
-      prompt:
-        source: step_output            # From a previous step's output
-        step_id: plan
-        path: data.video_prompts[0].prompt
-    # ...
-
-  - step_id: sfx
-    skill_id: generate_sfx_pack
-    depends_on: [plan]
-    input_selector:
-      sfx_list:
-        source: step_output
-        step_id: plan
-        path: data.audio_specs.sfx_list
-    # ...
-
-  - step_id: audio_mix
-    skill_id: mix_audio_for_game
-    depends_on: [bgm, sfx]            # Waits for BOTH bgm AND sfx to complete
-    input_selector:
-      bgm_uri:
-        source: step_output
-        step_id: bgm
-        path: data.audio_uri
-      loudness_targets:
-        source: constants              # Literal values, not from trigger or steps
-        value:
-          bgm_lufs: -14
-          sfx_lufs: -12
-    # ...
+export const campaignBuildWorkflow: WorkflowSpec = {
+  workflowName: 'campaign.build',
+  version: '1.0.0',
+  description: 'End-to-end campaign build',
+  steps: [
+    {
+      stepId: 'plan',
+      skillId: 'campaign_plan_from_brief',
+      dependsOn: [],
+      description: 'Generate campaign plan',
+      inputSelector: inputSelector({
+        brief: fromTrigger('brief'),
+        constraints: fromTrigger('constraints'),
+      }),
+      cachePolicy: { enabled: true, scope: 'run_only' },
+      retryPolicy: { maxAttempts: 2, backoffMs: 1000 },
+    },
+    {
+      stepId: 'intro_image',
+      skillId: 'generate_intro_image',
+      dependsOn: ['plan'],
+      description: 'Generate intro image from plan',
+      inputSelector: inputSelector({
+        prompt: fromStep('plan', 'data.video_prompts[0].prompt'),
+      }),
+      cachePolicy: { enabled: true, scope: 'run_only' },
+      retryPolicy: { maxAttempts: 2, backoffMs: 2000 },
+    },
+    {
+      stepId: 'sfx',
+      skillId: 'generate_sfx_pack',
+      dependsOn: ['plan'],
+      description: 'Generate sound effects pack',
+      inputSelector: inputSelector({
+        sfx_list: fromStep('plan', 'data.audio_specs.sfx_list'),
+      }),
+      cachePolicy: { enabled: true, scope: 'run_only' },
+      retryPolicy: { maxAttempts: 2, backoffMs: 2000 },
+    },
+    {
+      stepId: 'audio_mix',
+      skillId: 'mix_audio_for_game',
+      dependsOn: ['bgm', 'sfx'],
+      description: 'Mix and normalize audio tracks',
+      inputSelector: inputSelector({
+        bgm_uri: fromStep('bgm', 'data.audio_uri'),
+        loudness_targets: constant({ bgm_lufs: -14, sfx_lufs: -12 }),
+      }),
+      cachePolicy: { enabled: true, scope: 'run_only' },
+      retryPolicy: { maxAttempts: 2, backoffMs: 1000 },
+    },
+  ],
+};
 ```
 
-### Input Selector DSL
+### Input Selector Helpers
 
-The `input_selector` is a declarative DSL that tells the engine how to resolve each input parameter for a step. There are three source types:
+The `inputSelector` function and its helpers define how to resolve each input parameter for a step. Input selectors are plain TypeScript functions composed from helper functions in `input-helpers.ts`:
 
-| Source | Description | Example |
+| Helper | Description | Example |
 |--------|-------------|---------|
-| `trigger` | From the original workflow trigger payload (what the API sent) | `{ source: trigger, path: brief }` |
-| `step_output` | From a completed step's output data | `{ source: step_output, step_id: plan, path: data.video_prompts[0].prompt }` |
-| `constants` | Literal values defined inline in the YAML | `{ source: constants, value: 30 }` |
+| `fromTrigger(path)` | From the original workflow trigger payload | `fromTrigger('brief')` |
+| `fromStep(stepId, path)` | From a completed step's output data | `fromStep('plan', 'data.video_prompts[0].prompt')` |
+| `fromBaseRun(stepId, path)` | From a previous run's step output (for update workflows) | `fromBaseRun('plan', 'data.audio_style')` |
+| `constant(value)` | Literal values defined inline | `constant({ bgm_lufs: -14 })` |
+| `merge(...resolvers)` | Merge multiple resolved objects into one | `merge(fromBaseRun('plan', 'data.mood'), fromTrigger('overrides.mood'))` |
+| `inputSelector(fields)` | Compose field resolvers into a step-level input resolver | `inputSelector({ brief: fromTrigger('brief') })` |
 
-The `path` field supports dot notation and array indexing (e.g., `data.video_prompts[0].prompt`).
-
-**Compilation**: At workflow registration time, `InputSelectorInterpreterService` compiles each input selector from YAML into a TypeScript function. This function is called at runtime with the current execution context and returns the resolved value.
+The `path` argument supports dot notation and array indexing (e.g., `data.video_prompts[0].prompt`). Each helper returns a `FieldResolver` function `(ctx: RunContext) => unknown` that is called at runtime with the current execution context.
 
 ### Cache Policy
 
-```yaml
-cache_policy:
-  enabled: true       # Whether caching is enabled for this step
-  scope: run_only     # 'global' or 'run_only'
+```typescript
+cachePolicy: { enabled: true, scope: 'run_only' }
 ```
 
 - **enabled: true**: The step's inputs are hashed, and if a matching cache entry exists, the cached result is returned without re-executing the skill.
@@ -118,25 +116,23 @@ cache_policy:
 
 ### Retry Policy
 
-```yaml
-retry_policy:
-  max_attempts: 2     # Total attempts (1 = no retry, 2 = one retry)
-  backoff_ms: 1000    # Wait time between attempts
+```typescript
+retryPolicy: { maxAttempts: 2, backoffMs: 1000 }
 ```
 
 ## Available Workflows
 
-All workflows are registered in `agent-platform/workflows/index.yaml`:
+All workflows are exported from the `ALL_WORKFLOWS` array in `agent-platform/src/run-engine/workflow-definitions/all-workflows.ts`:
 
 | Workflow | File | Purpose |
 |----------|------|---------|
-| `campaign.build` | `campaign.build.v1.yaml` | Full end-to-end campaign generation (18 steps) |
-| `campaign.build.minimal` | `campaign.build.minimal.v1.yaml` | Minimal build for testing |
-| `campaign.update_intro` | `campaign.update_intro.v1.yaml` | Regenerate intro video/image only |
-| `campaign.update_outcome` | `campaign.update_outcome.v1.yaml` | Regenerate win/lose outcome videos |
-| `campaign.update_audio` | `campaign.update_audio.v1.yaml` | Regenerate BGM and SFX |
-| `campaign.update_game_config` | `campaign.update_game_config.v1.yaml` | Regenerate game configuration |
-| `campaign.replace_3d_asset` | `campaign.replace_3d_asset.v1.yaml` | Replace 3D assets |
+| `campaign.build` | `campaign-build.workflow.ts` | Full end-to-end campaign generation (18 steps) |
+| `campaign.build.minimal` | `campaign-build-minimal.workflow.ts` | Minimal build for testing |
+| `campaign.update_intro` | `campaign-update-intro.workflow.ts` | Regenerate intro video/image only |
+| `campaign.update_outcome` | `campaign-update-outcome.workflow.ts` | Regenerate win/lose outcome videos |
+| `campaign.update_audio` | `campaign-update-audio.workflow.ts` | Regenerate BGM and SFX |
+| `campaign.update_game_config` | `campaign-update-game-config.workflow.ts` | Regenerate game configuration |
+| `campaign.replace_3d_asset` | `campaign-replace-3d-asset.workflow.ts` | Replace 3D assets |
 
 ## The campaign.build Workflow (Full Pipeline)
 
@@ -207,13 +203,11 @@ This is the main workflow with 18 steps. Here's the dependency graph showing whi
 
 ## Key Services
 
-### WorkflowYamlLoaderService
+### WorkflowRegistryService
 
-**File**: `agent-platform/src/run-engine/services/workflow-yaml-loader.service.ts`
+**File**: `agent-platform/src/run-engine/services/workflow-registry.service.ts`
 
-Loads YAML workflow files from disk, validates their structure, and compiles them into `WorkflowSpec` objects. The compilation step converts the declarative input selectors into executable TypeScript functions.
-
-Called once at startup to register all workflows, and can be called again to reload.
+In-memory registry of workflow definitions. On startup (`onModuleInit`), it imports the `ALL_WORKFLOWS` array from `workflow-definitions/all-workflows.ts` and registers each `WorkflowSpec` directly. During registration, it validates that each workflow has no cyclic dependencies via `DependencyGraphService.validateNoCycles()`.
 
 ### DependencyGraphService
 
@@ -225,7 +219,7 @@ Takes the `depends_on` declarations from the workflow steps and produces a topol
 
 **File**: `agent-platform/src/run-engine/services/langgraph-workflow-builder.service.ts`
 
-Converts a `WorkflowSpec` into a LangGraph `StateGraph`. Each step becomes a node, edges connect dependencies, and the state annotation tracks step outputs and artifacts. The result is an executable graph that LangGraph can run with built-in support for parallel branches.
+Converts a `WorkflowSpec` into a LangGraph `StateGraph`. Each step becomes a node, edges connect dependencies, and the state annotation tracks step outputs and artifacts. The result is an executable graph that LangGraph can run with built-in support for parallel branches. Cycle detection is handled at registration time by `WorkflowRegistryService`, so the builder does not repeat it.
 
 ### CachedStepExecutorService
 
@@ -259,12 +253,6 @@ Database-backed cache using the `step_cache` table. The cache key is computed fr
 
 Computes a deterministic SHA256 hash of the resolved step inputs. The hash is used as the cache key. Inputs are sorted and serialized to ensure the same logical inputs always produce the same hash.
 
-### WorkflowRegistryService
-
-**File**: `agent-platform/src/run-engine/services/workflow-registry.service.ts`
-
-In-memory registry of compiled workflows. Workflows are loaded from YAML at startup and stored here for fast lookup when a run is triggered.
-
 ### LangGraphRunProcessor
 
 **File**: `agent-platform/src/run-engine/processors/langgraph-run.processor.ts`
@@ -288,7 +276,7 @@ This is a separate, parallel execution system from the Run Engine. It uses LangG
 - Stores workflow state in PostgreSQL checkpoint tables
 - Can resume workflows from any checkpoint after a crash
 - Used for chat workflows and other conversational patterns
-- Does NOT use the YAML workflow format or skill catalog
+- Does NOT use the TypeScript workflow definitions or skill catalog
 
 **Key services**:
 - `WorkflowEngineService` — Executes LangGraph workflows with checkpointing

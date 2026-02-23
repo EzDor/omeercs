@@ -85,7 +85,7 @@ The agent-platform has two parallel execution systems:
 **Run Engine** (`agent-platform/src/run-engine/`):
 - Executes workflows as sequential steps with skill invocation
 - Key services: `RunEngineService`, `WorkflowRegistryService`, `CachedStepExecutorService`
-- Workflow definitions loaded from YAML files via `WorkflowYamlLoaderService`
+- Workflow definitions are TypeScript `WorkflowSpec` objects in `agent-platform/src/run-engine/workflow-definitions/`
 - Step dependencies managed via `DependencyGraphService` (topological sorting)
 - Input-based caching via `StepCacheService` with hash-based keys
 - Queue: `RUN_ORCHESTRATION` processed by `LangGraphRunProcessor`
@@ -121,6 +121,7 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 | Tenant Context | `common/src/tenant/tenant-cls.service.ts` |
 | LLM Client | `common/src/llm/litellm-http.client.ts` |
 | Run Engine | `agent-platform/src/run-engine/` |
+| Workflow Definitions | `agent-platform/src/run-engine/workflow-definitions/` |
 | Workflow Engine | `agent-platform/src/workflow-orchestration/` |
 | Skill Runner | `agent-platform/src/skills/skill-runner/skill-runner.service.ts` |
 | Chat Entities | `dao/src/entities/chat-*.entity.ts` |

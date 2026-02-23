@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { WorkflowSpec } from '../interfaces/workflow-spec.interface';
 import { DependencyGraphService } from './dependency-graph.service';
+import { ALL_WORKFLOWS } from '../workflow-definitions/all-workflows';
 
 @Injectable()
 export class WorkflowRegistryService implements OnModuleInit {
@@ -10,7 +11,10 @@ export class WorkflowRegistryService implements OnModuleInit {
   constructor(private readonly dependencyGraphService: DependencyGraphService) {}
 
   onModuleInit() {
-    this.logger.log('WorkflowRegistryService initialized');
+    for (const workflow of ALL_WORKFLOWS) {
+      this.register(workflow);
+    }
+    this.logger.log(`Registered ${ALL_WORKFLOWS.length} workflows`);
   }
 
   register(workflow: WorkflowSpec): void {

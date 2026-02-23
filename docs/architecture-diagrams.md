@@ -74,40 +74,48 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                            WORKFLOW YAML FILES                                          │
-│                         (agent-platform/workflows/)                                     │
+│                       TYPESCRIPT WORKFLOW DEFINITIONS                                    │
+│              (agent-platform/src/run-engine/workflow-definitions/)                       │
+│                                                                                         │
+│   ┌────────────────────────────────────────────────────────────────────────────────┐    │
+│   │  campaign-build.workflow.ts          → campaignBuildWorkflow                    │    │
+│   │  campaign-build-minimal.workflow.ts  → campaignBuildMinimalWorkflow             │    │
+│   │  campaign-update-audio.workflow.ts   → campaignUpdateAudioWorkflow              │    │
+│   │  campaign-update-intro.workflow.ts   → campaignUpdateIntroWorkflow              │    │
+│   │  ...                                                                            │    │
+│   │                                                                                 │    │
+│   │  all-workflows.ts  → exports ALL_WORKFLOWS: WorkflowSpec[]                     │    │
+│   │  input-helpers.ts  → fromTrigger, fromStep, fromBaseRun, constant, merge       │    │
+│   └────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
         │
         │  On Application Startup
         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                        WorkflowYamlLoaderService                                        │
+│                        WorkflowRegistryService.onModuleInit()                           │
 │                                                                                         │
 │   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
-│   │  1. Read index.yaml                                                              │  │
-│   │     ┌────────────────────────────────────────────────────────────────────────┐  │  │
-│   │     │ workflows:                                                              │  │  │
-│   │     │   - workflow_name: campaign.build                                       │  │  │
-│   │     │     version: "1.0.0"                                                    │  │  │
-│   │     │     status: active                                                      │  │  │
-│   │     │   - workflow_name: campaign.update_audio                                │  │  │
-│   │     │     version: "1.0.0"                                                    │  │  │
-│   │     │     status: active                                                      │  │  │
-│   │     └────────────────────────────────────────────────────────────────────────┘  │  │
-│   └─────────────────────────────────────────────────────────────────────────────────┘  │
-│                                          │                                              │
-│                                          ▼                                              │
-│   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
-│   │  2. For each active workflow: Load & Validate YAML                              │  │
+│   │  1. Import ALL_WORKFLOWS array                                                   │  │
 │   │                                                                                  │  │
-│   │     campaign.build.v1.yaml ──────▶ Parse ──────▶ Validate Schema               │  │
-│   │     campaign.update_audio.v1.yaml ──────▶ Parse ──────▶ Validate Schema        │  │
-│   │     ...                                                                         │  │
+│   │     ALL_WORKFLOWS = [                                                            │  │
+│   │       campaignBuildWorkflow,                                                     │  │
+│   │       campaignBuildMinimalWorkflow,                                               │  │
+│   │       campaignUpdateAudioWorkflow,                                                │  │
+│   │       ...                                                                        │  │
+│   │     ]                                                                            │  │
 │   └─────────────────────────────────────────────────────────────────────────────────┘  │
 │                                          │                                              │
 │                                          ▼                                              │
 │   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
-│   │  3. Register in WorkflowRegistryService                                          │  │
+│   │  2. For each WorkflowSpec: Validate & Register                                   │  │
+│   │                                                                                  │  │
+│   │     DependencyGraphService.validateNoCycles(workflow.steps)                      │  │
+│   │     Register in Map<workflowName, Map<version, WorkflowSpec>>                   │  │
+│   └─────────────────────────────────────────────────────────────────────────────────┘  │
+│                                          │                                              │
+│                                          ▼                                              │
+│   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
+│   │  3. Result: In-memory Registry                                                   │  │
 │   │                                                                                  │  │
 │   │     Map<workflowName, Map<version, WorkflowSpec>>                               │  │
 │   │     ┌────────────────────────────────────────────────────────────────────────┐  │  │
@@ -255,7 +263,7 @@
 │                     LangGraphWorkflowBuilderService                                     │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
-    INPUT: WorkflowSpec (from YAML)
+    INPUT: WorkflowSpec (TypeScript)
     ┌─────────────────────────────────────────────────────────────────────────────────┐
     │  steps:                                                                         │
     │    - step_id: plan         depends_on: []                                       │
@@ -874,8 +882,8 @@
     │            │                                                                    │
     │            ▼                                                                    │
     │   ┌─────────────────┐     ┌─────────────────┐                                  │
-    │   │ Workflow        │<────│ Workflow YAML   │                                  │
-    │   │ Registry        │     │ Files           │                                  │
+    │   │ Workflow        │<────│ TypeScript      │                                  │
+    │   │ Registry        │     │ Workflow Defs   │                                  │
     │   └────────┬────────┘     └─────────────────┘                                  │
     │            │                                                                    │
     │            ▼                                                                    │
