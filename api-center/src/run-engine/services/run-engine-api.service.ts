@@ -1,24 +1,14 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { QueueNames } from '@agentic-template/common/src/queues/queue-names';
 import { TenantClsService } from '@agentic-template/common/src/tenant/tenant-cls.service';
 
 import { Run } from '@agentic-template/dao/src/entities/run.entity';
-import { RunStep, StepStatusType } from '@agentic-template/dao/src/entities/run-step.entity';
-import { Artifact } from '@agentic-template/dao/src/entities/artifact.entity';
 
-import type { TriggerRunRequest, TriggerRunResponse, RunResponse, RunStatus, StepsSummary } from '@agentic-template/dto/src/run-engine/run.dto';
-import type {
-  RunStepsResponse,
-  RunStep as RunStepDto,
-  ArtifactsResponse,
-  ArtifactDto,
-  CacheAnalysisResponse,
-  CacheAnalysisStep,
-} from '@agentic-template/dto/src/run-engine/run-step.dto';
+import type { TriggerRunRequest, TriggerRunResponse, RunResponse, RunStatus } from '@agentic-template/dto/src/run-engine/run.dto';
 
 export interface RunOrchestrationJobData {
   runId: string;
@@ -32,10 +22,6 @@ export class RunEngineApiService {
   constructor(
     @InjectRepository(Run)
     private readonly runRepository: Repository<Run>,
-    @InjectRepository(RunStep)
-    private readonly runStepRepository: Repository<RunStep>,
-    @InjectRepository(Artifact)
-    private readonly artifactRepository: Repository<Artifact>,
     @InjectQueue(QueueNames.RUN_ORCHESTRATION)
     private readonly orchestrationQueue: Queue<RunOrchestrationJobData>,
     private readonly tenantClsService: TenantClsService,
@@ -93,19 +79,6 @@ export class RunEngineApiService {
       throw new NotFoundException(`Run ${runId} not found`);
     }
 
-    const steps = await this.runStepRepository.find({
-      where: { runId, tenantId },
-    });
-
-    const stepsSummary: StepsSummary = {
-      total: steps.length,
-      pending: steps.filter((s) => s.status === 'pending').length,
-      running: steps.filter((s) => s.status === 'running').length,
-      completed: steps.filter((s) => s.status === 'completed').length,
-      skipped: steps.filter((s) => s.status === 'skipped').length,
-      failed: steps.filter((s) => s.status === 'failed').length,
-    };
-
     return {
       id: run.id,
       workflowName: run.workflowName,
@@ -122,173 +95,11 @@ export class RunEngineApiService {
             timestamp: new Date(run.error.timestamp),
           }
         : undefined,
-      stepsSummary,
       startedAt: run.startedAt || undefined,
       completedAt: run.completedAt || undefined,
       durationMs: run.durationMs || undefined,
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
-    };
-  }
-
-  async getRunSteps(runId: string, statusFilter?: StepStatusType): Promise<RunStepsResponse> {
-    const tenantId = this.tenantClsService.getTenantId();
-    if (!tenantId) {
-      throw new BadRequestException('Tenant ID is required');
-    }
-
-    const run = await this.runRepository.findOne({
-      where: { id: runId, tenantId },
-    });
-
-    if (!run) {
-      throw new NotFoundException(`Run ${runId} not found`);
-    }
-
-    const where: { runId: string; tenantId: string; status?: StepStatusType } = {
-      runId,
-      tenantId,
-    };
-
-    if (statusFilter) {
-      where.status = statusFilter;
-    }
-
-    const steps = await this.runStepRepository.find({
-      where,
-      order: { createdAt: 'ASC' },
-    });
-
-    const stepDtos: RunStepDto[] = steps.map((step) => ({
-      id: step.id,
-      stepId: step.stepId,
-      skillId: step.skillId,
-      status: step.status,
-      inputHash: step.inputHash,
-      attempt: step.attempt,
-      outputArtifactIds: step.outputArtifactIds,
-      error: step.error
-        ? {
-            code: step.error.code,
-            message: step.error.message,
-            attempt: step.error.attempt,
-            timestamp: new Date(step.error.timestamp),
-            details: step.error.details,
-          }
-        : undefined,
-      cacheHit: step.cacheHit,
-      startedAt: step.startedAt || undefined,
-      endedAt: step.endedAt || undefined,
-      durationMs: step.durationMs || undefined,
-    }));
-
-    return {
-      runId,
-      steps: stepDtos,
-    };
-  }
-
-  async getRunArtifacts(runId: string, stepId?: string): Promise<ArtifactsResponse> {
-    const tenantId = this.tenantClsService.getTenantId();
-    if (!tenantId) {
-      throw new BadRequestException('Tenant ID is required');
-    }
-
-    const run = await this.runRepository.findOne({
-      where: { id: runId, tenantId },
-    });
-
-    if (!run) {
-      throw new NotFoundException(`Run ${runId} not found`);
-    }
-
-    const steps = await this.runStepRepository.find({
-      where: { runId, tenantId },
-    });
-
-    const artifactIdsByStep = new Map<string, string[]>();
-    for (const step of steps) {
-      if (step.outputArtifactIds && step.outputArtifactIds.length > 0) {
-        if (!stepId || step.stepId === stepId) {
-          artifactIdsByStep.set(step.stepId, step.outputArtifactIds);
-        }
-      }
-    }
-
-    const allArtifactIds = Array.from(artifactIdsByStep.values()).flat();
-
-    if (allArtifactIds.length === 0) {
-      return { runId, artifacts: [] };
-    }
-
-    const artifacts = await this.artifactRepository.find({
-      where: { tenantId, id: In(allArtifactIds) },
-    });
-
-    const stepIdByArtifactId = new Map<string, string>();
-    for (const [sId, artIds] of artifactIdsByStep) {
-      for (const artId of artIds) {
-        stepIdByArtifactId.set(artId, sId);
-      }
-    }
-
-    const artifactDtos: ArtifactDto[] = artifacts.map((a) => ({
-      id: a.id,
-      stepId: stepIdByArtifactId.get(a.id),
-      type: a.type,
-      uri: a.uri,
-      contentHash: a.contentHash,
-      sizeBytes: a.sizeBytes,
-      filename: a.filename,
-      metadata: a.metadata,
-      createdAt: a.createdAt,
-    }));
-
-    return {
-      runId,
-      artifacts: artifactDtos,
-    };
-  }
-
-  async getCacheAnalysis(runId: string): Promise<CacheAnalysisResponse> {
-    const tenantId = this.tenantClsService.getTenantId();
-    if (!tenantId) {
-      throw new BadRequestException('Tenant ID is required');
-    }
-
-    const run = await this.runRepository.findOne({
-      where: { id: runId, tenantId },
-    });
-
-    if (!run) {
-      throw new NotFoundException(`Run ${runId} not found`);
-    }
-
-    const steps = await this.runStepRepository.find({
-      where: { runId, tenantId },
-      order: { createdAt: 'ASC' },
-    });
-
-    const cacheHits = steps.filter((s) => s.cacheHit).length;
-    const cacheMisses = steps.filter((s) => !s.cacheHit && s.status !== 'pending').length;
-    const totalExecuted = cacheHits + cacheMisses;
-
-    const cacheSteps: CacheAnalysisStep[] = steps.map((step) => ({
-      stepId: step.stepId,
-      skillId: step.skillId,
-      status: step.status,
-      cacheHit: step.cacheHit,
-      inputHash: step.inputHash,
-      executedFrom: step.cacheHit ? 'cache' : 'fresh',
-    }));
-
-    return {
-      runId,
-      totalSteps: steps.length,
-      cacheHits,
-      cacheMisses,
-      cacheHitRate: totalExecuted > 0 ? cacheHits / totalExecuted : 0,
-      steps: cacheSteps,
     };
   }
 }

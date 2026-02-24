@@ -5,7 +5,6 @@ import { ConfigModule } from '@nestjs/config';
 import { QueueNames } from '@agentic-template/common/src/queues/queue-names';
 import { TenantClsModule } from '@agentic-template/common/src/tenant/tenant-cls.module';
 import { Run } from '@agentic-template/dao/src/entities/run.entity';
-import { RunStep } from '@agentic-template/dao/src/entities/run-step.entity';
 import { Artifact } from '@agentic-template/dao/src/entities/artifact.entity';
 import { RunEngineApiService } from './services/run-engine-api.service';
 import { RunEngineController } from './run-engine.controller';
@@ -14,7 +13,7 @@ import { RunEngineController } from './run-engine.controller';
   imports: [
     ConfigModule,
     TenantClsModule,
-    TypeOrmModule.forFeature([Run, RunStep, Artifact]),
+    TypeOrmModule.forFeature([Run, Artifact]),
     BullModule.registerQueue({
       name: QueueNames.RUN_ORCHESTRATION,
     }),

@@ -1,16 +1,14 @@
 import { Annotation } from '@langchain/langgraph';
 
-export interface StepResult {
-  stepId: string;
-  status: 'completed' | 'skipped' | 'failed';
-  artifactIds: string[];
+export interface SkillStepResult {
+  ok: boolean;
   data?: Record<string, unknown>;
-  cacheHit: boolean;
+  artifactIds: string[];
+  error?: string;
   durationMs: number;
-  error?: { code: string; message: string };
 }
 
-function mergeMapReducer<K, V>(current: Map<K, V>, update: Map<K, V>): Map<K, V> {
+function mergeStepResults(current: Map<string, SkillStepResult>, update: Map<string, SkillStepResult>): Map<string, SkillStepResult> {
   const merged = new Map(current);
   for (const [key, value] of update) {
     merged.set(key, value);
@@ -18,7 +16,7 @@ function mergeMapReducer<K, V>(current: Map<K, V>, update: Map<K, V>): Map<K, V>
   return merged;
 }
 
-export const RunStateAnnotation = Annotation.Root({
+export const CampaignWorkflowState = Annotation.Root({
   runId: Annotation<string>({
     reducer: (_current: string, update: string) => update,
     default: () => '',
@@ -29,23 +27,13 @@ export const RunStateAnnotation = Annotation.Root({
     default: () => '',
   }),
 
-  workflowName: Annotation<string>({
-    reducer: (_current: string, update: string) => update,
-    default: () => '',
-  }),
-
   triggerPayload: Annotation<Record<string, unknown>>({
     reducer: (_current: Record<string, unknown>, update: Record<string, unknown>) => update,
     default: () => ({}),
   }),
 
-  stepResults: Annotation<Map<string, StepResult>>({
-    reducer: mergeMapReducer,
-    default: () => new Map(),
-  }),
-
-  artifacts: Annotation<Map<string, string[]>>({
-    reducer: mergeMapReducer,
+  stepResults: Annotation<Map<string, SkillStepResult>>({
+    reducer: mergeStepResults,
     default: () => new Map(),
   }),
 
@@ -55,4 +43,4 @@ export const RunStateAnnotation = Annotation.Root({
   }),
 });
 
-export type RunStateType = typeof RunStateAnnotation.State;
+export type CampaignWorkflowStateType = typeof CampaignWorkflowState.State;

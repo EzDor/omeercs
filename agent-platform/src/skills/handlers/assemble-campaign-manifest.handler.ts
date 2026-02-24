@@ -201,7 +201,7 @@ export class AssembleCampaignManifestHandler implements SkillHandler<AssembleCam
     }
 
     if (!normalized.campaign_name) {
-      const planData = normalized.plan_data as Record<string, unknown> | undefined;
+      const planData = normalized.plan_data;
       normalized.campaign_name = (planData?.theme as string) || 'Campaign';
     }
 

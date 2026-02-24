@@ -5,7 +5,7 @@ import { CoreModule } from 'src/core/core.module';
 import { WorkflowOrchestrationModule } from 'src/workflow-orchestration/workflow-orchestration.module';
 import { HealthModule } from 'src/health/health.module';
 import { SkillsModule } from 'src/skills/skills.module';
-import { RunEngineModule } from 'src/run-engine/run-engine.module';
+import { CampaignWorkflowsModule } from 'src/workflows/campaign/campaign-workflows.module';
 import { PromptRegistryModule } from 'src/prompt-registry/prompt-registry.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -28,7 +28,7 @@ import { IntelligenceModule } from './intelligence/intelligence.module';
     SkillsModule,
     ProvidersModule,
     StorageModule,
-    RunEngineModule,
+    CampaignWorkflowsModule,
     PromptRegistryModule,
     CampaignModule,
     IntelligenceModule,
