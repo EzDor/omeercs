@@ -78,17 +78,14 @@ Build order matters: `dto` → `common` → `dao` → `api-center`/`agent-platfo
 3. **LLM Integration**: LiteLLM proxy abstracts model providers, configured in `/litellm/litellm_config.yaml`
 4. **Auth Flow**: Clerk JWT → AuthGuard validates → TenantContextInterceptor extracts org → CLS propagates tenant
 
-### Run Engine & Workflow Systems
+### Campaign Workflows & Workflow Systems
 
-The agent-platform has two parallel execution systems:
-
-**Run Engine** (`agent-platform/src/run-engine/`):
-- Executes workflows as sequential steps with skill invocation
-- Key services: `RunEngineService`, `WorkflowRegistryService`, `CachedStepExecutorService`
-- Workflow definitions are TypeScript `WorkflowSpec` objects in `agent-platform/src/run-engine/workflow-definitions/`
-- Step dependencies managed via `DependencyGraphService` (topological sorting)
-- Input-based caching via `StepCacheService` with hash-based keys
-- Queue: `RUN_ORCHESTRATION` processed by `LangGraphRunProcessor`
+**Campaign Workflows** (`agent-platform/src/workflows/campaign/`):
+- Each workflow is a TypeScript class (e.g., `CampaignBuildWorkflow`) that builds a LangGraph `StateGraph` directly via `createGraph()`
+- `CampaignRunProcessor` maps workflow names to workflow classes and executes them via `WorkflowEngineService`
+- `SkillNodeService` wraps skill execution with retry logic as LangGraph node functions
+- Shared state defined in `CampaignWorkflowState` annotation with merge reducers for parallel branches
+- Queue: `RUN_ORCHESTRATION` processed by `CampaignRunProcessor`
 
 **Workflow Orchestration** (`agent-platform/src/workflow-orchestration/`):
 - Executes LangGraph workflows with PostgreSQL checkpointing
@@ -120,8 +117,7 @@ Frontend ← API Center (SSE stream) ←←←←←←←←←←←←←←�
 | Auth Guard | `common/src/auth/auth.guard.ts` |
 | Tenant Context | `common/src/tenant/tenant-cls.service.ts` |
 | LLM Client | `common/src/llm/litellm-http.client.ts` |
-| Run Engine | `agent-platform/src/run-engine/` |
-| Workflow Definitions | `agent-platform/src/run-engine/workflow-definitions/` |
+| Campaign Workflows | `agent-platform/src/workflows/campaign/` |
 | Workflow Engine | `agent-platform/src/workflow-orchestration/` |
 | Skill Runner | `agent-platform/src/skills/skill-runner/skill-runner.service.ts` |
 | Chat Entities | `dao/src/entities/chat-*.entity.ts` |

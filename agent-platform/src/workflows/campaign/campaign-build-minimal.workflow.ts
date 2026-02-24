@@ -2,11 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { StateGraph } from '@langchain/langgraph';
 import { SkillNodeService } from './services/skill-node.service';
 import { CampaignWorkflowState, CampaignWorkflowStateType } from './interfaces/campaign-workflow-state.interface';
-import { CAMPAIGN_BUILD_MINIMAL } from './campaign-workflow.constants';
 
 @Injectable()
 export class CampaignBuildMinimalWorkflow {
-  static readonly WORKFLOW_NAME = CAMPAIGN_BUILD_MINIMAL;
   private readonly logger = new Logger(CampaignBuildMinimalWorkflow.name);
 
   constructor(private readonly skillNode: SkillNodeService) {}
@@ -16,7 +14,7 @@ export class CampaignBuildMinimalWorkflow {
   }
 
   private stepData(state: CampaignWorkflowStateType, stepId: string): Record<string, any> | undefined {
-    return state.stepResults.get(stepId)?.data as Record<string, any> | undefined;
+    return state.stepResults[stepId]?.data as Record<string, any> | undefined;
   }
 
   createGraph(): StateGraph<CampaignWorkflowStateType> {

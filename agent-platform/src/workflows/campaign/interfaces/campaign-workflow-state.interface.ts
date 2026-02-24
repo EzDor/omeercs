@@ -8,12 +8,11 @@ export interface SkillStepResult {
   durationMs: number;
 }
 
-function mergeStepResults(current: Map<string, SkillStepResult>, update: Map<string, SkillStepResult>): Map<string, SkillStepResult> {
-  const merged = new Map(current);
-  for (const [key, value] of update) {
-    merged.set(key, value);
-  }
-  return merged;
+function mergeStepResults(
+  current: Record<string, SkillStepResult>,
+  update: Record<string, SkillStepResult>,
+): Record<string, SkillStepResult> {
+  return { ...current, ...update };
 }
 
 export const CampaignWorkflowState = Annotation.Root({
@@ -32,9 +31,14 @@ export const CampaignWorkflowState = Annotation.Root({
     default: () => ({}),
   }),
 
-  stepResults: Annotation<Map<string, SkillStepResult>>({
+  stepResults: Annotation<Record<string, SkillStepResult>>({
     reducer: mergeStepResults,
-    default: () => new Map(),
+    default: () => ({}),
+  }),
+
+  baseRunOutputs: Annotation<Record<string, Record<string, unknown>>>({
+    reducer: (_current: Record<string, Record<string, unknown>>, update: Record<string, Record<string, unknown>>) => update,
+    default: () => ({}),
   }),
 
   error: Annotation<string | null>({

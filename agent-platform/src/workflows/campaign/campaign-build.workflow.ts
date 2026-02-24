@@ -2,11 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { StateGraph } from '@langchain/langgraph';
 import { SkillNodeService } from './services/skill-node.service';
 import { CampaignWorkflowState, CampaignWorkflowStateType } from './interfaces/campaign-workflow-state.interface';
-import { CAMPAIGN_BUILD } from './campaign-workflow.constants';
 
 @Injectable()
 export class CampaignBuildWorkflow {
-  static readonly WORKFLOW_NAME = CAMPAIGN_BUILD;
   private readonly logger = new Logger(CampaignBuildWorkflow.name);
 
   constructor(private readonly skillNode: SkillNodeService) {}
@@ -16,11 +14,11 @@ export class CampaignBuildWorkflow {
   }
 
   private stepData(state: CampaignWorkflowStateType, stepId: string): Record<string, any> | undefined {
-    return state.stepResults.get(stepId)?.data as Record<string, any> | undefined;
+    return state.stepResults[stepId]?.data as Record<string, any> | undefined;
   }
 
   private stepArtifacts(state: CampaignWorkflowStateType, stepId: string) {
-    return state.stepResults.get(stepId)?.artifactIds || [];
+    return state.stepResults[stepId]?.artifactIds || [];
   }
 
   private planVideoPrompt(state: CampaignWorkflowStateType, index: number): Record<string, unknown> | undefined {
@@ -231,21 +229,25 @@ export class CampaignBuildWorkflow {
       .addEdge('__start__', 'plan')
       .addEdge('__start__', 'intel_plan')
       .addEdge('__start__', 'intel_theme_brief')
-      .addConditionalEdges('plan', (s) => this.shouldContinue(s), { continue: 'intel_copy', __end__: '__end__' })
-      .addConditionalEdges('plan', (s) => this.shouldContinue(s), { continue: 'intro_image', __end__: '__end__' })
-      .addConditionalEdges('plan', (s) => this.shouldContinue(s), { continue: 'bgm', __end__: '__end__' })
-      .addConditionalEdges('plan', (s) => this.shouldContinue(s), { continue: 'sfx', __end__: '__end__' })
-      .addConditionalEdges('plan', (s) => this.shouldContinue(s), { continue: 'game_config', __end__: '__end__' })
-      .addConditionalEdges('plan', (s) => this.shouldContinue(s), { continue: 'outcome_win', __end__: '__end__' })
-      .addConditionalEdges('plan', (s) => this.shouldContinue(s), { continue: 'outcome_lose', __end__: '__end__' })
-      .addConditionalEdges('intro_image', (s) => this.shouldContinue(s), { continue: 'intel_theme_image', __end__: '__end__' })
-      .addConditionalEdges('intro_image', (s) => this.shouldContinue(s), { continue: 'intro_button_segmentation', __end__: '__end__' })
-      .addConditionalEdges('intro_image', (s) => this.shouldContinue(s), { continue: 'intro_video', __end__: '__end__' })
+      .addConditionalEdges(
+        'plan',
+        (s) => (s.error ? [] : ['intel_copy', 'intro_image', 'bgm', 'sfx', 'game_config', 'outcome_win', 'outcome_lose']),
+        ['intel_copy', 'intro_image', 'bgm', 'sfx', 'game_config', 'outcome_win', 'outcome_lose'],
+      )
+      .addConditionalEdges(
+        'intro_image',
+        (s) => (s.error ? [] : ['intel_theme_image', 'intro_button_segmentation', 'intro_video']),
+        ['intel_theme_image', 'intro_button_segmentation', 'intro_video'],
+      )
       .addConditionalEdges('bgm', (s) => this.shouldContinue(s), { continue: 'audio_mix', __end__: '__end__' })
       .addConditionalEdges('sfx', (s) => this.shouldContinue(s), { continue: 'audio_mix', __end__: '__end__' })
       .addConditionalEdges('audio_mix', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
       .addConditionalEdges('game_config', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges('bundle_game', (s) => this.shouldContinue(s), { continue: 'qa_bundle', __end__: '__end__' })
+      .addConditionalEdges(
+        'bundle_game',
+        (s) => (s.error ? [] : ['qa_bundle', 'manifest']),
+        ['qa_bundle', 'manifest'],
+      )
       .addConditionalEdges('intro_button_segmentation', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('intro_video', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('outcome_win', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
@@ -254,7 +256,6 @@ export class CampaignBuildWorkflow {
       .addConditionalEdges('intel_theme_brief', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('intel_copy', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('intel_theme_image', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
-      .addConditionalEdges('bundle_game', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('manifest', (s) => this.shouldContinue(s), { continue: 'review_smoke', __end__: '__end__' })
       .addEdge('qa_bundle', '__end__')
       .addEdge('review_smoke', '__end__');

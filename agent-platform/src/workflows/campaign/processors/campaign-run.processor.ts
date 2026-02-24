@@ -73,12 +73,15 @@ export class CampaignRunProcessor extends WorkerHost {
 
         await this.updateRunStatus(run, 'running');
 
+        const baseRunOutputs = await this.loadBaseRunOutputs(run.baseRunId, tenantId);
+
         const graph = workflow.createGraph();
         const initialState: Partial<CampaignWorkflowStateType> = {
           runId,
           tenantId,
           triggerPayload: run.triggerPayload || {},
-          stepResults: new Map(),
+          stepResults: {},
+          baseRunOutputs,
           error: null,
         };
 
@@ -89,10 +92,11 @@ export class CampaignRunProcessor extends WorkerHost {
 
         if (finalState.error || failedSteps.length > 0) {
           const failedStep = failedSteps[0];
+          const rawMessage = failedStep?.error || finalState.error || 'Unknown error';
           await this.updateRunStatus(run, 'failed', {
             code: 'STEP_EXECUTION_FAILED',
-            message: failedStep?.error || finalState.error || 'Unknown error',
-            failedStepId: failedStep ? failedSteps[0]?.stepId : undefined,
+            message: this.sanitizeErrorMessage(rawMessage),
+            failedStepId: failedStep?.stepId,
           });
           this.logger.error(`[CampaignRun] Run failed: runId=${runId}`);
           await this.updateCampaignStatus(campaignId, 'failed', undefined, runId);
@@ -103,25 +107,25 @@ export class CampaignRunProcessor extends WorkerHost {
           await this.updateCampaignStatus(campaignId, 'live', bundleUrl, runId);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(`[CampaignRun] Run error: runId=${runId}, error=${message}`);
-        await this.updateRunStatusById(runId, tenantId, 'failed', { code: 'ORCHESTRATION_ERROR', message });
+        const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`[CampaignRun] Run error: runId=${runId}, error=${rawMessage}`);
+        await this.updateRunStatusById(runId, tenantId, 'failed', { code: 'ORCHESTRATION_ERROR', message: this.sanitizeErrorMessage(rawMessage) });
         await this.updateCampaignStatus(campaignId, 'failed', undefined, runId);
         throw error;
       }
     });
   }
 
-  private findFailedSteps(stepResults: Map<string, SkillStepResult>): Array<SkillStepResult & { stepId: string }> {
+  private findFailedSteps(stepResults: Record<string, SkillStepResult>): Array<SkillStepResult & { stepId: string }> {
     const failed: Array<SkillStepResult & { stepId: string }> = [];
-    for (const [stepId, result] of stepResults) {
+    for (const [stepId, result] of Object.entries(stepResults)) {
       if (!result.ok) failed.push({ ...result, stepId });
     }
     return failed;
   }
 
-  private extractBundleUrl(stepResults: Map<string, SkillStepResult>): string | undefined {
-    for (const [, result] of stepResults) {
+  private extractBundleUrl(stepResults: Record<string, SkillStepResult>): string | undefined {
+    for (const result of Object.values(stepResults)) {
       if (result.data?.bundleUrl) return result.data.bundleUrl as string;
     }
     return undefined;
@@ -141,6 +145,45 @@ export class CampaignRunProcessor extends WorkerHost {
   private async updateRunStatusById(runId: string, tenantId: string, status: Run['status'], error?: { code: string; message: string }): Promise<void> {
     const run = await this.runRepository.findOne({ where: { id: runId, tenantId } });
     if (run) await this.updateRunStatus(run, status, error);
+  }
+
+  private sanitizeErrorMessage(message: string): string {
+    return message
+      .replace(/password[=:]\S+/gi, 'password=***')
+      .replace(/(?:postgresql?|mysql|redis|mongodb):\/\/\S+/gi, '[REDACTED_URI]')
+      .replace(/\/(?:Users|home|var|etc|tmp)\/\S+/gi, '[REDACTED_PATH]')
+      .replace(/[a-zA-Z0-9_-]{32,}/g, '[REDACTED_TOKEN]')
+      .substring(0, 500);
+  }
+
+  private async loadBaseRunOutputs(baseRunId: string | undefined, tenantId: string): Promise<Record<string, Record<string, unknown>>> {
+    if (!baseRunId) return {};
+
+    const baseRun = await this.runRepository.findOne({ where: { id: baseRunId, tenantId } });
+    if (!baseRun) {
+      this.logger.warn(`[CampaignRun] Base run not found or access denied: baseRunId=${baseRunId}, tenantId=${tenantId}`);
+      return {};
+    }
+
+    try {
+      const checkpointer = this.workflowEngine.getCheckpointer();
+      const checkpoint = await checkpointer.get({ configurable: { thread_id: baseRunId } });
+      if (!checkpoint?.channel_values) return {};
+
+      const state = checkpoint.channel_values as Partial<CampaignWorkflowStateType>;
+      if (!state.stepResults) return {};
+
+      const outputs: Record<string, Record<string, unknown>> = {};
+      for (const [stepId, result] of Object.entries(state.stepResults)) {
+        if (result.ok && result.data) {
+          outputs[stepId] = { data: result.data, outputArtifactIds: result.artifactIds };
+        }
+      }
+      return outputs;
+    } catch (error) {
+      this.logger.error(`[CampaignRun] Failed to load base run outputs: baseRunId=${baseRunId}, error=${(error as Error).message}`);
+      return {};
+    }
   }
 
   private async updateCampaignStatus(campaignId: string | undefined, status: 'live' | 'failed', bundleUrl: string | undefined, runId: string): Promise<void> {

@@ -40,7 +40,7 @@ export class SkillNodeService {
         this.logger.log(`[SkillNode] Completed: ${stepId}, durationMs=${durationMs}`);
 
         const stepResult: SkillStepResult = { ok: true, data: result.data as Record<string, unknown> | undefined, artifactIds, durationMs };
-        return { stepResults: new Map([[stepId, stepResult]]) };
+        return { stepResults: { [stepId]: stepResult } };
       }
 
       this.logger.error(`[SkillNode] Failed: ${stepId}, error=${result.error_code}`);
@@ -52,7 +52,7 @@ export class SkillNodeService {
     const durationMs = Date.now() - startTime;
     const stepResult: SkillStepResult = { ok: false, artifactIds: [], error: errorMessage, durationMs };
     return {
-      stepResults: new Map([[stepId, stepResult]]),
+      stepResults: { [stepId]: stepResult },
       error: `Step ${stepId} failed: ${errorMessage}`,
     };
   }

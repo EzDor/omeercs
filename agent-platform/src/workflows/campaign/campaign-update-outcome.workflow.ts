@@ -2,11 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { StateGraph } from '@langchain/langgraph';
 import { SkillNodeService } from './services/skill-node.service';
 import { CampaignWorkflowState, CampaignWorkflowStateType } from './interfaces/campaign-workflow-state.interface';
-import { CAMPAIGN_UPDATE_OUTCOME } from './campaign-workflow.constants';
 
 @Injectable()
 export class CampaignUpdateOutcomeWorkflow {
-  static readonly WORKFLOW_NAME = CAMPAIGN_UPDATE_OUTCOME;
   private readonly logger = new Logger(CampaignUpdateOutcomeWorkflow.name);
 
   constructor(private readonly skillNode: SkillNodeService) {}
@@ -16,15 +14,15 @@ export class CampaignUpdateOutcomeWorkflow {
   }
 
   private stepData(state: CampaignWorkflowStateType, stepId: string): Record<string, any> | undefined {
-    return state.stepResults.get(stepId)?.data as Record<string, any> | undefined;
+    return state.stepResults[stepId]?.data as Record<string, any> | undefined;
   }
 
   private stepArtifacts(state: CampaignWorkflowStateType, stepId: string) {
-    return state.stepResults.get(stepId)?.artifactIds || [];
+    return state.stepResults[stepId]?.artifactIds || [];
   }
 
   private baseRunData(state: CampaignWorkflowStateType, stepId: string): Record<string, any> | undefined {
-    return (state.triggerPayload.baseRunOutputs as Record<string, Record<string, any>> | undefined)?.[stepId];
+    return state.baseRunOutputs[stepId] as Record<string, any> | undefined;
   }
 
   private baseRunArtifactId(state: CampaignWorkflowStateType, stepId: string, index = 0): string | undefined {

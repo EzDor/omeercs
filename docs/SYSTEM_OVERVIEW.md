@@ -6,7 +6,7 @@
 3. [Data Model](#data-model)
 4. [Skills System](#skills-system)
 5. [Prompt Loading](#prompt-loading)
-6. [Run Engine & Agents](#run-engine--agents)
+6. [Campaign Workflows](#campaign-workflows)
 7. [MVP Gap Analysis](#mvp-gap-analysis)
 
 ---
@@ -119,12 +119,12 @@ JWT Token → AuthGuard → TenantContextInterceptor → TenantClsService
 4. Enqueues job to BullMQ 'run-orchestration' queue
 5. Returns { runId, status }
 
-6. Agent Platform picks up job
-7. Loads WorkflowSpec from registry
-8. Builds LangGraph state machine
-9. Executes steps in dependency order
-10. Each step calls SkillRunnerService
-11. Updates Run/RunStep entities
+6. Agent Platform: CampaignRunProcessor picks up job
+7. Looks up workflow class by workflowName
+8. Calls workflow.createGraph() to build LangGraph StateGraph
+9. Executes graph via WorkflowEngineService (with checkpointing)
+10. Each node calls SkillRunnerService via SkillNodeService (with retry)
+11. Updates Run entity status
 12. Run completes (status: 'completed')
 ```
 
@@ -378,122 +378,116 @@ Generate a structured plan with:
 
 ---
 
-## Run Engine & Agents
+## Campaign Workflows
 
-### Workflow Definition (TypeScript)
+### Workflow Definition (TypeScript Classes)
+
+Each workflow is an injectable NestJS class that builds a LangGraph `StateGraph` directly in its `createGraph()` method:
 
 ```typescript
-import type { WorkflowSpec } from '../interfaces/workflow-spec.interface';
-import { inputSelector, fromTrigger, fromStep, constant } from './input-helpers';
+import { Injectable } from '@nestjs/common';
+import { StateGraph } from '@langchain/langgraph';
+import { SkillNodeService } from './services/skill-node.service';
+import { CampaignWorkflowState, CampaignWorkflowStateType } from './interfaces/campaign-workflow-state.interface';
 
-export const campaignBuildMinimalWorkflow: WorkflowSpec = {
-  workflowName: 'campaign.build.minimal',
-  version: '1.0.0',
-  description: 'Minimal campaign build for reference implementation testing - 4 steps',
-  steps: [
-    {
-      stepId: 'game_config',
-      skillId: 'game_config_from_template',
-      dependsOn: [],
-      description: 'Generate game configuration from template',
-      inputSelector: inputSelector({
-        template_id: fromTrigger('template_id'),
-        theme: fromTrigger('theme'),
-        difficulty: fromTrigger('difficulty'),
-        color_scheme: fromTrigger('color_scheme'),
-        copy: fromTrigger('copy'),
-      }),
-      cachePolicy: { enabled: true, scope: 'global' },
-      retryPolicy: { maxAttempts: 2, backoffMs: 1000 },
-    },
-    {
-      stepId: 'bgm',
-      skillId: 'generate_bgm_track',
-      dependsOn: [],
-      description: 'Generate background music track',
-      inputSelector: inputSelector({
-        style: fromTrigger('audio.style'),
-        duration_sec: fromTrigger('audio.duration_sec'),
-        loopable: constant(true),
-      }),
-      cachePolicy: { enabled: true, scope: 'global' },
-      retryPolicy: { maxAttempts: 2, backoffMs: 2000 },
-    },
-    {
-      stepId: 'bundle_game',
-      skillId: 'bundle_game_template',
-      dependsOn: ['game_config', 'bgm'],
-      description: 'Bundle game template with assets',
-      inputSelector: inputSelector({
-        game_config: fromStep('game_config', 'data'),
-        audio_uri: fromStep('bgm', 'audio_uri'),
-        template_id: fromTrigger('template_id'),
-      }),
-      cachePolicy: { enabled: true, scope: 'run_only' },
-      retryPolicy: { maxAttempts: 2, backoffMs: 2000 },
-    },
-  ],
-};
+@Injectable()
+export class CampaignBuildMinimalWorkflow {
+  constructor(private readonly skillNode: SkillNodeService) {}
+
+  createGraph(): StateGraph<CampaignWorkflowStateType> {
+    const graph = new StateGraph(CampaignWorkflowState)
+      .addNode('game_config',
+        this.skillNode.createNode('game_config', 'game_config_from_template', (s) => ({
+          template_id: s.triggerPayload.template_id,
+          theme: s.triggerPayload.theme,
+          difficulty: s.triggerPayload.difficulty,
+        })),
+      )
+      .addNode('bgm',
+        this.skillNode.createNode('bgm', 'generate_bgm_track', (s) => ({
+          style: (s.triggerPayload.audio as Record<string, any>)?.style,
+          duration_sec: (s.triggerPayload.audio as Record<string, any>)?.duration_sec,
+          loopable: true,
+        }), { maxAttempts: 2, backoffMs: 2000 }),
+      )
+      .addNode('bundle_game',
+        this.skillNode.createNode('bundle_game', 'bundle_game_template', (s) => ({
+          game_config: s.stepResults['game_config']?.data,
+          audio_uri: s.stepResults['bgm']?.data?.audio_uri,
+          template_id: s.triggerPayload.template_id,
+        }), { maxAttempts: 2, backoffMs: 2000 }),
+      )
+      .addNode('manifest',
+        this.skillNode.createNode('manifest', 'assemble_campaign_manifest', (s) => ({
+          campaign_id: s.triggerPayload.campaign_id,
+          game_bundle_uri: s.stepResults['bundle_game']?.data?.bundle_uri,
+        })),
+      );
+
+    graph
+      .addEdge('__start__', 'game_config')
+      .addEdge('__start__', 'bgm')
+      .addConditionalEdges('game_config', (s) => s.error ? '__end__' : 'continue',
+        { continue: 'bundle_game', __end__: '__end__' })
+      .addConditionalEdges('bgm', (s) => s.error ? '__end__' : 'continue',
+        { continue: 'bundle_game', __end__: '__end__' })
+      .addConditionalEdges('bundle_game', (s) => s.error ? '__end__' : 'continue',
+        { continue: 'manifest', __end__: '__end__' })
+      .addEdge('manifest', '__end__');
+
+    return graph;
+  }
+}
 ```
 
 ### LangGraph Execution
 
 ```
-1. WorkflowRegistryService provides pre-registered WorkflowSpec
-   ↓
-2. LangGraphWorkflowBuilderService builds StateGraph
-   ↓
-3. For each step → Create node function:
+1. CampaignRunProcessor looks up workflow class by workflowName
+   |
+2. Calls workflow.createGraph() to build StateGraph
+   |
+3. Each node wraps a skill via SkillNodeService.createNode():
 
-   async (state: RunStateType) => {
-     context = buildRunContext(state)
-     input = inputSelector(context)
-     result = await skillRunner.execute(skillId, input)
-     return buildSuccessUpdate(stepId, result)
+   async (state: CampaignWorkflowStateType) => {
+     input = inputFn(state)
+     result = await skillRunner.execute(skillId, input)  // with retry
+     return { stepResults: { [stepId]: result } }
    }
-   ↓
-4. Connect nodes via edges (dependsOn)
-   ↓
+   |
+4. Conditional edges handle error short-circuiting
+   |
 5. WorkflowEngineService.executeWorkflow(graph, initialState)
 ```
 
 ### State Flow Between Steps
 
 ```typescript
-RunStateType {
-  runId, tenantId, workflowName
-  triggerPayload: { ... }           // Initial input
-  stepResults: Map<stepId, {
-    status: 'completed'
-    artifactIds: ['uuid-1', 'uuid-2']
-    data: { ... }                   // Step output
-    cacheHit: boolean
+CampaignWorkflowStateType {
+  runId, tenantId
+  triggerPayload: { ... }               // Initial input
+  stepResults: Record<stepId, {
+    ok: boolean
+    artifactIds: string[]
+    data?: Record<string, unknown>      // Step output
+    error?: string
     durationMs: number
   }>
-  artifacts: Map<stepId, string[]>  // Artifact IDs
-  error: null | string
+  baseRunOutputs: Record<stepId, { ... }>  // Previous run data (for updates)
+  error: string | null
 }
 ```
 
-### Input Selector Helpers
+### Input Resolution
 
-| Helper | Description | Example |
-|--------|-------------|---------|
-| `fromTrigger(path)` | From the original trigger payload | `fromTrigger('template_id')`, `fromTrigger('audio.style')` |
-| `fromStep(stepId, path)` | From a completed step's output | `fromStep('plan', 'data.bundle_uri')` |
-| `fromBaseRun(stepId, path)` | From a previous run's step output | `fromBaseRun('plan', 'data.audio_style')` |
-| `constant(value)` | Literal values | `constant(true)`, `constant({ bgm_lufs: -14 })` |
-| `merge(...resolvers)` | Merge multiple resolved objects | `merge(fromBaseRun('plan', 'data.mood'), fromTrigger('overrides'))` |
+Inputs are resolved via inline lambda functions in each workflow class:
 
-### Caching Strategy
-
-```
-1. Hash input: SHA256(canonical_json(input))
-2. Build cache key: "workflow:stepId:inputHash"
-3. Check StepCache table
-4. If HIT: Return cached artifactIds (skip execution)
-5. If MISS: Execute skill, store result
-```
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| Trigger payload | From the original trigger data | `(s) => ({ template_id: s.triggerPayload.template_id })` |
+| Step output | From a completed step's result | `(s) => ({ config: s.stepResults['game_config']?.data })` |
+| Base run output | From a previous run (update workflows) | `(s) => ({ plan: s.baseRunOutputs['plan']?.data })` |
+| Mixed sources | Combine multiple sources | `(s) => ({ prompt: s.stepResults['plan']?.data?.prompt, brand: s.triggerPayload.brand })` |
 
 ---
 
@@ -672,9 +666,11 @@ curl http://localhost:3001/api/dev/runs/{runId}
 
 | Purpose | Location |
 |---------|----------|
-| Workflow definitions | `agent-platform/src/run-engine/workflow-definitions/*.workflow.ts` |
+| Campaign workflows | `agent-platform/src/workflows/campaign/*.workflow.ts` |
+| Skill node service | `agent-platform/src/workflows/campaign/services/skill-node.service.ts` |
+| Campaign run processor | `agent-platform/src/workflows/campaign/processors/campaign-run.processor.ts` |
+| Workflow state | `agent-platform/src/workflows/campaign/interfaces/campaign-workflow-state.interface.ts` |
 | Skill catalog | `skills/catalog/index.yaml` |
 | Skill handlers | `agent-platform/src/skills/handlers/` |
-| Run engine | `agent-platform/src/run-engine/` |
 | Entities | `dao/src/entities/` |
 | API routes | `api-center/src/run-engine/` |

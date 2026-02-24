@@ -2,11 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { StateGraph } from '@langchain/langgraph';
 import { SkillNodeService } from './services/skill-node.service';
 import { CampaignWorkflowState, CampaignWorkflowStateType } from './interfaces/campaign-workflow-state.interface';
-import { CAMPAIGN_UPDATE_GAME_CONFIG } from './campaign-workflow.constants';
 
 @Injectable()
 export class CampaignUpdateGameConfigWorkflow {
-  static readonly WORKFLOW_NAME = CAMPAIGN_UPDATE_GAME_CONFIG;
   private readonly logger = new Logger(CampaignUpdateGameConfigWorkflow.name);
 
   constructor(private readonly skillNode: SkillNodeService) {}
@@ -16,15 +14,15 @@ export class CampaignUpdateGameConfigWorkflow {
   }
 
   private stepData(state: CampaignWorkflowStateType, stepId: string): Record<string, any> | undefined {
-    return state.stepResults.get(stepId)?.data as Record<string, any> | undefined;
+    return state.stepResults[stepId]?.data as Record<string, any> | undefined;
   }
 
   private stepArtifacts(state: CampaignWorkflowStateType, stepId: string) {
-    return state.stepResults.get(stepId)?.artifactIds || [];
+    return state.stepResults[stepId]?.artifactIds || [];
   }
 
   private baseRunData(state: CampaignWorkflowStateType, stepId: string): Record<string, any> | undefined {
-    return (state.triggerPayload.baseRunOutputs as Record<string, Record<string, any>> | undefined)?.[stepId];
+    return state.baseRunOutputs[stepId] as Record<string, any> | undefined;
   }
 
   private baseRunArtifactId(state: CampaignWorkflowStateType, stepId: string, index = 0): string | undefined {
@@ -91,8 +89,11 @@ export class CampaignUpdateGameConfigWorkflow {
     graph
       .addEdge('__start__', 'game_config')
       .addConditionalEdges('game_config', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges('bundle_game', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
-      .addConditionalEdges('bundle_game', (s) => this.shouldContinue(s), { continue: 'qa_bundle', __end__: '__end__' })
+      .addConditionalEdges(
+        'bundle_game',
+        (s) => (s.error ? [] : ['manifest', 'qa_bundle']),
+        ['manifest', 'qa_bundle'],
+      )
       .addEdge('manifest', '__end__')
       .addEdge('qa_bundle', '__end__');
 

@@ -20,7 +20,7 @@ export class Run extends BaseEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'workflow_name', type: 'varchar', length: 255 })
+  @Column({ name: 'workflow_name', type: 'varchar', length: 255, update: false })
   workflowName: string;
 
   @Column({ name: 'workflow_version', type: 'varchar', length: 50 })
