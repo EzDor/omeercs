@@ -111,11 +111,7 @@ export class CampaignReplace3dAssetWorkflow {
       .addEdge('__start__', 'generate_3d_asset')
       .addConditionalEdges('generate_3d_asset', (s) => this.shouldContinue(s), { continue: 'optimize_3d_asset', __end__: '__end__' })
       .addConditionalEdges('optimize_3d_asset', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges(
-        'bundle_game',
-        (s) => (s.error ? [] : ['manifest', 'qa_bundle']),
-        ['manifest', 'qa_bundle'],
-      )
+      .addConditionalEdges('bundle_game', (s) => (s.error ? [] : ['manifest', 'qa_bundle']), ['manifest', 'qa_bundle'])
       .addEdge('manifest', '__end__')
       .addEdge('qa_bundle', '__end__');
 

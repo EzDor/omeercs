@@ -229,25 +229,25 @@ export class CampaignBuildWorkflow {
       .addEdge('__start__', 'plan')
       .addEdge('__start__', 'intel_plan')
       .addEdge('__start__', 'intel_theme_brief')
-      .addConditionalEdges(
-        'plan',
-        (s) => (s.error ? [] : ['intel_copy', 'intro_image', 'bgm', 'sfx', 'game_config', 'outcome_win', 'outcome_lose']),
-        ['intel_copy', 'intro_image', 'bgm', 'sfx', 'game_config', 'outcome_win', 'outcome_lose'],
-      )
-      .addConditionalEdges(
+      .addConditionalEdges('plan', (s) => (s.error ? [] : ['intel_copy', 'intro_image', 'bgm', 'sfx', 'game_config', 'outcome_win', 'outcome_lose']), [
+        'intel_copy',
         'intro_image',
-        (s) => (s.error ? [] : ['intel_theme_image', 'intro_button_segmentation', 'intro_video']),
-        ['intel_theme_image', 'intro_button_segmentation', 'intro_video'],
-      )
+        'bgm',
+        'sfx',
+        'game_config',
+        'outcome_win',
+        'outcome_lose',
+      ])
+      .addConditionalEdges('intro_image', (s) => (s.error ? [] : ['intel_theme_image', 'intro_button_segmentation', 'intro_video']), [
+        'intel_theme_image',
+        'intro_button_segmentation',
+        'intro_video',
+      ])
       .addConditionalEdges('bgm', (s) => this.shouldContinue(s), { continue: 'audio_mix', __end__: '__end__' })
       .addConditionalEdges('sfx', (s) => this.shouldContinue(s), { continue: 'audio_mix', __end__: '__end__' })
       .addConditionalEdges('audio_mix', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
       .addConditionalEdges('game_config', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges(
-        'bundle_game',
-        (s) => (s.error ? [] : ['qa_bundle', 'manifest']),
-        ['qa_bundle', 'manifest'],
-      )
+      .addConditionalEdges('bundle_game', (s) => (s.error ? [] : ['qa_bundle', 'manifest']), ['qa_bundle', 'manifest'])
       .addConditionalEdges('intro_button_segmentation', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('intro_video', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('outcome_win', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })

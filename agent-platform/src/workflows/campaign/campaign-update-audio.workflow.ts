@@ -117,11 +117,7 @@ export class CampaignUpdateAudioWorkflow {
       .addConditionalEdges('bgm', (s) => this.shouldContinue(s), { continue: 'audio_mix', __end__: '__end__' })
       .addConditionalEdges('sfx', (s) => this.shouldContinue(s), { continue: 'audio_mix', __end__: '__end__' })
       .addConditionalEdges('audio_mix', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges(
-        'bundle_game',
-        (s) => (s.error ? [] : ['manifest', 'qa_bundle']),
-        ['manifest', 'qa_bundle'],
-      )
+      .addConditionalEdges('bundle_game', (s) => (s.error ? [] : ['manifest', 'qa_bundle']), ['manifest', 'qa_bundle'])
       .addEdge('manifest', '__end__')
       .addEdge('qa_bundle', '__end__');
 

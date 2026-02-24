@@ -89,11 +89,7 @@ export class CampaignUpdateGameConfigWorkflow {
     graph
       .addEdge('__start__', 'game_config')
       .addConditionalEdges('game_config', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges(
-        'bundle_game',
-        (s) => (s.error ? [] : ['manifest', 'qa_bundle']),
-        ['manifest', 'qa_bundle'],
-      )
+      .addConditionalEdges('bundle_game', (s) => (s.error ? [] : ['manifest', 'qa_bundle']), ['manifest', 'qa_bundle'])
       .addEdge('manifest', '__end__')
       .addEdge('qa_bundle', '__end__');
 

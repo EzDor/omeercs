@@ -503,9 +503,11 @@ Inputs are resolved via inline lambda functions in each workflow class:
 | LangGraph workflow engine | ✅ Working |
 | Skill catalog & handler framework | ✅ Working |
 | Prompt registry | ✅ Working |
-| Run/RunStep/Artifact persistence | ✅ Working |
-| Step caching | ✅ Working |
+| Run/Artifact persistence | ✅ Working |
+| Campaign workflow classes (7 workflows) | ✅ Working |
 | 4-step minimal workflow | ✅ Working |
+| 18-step full campaign build workflow | ✅ Working |
+| Intelligence pipeline (plan, copy, theme) | ✅ Working |
 
 ### What's Missing for AI Game Creator MVP ❌
 

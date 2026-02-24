@@ -101,7 +101,7 @@ StepCache (standalone, indexed by workflow + step + inputHash)
 |--------|------|-------------|
 | id | UUID (PK) | Auto-generated unique identifier |
 | tenantId | VARCHAR(255) | Organization ID |
-| workflowName | VARCHAR(255) | Which workflow YAML to execute (e.g., `campaign.build`) |
+| workflowName | VARCHAR(255) | Which workflow to execute (e.g., `campaign.build`) |
 | workflowVersion | VARCHAR(50) | Semantic version of the workflow |
 | triggerType | VARCHAR(20) | `initial` for new runs, `update` for re-runs |
 | triggerPayload | JSONB, nullable | The input data that triggered this run (brief, constraints, etc.) |
@@ -131,7 +131,9 @@ queued  →  running  →  completed
 ### RunStep
 
 **Table**: `run_steps`
-**Purpose**: Represents a single skill execution within a workflow run. Each step in the workflow YAML becomes a RunStep record.
+**Purpose**: Represents a single skill execution within a workflow run.
+
+> **Note**: The `run_steps` table and entity still exist in the schema, but the current campaign workflow system (`CampaignRunProcessor` + `SkillNodeService`) does not write RunStep records. Step results are tracked in the LangGraph workflow state (`CampaignWorkflowState.stepResults`) instead. This table may be used by future workflow systems or for auditing purposes.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -169,6 +171,8 @@ pending  →  running  →  completed
 
 **Table**: `step_cache`
 **Purpose**: Input-based caching for step executions. If the same step receives the same inputs, the cached result is returned instead of re-executing the skill.
+
+> **Note**: The `step_cache` table and entity still exist in the schema, but the current campaign workflow system does not use step caching at runtime. This table may be used by future workflow systems or re-enabled for optimization.
 
 | Column | Type | Description |
 |--------|------|-------------|

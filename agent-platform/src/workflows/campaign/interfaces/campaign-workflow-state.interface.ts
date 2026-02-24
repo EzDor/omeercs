@@ -8,10 +8,7 @@ export interface SkillStepResult {
   durationMs: number;
 }
 
-function mergeStepResults(
-  current: Record<string, SkillStepResult>,
-  update: Record<string, SkillStepResult>,
-): Record<string, SkillStepResult> {
+function mergeStepResults(current: Record<string, SkillStepResult>, update: Record<string, SkillStepResult>): Record<string, SkillStepResult> {
   return { ...current, ...update };
 }
 

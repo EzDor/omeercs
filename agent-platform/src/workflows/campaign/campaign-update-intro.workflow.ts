@@ -100,11 +100,7 @@ export class CampaignUpdateIntroWorkflow {
 
     graph
       .addEdge('__start__', 'intro_image')
-      .addConditionalEdges(
-        'intro_image',
-        (s) => (s.error ? [] : ['intro_button_segmentation', 'intro_video']),
-        ['intro_button_segmentation', 'intro_video'],
-      )
+      .addConditionalEdges('intro_image', (s) => (s.error ? [] : ['intro_button_segmentation', 'intro_video']), ['intro_button_segmentation', 'intro_video'])
       .addConditionalEdges('intro_button_segmentation', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('intro_video', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addConditionalEdges('manifest', (s) => this.shouldContinue(s), { continue: 'review_smoke', __end__: '__end__' })
