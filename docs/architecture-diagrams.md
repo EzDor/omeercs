@@ -2,11 +2,11 @@
 
 ## Table of Contents
 1. [High-Level System Flow](#1-high-level-system-flow)
-2. [Workflow Loading & Registration](#2-workflow-loading--registration)
+2. [Workflow Registration & Dependency Injection](#2-workflow-registration--dependency-injection)
 3. [Skill Loading & Registration](#3-skill-loading--registration)
-4. [Workflow Execution Flow (Run Engine)](#4-workflow-execution-flow-run-engine)
-5. [LangGraph DAG Building](#5-langgraph-dag-building)
-6. [Step Execution with Caching](#6-step-execution-with-caching)
+4. [Workflow Execution Flow (Campaign Workflows)](#4-workflow-execution-flow-campaign-workflows)
+5. [LangGraph DAG Building (Inside Workflow Classes)](#5-langgraph-dag-building-inside-workflow-classes)
+6. [Step Execution via SkillNodeService](#6-step-execution-via-skillnodeservice)
 7. [Skill Execution Detail](#7-skill-execution-detail)
 8. [Handler Execution Example](#8-handler-execution-example-image-generation)
 9. [Full Campaign Build - Step by Step](#9-full-campaign-build---step-by-step)
@@ -27,7 +27,7 @@
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                   API CENTER                                            │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  POST /run-engine/trigger-run                                                    │   │
+│  │  POST /api/campaigns/:id/generate                                                 │   │
 │  │  {                                                                               │   │
 │  │    "workflowName": "campaign.build",                                            │   │
 │  │    "triggerPayload": { "brief": {...}, "brand_assets": [...] }                  │   │
@@ -70,49 +70,52 @@
 
 ---
 
-## 2. Workflow Loading & Registration
+## 2. Workflow Registration & Dependency Injection
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                            WORKFLOW YAML FILES                                          │
-│                         (agent-platform/workflows/)                                     │
+│                        TYPESCRIPT WORKFLOW CLASSES                                       │
+│              (agent-platform/src/workflows/campaign/)                                    │
+│                                                                                         │
+│   ┌────────────────────────────────────────────────────────────────────────────────┐    │
+│   │  campaign-build.workflow.ts          → CampaignBuildWorkflow          @Injectable│    │
+│   │  campaign-build-minimal.workflow.ts  → CampaignBuildMinimalWorkflow   @Injectable│    │
+│   │  campaign-update-audio.workflow.ts   → CampaignUpdateAudioWorkflow    @Injectable│    │
+│   │  campaign-update-intro.workflow.ts   → CampaignUpdateIntroWorkflow    @Injectable│    │
+│   │  ...                                                                            │    │
+│   │                                                                                 │    │
+│   │  Each class has createGraph() → returns StateGraph<CampaignWorkflowStateType>   │    │
+│   │  All depend on SkillNodeService for creating node functions                     │    │
+│   └────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
         │
-        │  On Application Startup
+        │  NestJS Dependency Injection
         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                        WorkflowYamlLoaderService                                        │
+│                CampaignWorkflowsModule (NestJS Module)                                   │
 │                                                                                         │
 │   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
-│   │  1. Read index.yaml                                                              │  │
-│   │     ┌────────────────────────────────────────────────────────────────────────┐  │  │
-│   │     │ workflows:                                                              │  │  │
-│   │     │   - workflow_name: campaign.build                                       │  │  │
-│   │     │     version: "1.0.0"                                                    │  │  │
-│   │     │     status: active                                                      │  │  │
-│   │     │   - workflow_name: campaign.update_audio                                │  │  │
-│   │     │     version: "1.0.0"                                                    │  │  │
-│   │     │     status: active                                                      │  │  │
-│   │     └────────────────────────────────────────────────────────────────────────┘  │  │
+│   │  1. Provides all workflow classes as injectable services                         │  │
+│   │                                                                                  │  │
+│   │     providers: [                                                                 │  │
+│   │       SkillNodeService,                                                          │  │
+│   │       CampaignBuildWorkflow,                                                     │  │
+│   │       CampaignBuildMinimalWorkflow,                                               │  │
+│   │       CampaignUpdateAudioWorkflow,                                                │  │
+│   │       ...                                                                        │  │
+│   │       CampaignRunProcessor,                                                      │  │
+│   │     ]                                                                            │  │
 │   └─────────────────────────────────────────────────────────────────────────────────┘  │
 │                                          │                                              │
 │                                          ▼                                              │
 │   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
-│   │  2. For each active workflow: Load & Validate YAML                              │  │
+│   │  2. CampaignRunProcessor builds workflow map in constructor                      │  │
 │   │                                                                                  │  │
-│   │     campaign.build.v1.yaml ──────▶ Parse ──────▶ Validate Schema               │  │
-│   │     campaign.update_audio.v1.yaml ──────▶ Parse ──────▶ Validate Schema        │  │
-│   │     ...                                                                         │  │
-│   └─────────────────────────────────────────────────────────────────────────────────┘  │
-│                                          │                                              │
-│                                          ▼                                              │
-│   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
-│   │  3. Register in WorkflowRegistryService                                          │  │
-│   │                                                                                  │  │
-│   │     Map<workflowName, Map<version, WorkflowSpec>>                               │  │
+│   │     Map<workflowName, WorkflowClass>                                            │  │
 │   │     ┌────────────────────────────────────────────────────────────────────────┐  │  │
-│   │     │  "campaign.build" ──▶ { "1.0.0" ──▶ WorkflowSpec }                     │  │  │
-│   │     │  "campaign.update_audio" ──▶ { "1.0.0" ──▶ WorkflowSpec }              │  │  │
+│   │     │  "campaign.build" ──▶ CampaignBuildWorkflow                            │  │  │
+│   │     │  "campaign.build.minimal" ──▶ CampaignBuildMinimalWorkflow              │  │  │
+│   │     │  "campaign.update_audio" ──▶ CampaignUpdateAudioWorkflow                │  │  │
 │   │     │  ...                                                                    │  │  │
 │   │     └────────────────────────────────────────────────────────────────────────┘  │  │
 │   └─────────────────────────────────────────────────────────────────────────────────┘  │
@@ -186,7 +189,7 @@
 
 ---
 
-## 4. Workflow Execution Flow (Run Engine)
+## 4. Workflow Execution Flow (Campaign Workflows)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
@@ -202,7 +205,7 @@
                                           │
                                           ▼
     ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  LangGraphRunProcessor.process()                                                │
+    │  CampaignRunProcessor.process()                                                 │
     │                                                                                 │
     │  ┌───────────────────────────────────────────────────────────────────────────┐  │
     │  │  1. Fetch Run from database                                               │  │
@@ -211,24 +214,21 @@
     │                                          │                                      │
     │                                          ▼                                      │
     │  ┌───────────────────────────────────────────────────────────────────────────┐  │
-    │  │  2. Get WorkflowSpec from registry                                        │  │
-    │  │     WorkflowSpec { name, version, steps: [...] }                         │  │
+    │  │  2. Look up workflow class from workflowMap                               │  │
+    │  │     workflowMap.get("campaign.build") → CampaignBuildWorkflow            │  │
     │  └───────────────────────────────────────────────────────────────────────────┘  │
     │                                          │                                      │
     │                                          ▼                                      │
     │  ┌───────────────────────────────────────────────────────────────────────────┐  │
-    │  │  3. Create RunStep entities (topologically sorted)                        │  │
-    │  │                                                                           │  │
-    │  │     RunStep { runId, stepId: "plan", skillId, status: "pending" }        │  │
-    │  │     RunStep { runId, stepId: "intro_image", skillId, status: "pending" } │  │
-    │  │     RunStep { runId, stepId: "bgm", skillId, status: "pending" }         │  │
-    │  │     ...                                                                   │  │
+    │  │  3. Build LangGraph StateGraph                                            │  │
+    │  │     workflow.createGraph()                                                │  │
+    │  │     → Returns StateGraph with nodes, edges, and conditional routing      │  │
     │  └───────────────────────────────────────────────────────────────────────────┘  │
     │                                          │                                      │
     │                                          ▼                                      │
     │  ┌───────────────────────────────────────────────────────────────────────────┐  │
-    │  │  4. Build LangGraph DAG                                                   │  │
-    │  │     LangGraphWorkflowBuilderService.buildWorkflowGraph()                 │  │
+    │  │  4. Load base run outputs (for update workflows)                          │  │
+    │  │     Reads previous run checkpoint from PostgreSQL                         │  │
     │  └───────────────────────────────────────────────────────────────────────────┘  │
     │                                          │                                      │
     │                                          ▼                                      │
@@ -239,8 +239,9 @@
     │                                          │                                      │
     │                                          ▼                                      │
     │  ┌───────────────────────────────────────────────────────────────────────────┐  │
-    │  │  6. Update Run status                                                     │  │
+    │  │  6. Update Run and Campaign status                                        │  │
     │  │     Run { status: "completed" | "failed" }                               │  │
+    │  │     Campaign { status: "live" | "failed" }                               │  │
     │  └───────────────────────────────────────────────────────────────────────────┘  │
     │                                                                                 │
     └─────────────────────────────────────────────────────────────────────────────────┘
@@ -248,60 +249,41 @@
 
 ---
 
-## 5. LangGraph DAG Building
+## 5. LangGraph DAG Building (Inside Workflow Classes)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                     LangGraphWorkflowBuilderService                                     │
+│                     Workflow.createGraph() (e.g., CampaignBuildMinimalWorkflow)          │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
-    INPUT: WorkflowSpec (from YAML)
+    Each workflow class builds its StateGraph directly in createGraph():
+
     ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  steps:                                                                         │
-    │    - step_id: plan         depends_on: []                                       │
-    │    - step_id: intro_image  depends_on: [plan]                                   │
-    │    - step_id: bgm          depends_on: [plan]                                   │
-    │    - step_id: sfx          depends_on: [plan]                                   │
-    │    - step_id: audio_mix    depends_on: [bgm, sfx]                              │
-    │    - step_id: manifest     depends_on: [intro_image, audio_mix]                │
-    └─────────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  1. Validate Dependencies (no cycles)                                           │
-    │     DependencyGraphService.validateNoCycles()                                   │
-    └─────────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  2. Create StateGraph                                                           │
+    │  1. Create StateGraph with nodes (each wraps a skill via SkillNodeService)      │
     │                                                                                 │
-    │     const graph = new StateGraph(RunStateAnnotation)                           │
-    │       .addNode("plan", cachedExecutor.create("plan"))                          │
-    │       .addNode("intro_image", cachedExecutor.create("intro_image"))            │
-    │       .addNode("bgm", cachedExecutor.create("bgm"))                            │
-    │       .addNode("sfx", cachedExecutor.create("sfx"))                            │
-    │       .addNode("audio_mix", cachedExecutor.create("audio_mix"))                │
-    │       .addNode("manifest", cachedExecutor.create("manifest"))                  │
+    │     const graph = new StateGraph(CampaignWorkflowState)                        │
+    │       .addNode("plan", skillNode.createNode("plan", "campaign_plan", inputFn)) │
+    │       .addNode("intro_image", skillNode.createNode("intro_image", ...))        │
+    │       .addNode("bgm", skillNode.createNode("bgm", ...))                        │
+    │       .addNode("sfx", skillNode.createNode("sfx", ...))                        │
+    │       .addNode("audio_mix", skillNode.createNode("audio_mix", ...))            │
+    │       .addNode("manifest", skillNode.createNode("manifest", ...))              │
     └─────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
     ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  3. Add Edges (dependencies)                                                    │
+    │  2. Add edges and conditional edges (dependencies + error short-circuiting)     │
     │                                                                                 │
-    │     .addEdge(START, "plan")           // Entry point                           │
-    │     .addEdge("plan", "intro_image")   // plan -> intro_image                   │
-    │     .addEdge("plan", "bgm")           // plan -> bgm                           │
-    │     .addEdge("plan", "sfx")           // plan -> sfx                           │
-    │     .addEdge("bgm", "audio_mix")      // bgm -> audio_mix                      │
-    │     .addEdge("sfx", "audio_mix")      // sfx -> audio_mix                      │
-    │     .addEdge("intro_image", "manifest")                                        │
-    │     .addEdge("audio_mix", "manifest")                                          │
-    │     .addEdge("manifest", END)         // Terminal                              │
+    │     .addEdge("__start__", "plan")        // Entry point                        │
+    │     .addConditionalEdges("plan", ...)     // plan -> intro_image, bgm, sfx     │
+    │     .addConditionalEdges("bgm", ...)      // bgm -> audio_mix (if no error)    │
+    │     .addConditionalEdges("sfx", ...)      // sfx -> audio_mix (if no error)    │
+    │     .addConditionalEdges("audio_mix",...) // audio_mix -> manifest (if no error)│
+    │     .addEdge("manifest", "__end__")       // Terminal                           │
     └─────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
-    OUTPUT: Compiled StateGraph (executable DAG)
+    OUTPUT: StateGraph (executable DAG)
 
     ┌─────────────────────────────────────────────────────────────────────────────────┐
     │                                                                                 │
@@ -344,100 +326,68 @@
 
 ---
 
-## 6. Step Execution with Caching
+## 6. Step Execution via SkillNodeService
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                        CachedStepExecutorService                                        │
+│                            SkillNodeService                                              │
 │                        (Node Function for each step)                                    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
     When LangGraph invokes a node (e.g., "intro_image"):
 
     ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  INPUT: Current RunState                                                        │
+    │  INPUT: Current CampaignWorkflowState                                           │
     │  {                                                                              │
     │    runId: "abc-123",                                                           │
     │    triggerPayload: { brief: {...}, brand_assets: [...] },                      │
-    │    stepResults: { "plan": { ok: true, data: {...}, artifacts: [...] } },       │
-    │    artifacts: Map<stepId, artifactIds[]>                                       │
+    │    stepResults: { "plan": { ok: true, data: {...}, artifactIds: [...] } },     │
+    │    baseRunOutputs: { ... },                                                    │
+    │    error: null                                                                 │
     │  }                                                                              │
     └─────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
     ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  1. Evaluate input_selector (build step input)                                  │
+    │  1. Evaluate input function (inline lambda from workflow class)                 │
     │                                                                                 │
-    │     input_selector:                                                            │
-    │       style_guide:                                                             │
-    │         source: step_output ───────> stepResults["plan"].data.style_guide     │
-    │         step_id: plan                                                          │
-    │         path: data.style_guide                                                 │
-    │       brand_assets:                                                            │
-    │         source: trigger ──────────> triggerPayload.brand_assets               │
-    │         path: brand_assets                                                     │
+    │     inputFn(state):                                                            │
+    │       prompt ──────> state.stepResults["plan"].data.video_prompts[0].prompt   │
+    │       brand_assets ──> state.triggerPayload.brand_assets                       │
     │                                                                                 │
-    │     RESULT: { style_guide: {...}, brand_assets: [...] }                        │
+    │     RESULT: { prompt: "...", brand_assets: [...] }                             │
     └─────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
     ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  2. Compute input hash (for caching)                                            │
+    │  2. Execute Skill with Retry                                                    │
     │                                                                                 │
-    │     inputHash = SHA256(JSON.stringify(sortedInput))                            │
-    │     cacheKey = "campaign.build:intro_image:a1b2c3d4..."                        │
-    └─────────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  3. Check cache                                                                 │
-    │                                                                                 │
-    │     StepCacheService.get(cacheKey)                                             │
-    │                                                                                 │
-    │     ┌─────────────────────────────┐     ┌─────────────────────────────┐        │
-    │     │      CACHE HIT              │     │      CACHE MISS             │        │
-    │     │                             │     │                             │        │
-    │     │  Return cached artifactIds  │     │  Continue to execution      │        │
-    │     │  Update RunStep: cacheHit   │     │                             │        │
-    │     │  Skip skill execution       │     │                             │        │
-    │     └─────────────────────────────┘     └─────────────────────────────┘        │
-    └─────────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          │ (Cache Miss)
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  4. Execute Skill                                                               │
-    │                                                                                 │
-    │     SkillRunnerService.execute("generate_intro_image", input)                  │
+    │     SkillNodeService.executeWithRetry("intro_image", "generate_intro_image",   │
+    │       input, { maxAttempts: 2, backoffMs: 2000 })                              │
     │                                                                                 │
     │     ┌─────────────────────────────────────────────────────────────────────┐    │
-    │     │  -> Validate input schema                                           │    │
-    │     │  -> Get handler: GenerateIntroImageHandler                          │    │
-    │     │  -> Execute with timeout                                            │    │
-    │     │  -> Validate output schema                                          │    │
-    │     │  -> Return SkillResult                                              │    │
+    │     │  Attempt 1:                                                         │    │
+    │     │  -> SkillRunnerService.execute("generate_intro_image", input)       │    │
+    │     │  -> If ok: return result                                            │    │
+    │     │  -> If failed: wait (backoffMs * 2^(attempt-1)), try again          │    │
+    │     │                                                                     │    │
+    │     │  Attempt 2 (if needed):                                             │    │
+    │     │  -> SkillRunnerService.execute("generate_intro_image", input)       │    │
+    │     │  -> Return result (success or failure)                              │    │
     │     └─────────────────────────────────────────────────────────────────────┘    │
     └─────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
     ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  5. Update State & Cache                                                        │
+    │  3. Return State Update                                                         │
     │                                                                                 │
-    │     - Update RunStep (status: completed, outputArtifactIds, durationMs)        │
-    │     - Store in cache: StepCacheService.set(cacheKey, artifactIds)              │
-    │     - Return updated state with new stepResults entry                          │
-    └─────────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────────┐
-    │  OUTPUT: Updated RunState                                                       │
-    │  {                                                                              │
-    │    stepResults: {                                                              │
-    │      "plan": {...},                                                            │
-    │      "intro_image": { ok: true, data: {...}, artifacts: [...] }  <- NEW       │
-    │    },                                                                          │
-    │    artifacts: Map { "intro_image" -> ["artifact-uuid-1"] }        <- NEW       │
-    │  }                                                                              │
+    │     On success:                                                                │
+    │     { stepResults: { "intro_image": { ok: true, data: {...}, artifactIds } } } │
+    │                                                                                 │
+    │     On failure:                                                                │
+    │     { stepResults: { "intro_image": { ok: false, error: "..." } },             │
+    │       error: "Step intro_image failed: ..." }                                  │
+    │     → Downstream conditional edges route to __end__                            │
     └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -850,7 +800,7 @@
     ┌──────────────┐
     │    User      │
     └──────┬───────┘
-           │ HTTP POST /run-engine/trigger-run
+           │ HTTP POST /api/campaigns/:id/generate
            ▼
     ┌──────────────┐     Creates Run     ┌──────────────┐
     │  API Center  │ ─────────────────-> │  PostgreSQL  │
@@ -868,22 +818,12 @@
     ┌──────────────────────────────────────────────────────────────────────────────────┐
     │                            AGENT PLATFORM                                        │
     │                                                                                  │
-    │   ┌─────────────────┐                                                           │
-    │   │ Run Processor   │                                                           │
-    │   └────────┬────────┘                                                           │
-    │            │                                                                    │
-    │            ▼                                                                    │
     │   ┌─────────────────┐     ┌─────────────────┐                                  │
-    │   │ Workflow        │<────│ Workflow YAML   │                                  │
-    │   │ Registry        │     │ Files           │                                  │
+    │   │ Campaign Run    │<────│ Workflow Classes │                                  │
+    │   │ Processor       │     │ (TypeScript)     │                                  │
     │   └────────┬────────┘     └─────────────────┘                                  │
     │            │                                                                    │
-    │            ▼                                                                    │
-    │   ┌─────────────────┐                                                           │
-    │   │ LangGraph DAG   │                                                           │
-    │   │ Builder         │                                                           │
-    │   └────────┬────────┘                                                           │
-    │            │                                                                    │
+    │            │ workflow.createGraph()                                              │
     │            ▼                                                                    │
     │   ┌─────────────────┐     ┌─────────────────┐                                  │
     │   │ Workflow Engine │<────│ PostgreSQL      │                                  │
@@ -892,12 +832,11 @@
     │            │                                                                    │
     │            │ For each step node                                                 │
     │            ▼                                                                    │
-    │   ┌─────────────────┐     ┌─────────────────┐                                  │
-    │   │ Cached Step     │<--->│ Step Cache      │                                  │
-    │   │ Executor        │     │ (PostgreSQL)    │                                  │
-    │   └────────┬────────┘     └─────────────────┘                                  │
+    │   ┌─────────────────┐                                                           │
+    │   │ SkillNode       │  Wraps skill execution with retry logic                  │
+    │   │ Service         │                                                           │
+    │   └────────┬────────┘                                                           │
     │            │                                                                    │
-    │            │ On cache miss                                                      │
     │            ▼                                                                    │
     │   ┌─────────────────┐     ┌─────────────────┐                                  │
     │   │ Skill Runner    │<────│ Skill Catalog   │                                  │
@@ -929,7 +868,7 @@
            │ Store artifacts
            ▼
     ┌──────────────┐
-    │  PostgreSQL  │  (Run, RunStep, Artifact, StepCache)
+    │  PostgreSQL  │  (Run, RunStep, Artifact, Checkpoints)
     └──────────────┘
 ```
 

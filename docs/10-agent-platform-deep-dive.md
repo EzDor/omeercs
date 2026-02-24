@@ -10,12 +10,12 @@ This document walks through every subsystem in detail, following the code paths 
 
 ```
 agent-platform/src/
-├── run-engine/                    # YAML workflow execution system
-│   ├── interfaces/                # TypeScript types for workflows, steps, state
-│   ├── services/                  # Core services (9 files)
-│   ├── processors/                # BullMQ job processors
-│   ├── schemas/                   # JSON Schemas for YAML validation
-│   └── run-engine.module.ts
+├── workflows/campaign/            # Campaign workflow execution system
+│   ├── interfaces/                # Shared state annotation (CampaignWorkflowState)
+│   ├── services/                  # SkillNodeService (retry-wrapped skill execution)
+│   ├── processors/                # CampaignRunProcessor (BullMQ job processor)
+│   ├── *.workflow.ts              # Workflow classes (each builds a LangGraph StateGraph)
+│   └── campaign-workflows.module.ts
 ├── skills/                        # Skill execution system
 │   ├── handlers/                  # 20 handler implementations
 │   ├── interfaces/                # SkillHandler interface
@@ -58,66 +58,80 @@ When the agent platform boots, these `OnModuleInit` hooks fire in dependency ord
    ├── Loads config and rubric templates
    └── Result: In-memory registry of versioned prompts
 
-3. WorkflowYamlLoaderService.onModuleInit()
-   ├── Reads agent-platform/workflows/index.yaml
-   ├── Loads each active workflow YAML file
-   ├── Validates against JSON Schema
-   ├── Validates skill references (every skill_id must exist in catalog)
-   ├── Compiles input selectors (YAML DSL → TypeScript functions)
-   ├── Validates no cyclic dependencies
-   ├── Registers compiled WorkflowSpec in WorkflowRegistryService
-   └── Result: 7 workflows registered and ready to execute
+3. NestJS dependency injection wires up workflow classes:
+   ├── SkillNodeService receives SkillRunnerService
+   ├── Each workflow class (CampaignBuildWorkflow, etc.) receives SkillNodeService
+   ├── CampaignRunProcessor receives all workflow class instances
+   └── Result: CampaignRunProcessor has a Map of workflow names to workflow classes
 
 4. BullMQ processors start listening:
-   ├── LangGraphRunProcessor → RUN_ORCHESTRATION queue
+   ├── CampaignRunProcessor → RUN_ORCHESTRATION queue
    └── WorkflowQueueProcessor → WORKFLOW_ORCHESTRATION queue
 ```
 
-## Run Engine: Complete Code Path
+## Campaign Workflows: Complete Code Path
 
 ### 1. Job Arrival
 
-When a job arrives on the `RUN_ORCHESTRATION` queue, `LangGraphRunProcessor.process()` is called:
+When a job arrives on the `RUN_ORCHESTRATION` queue, `CampaignRunProcessor.process()` is called:
 
 ```typescript
-// agent-platform/src/run-engine/processors/langgraph-run.processor.ts
+// agent-platform/src/workflows/campaign/processors/campaign-run.processor.ts
 @Processor(QueueNames.RUN_ORCHESTRATION, { concurrency: 1 })
-export class LangGraphRunProcessor extends WorkerHost {
+export class CampaignRunProcessor extends WorkerHost {
+  private readonly workflowMap: Map<string, CampaignWorkflow>;
+
+  constructor(
+    @InjectRepository(Run) private readonly runRepository: Repository<Run>,
+    private readonly workflowEngine: WorkflowEngineService,
+    private readonly tenantClsService: TenantClsService,
+    private readonly campaignStatusService: CampaignStatusService,
+    campaignBuild: CampaignBuildWorkflow,
+    campaignBuildMinimal: CampaignBuildMinimalWorkflow,
+    // ... all workflow classes injected via NestJS DI
+  ) {
+    super();
+    this.workflowMap = new Map([
+      [constants.CAMPAIGN_BUILD, campaignBuild],
+      [constants.CAMPAIGN_BUILD_MINIMAL, campaignBuildMinimal],
+      // ... one entry per workflow
+    ]);
+  }
+
   async process(job: Job<RunOrchestrationJobData>): Promise<void> {
     const { runId, tenantId } = job.data;
 
-    // Everything runs inside a tenant context
     await this.tenantClsService.runWithTenant(tenantId, undefined, async () => {
       // 1. Fetch the Run entity from the database
-      const run = await this.runEngineService.getRun(runId);
+      const run = await this.runRepository.findOne({ where: { id: runId, tenantId } });
 
-      // 2. Look up the compiled WorkflowSpec from the registry
-      const workflow = this.workflowRegistryService.getWorkflow(
-        run.workflowName,
-        run.workflowVersion
-      );
+      // 2. Look up the workflow class by name
+      const workflow = this.workflowMap.get(run.workflowName);
 
-      // 3. Create RunStep entities for each step (if not already created)
-      await this.runEngineService.createRunSteps(runId, tenantId, workflow, run.triggerPayload);
+      // 3. Update Run status to 'running'
+      await this.updateRunStatus(run, 'running');
 
-      // 4. Update Run status to 'running'
-      await this.runEngineService.updateRunStatus(runId, 'running');
+      // 4. Load base run outputs (for update workflows)
+      const baseRunOutputs = await this.loadBaseRunOutputs(run.baseRunId, tenantId);
 
-      // 5. Build the LangGraph state machine
-      const graph = this.langGraphBuilder.buildGraph(workflow);
+      // 5. Build the LangGraph StateGraph
+      const graph = workflow.createGraph();
 
-      // 6. Execute via the WorkflowEngineService (with checkpointing)
-      const result = await this.workflowEngineService.executeWorkflow(
-        graph, initialState, runId, tenantId, `run-engine:${workflow.workflowName}`
+      // 6. Execute via WorkflowEngineService (with checkpointing)
+      const result = await this.workflowEngine.executeWorkflow(
+        graph, initialState, runId, tenantId, `campaign:${run.workflowName}`
       );
 
       // 7. Check results and update statuses
-      if (failedSteps.length > 0) {
-        await this.runEngineService.updateRunStatus(runId, 'failed', { ... });
-        await this.campaignStatusService.updateStatusFromRun(campaignId, { status: 'failed' });
+      const finalState = result as CampaignWorkflowStateType;
+      const failedSteps = this.findFailedSteps(finalState.stepResults);
+
+      if (finalState.error || failedSteps.length > 0) {
+        await this.updateRunStatus(run, 'failed', { ... });
+        await this.updateCampaignStatus(campaignId, 'failed', undefined, runId);
       } else {
-        await this.runEngineService.updateRunStatus(runId, 'completed');
-        await this.campaignStatusService.updateStatusFromRun(campaignId, { status: 'live', bundleUrl });
+        await this.updateRunStatus(run, 'completed');
+        await this.updateCampaignStatus(campaignId, 'live', bundleUrl, runId);
       }
     });
   }
@@ -128,125 +142,89 @@ export class LangGraphRunProcessor extends WorkerHost {
 
 ### 2. Graph Construction
 
-`LangGraphWorkflowBuilderService.buildGraph()` converts a `WorkflowSpec` into an executable LangGraph `StateGraph`:
+Each workflow class builds its LangGraph `StateGraph` directly in `createGraph()`. Nodes are created via `SkillNodeService.createNode()`, and edges (including conditional edges for error handling) are defined inline:
 
 ```typescript
-// agent-platform/src/run-engine/services/langgraph-workflow-builder.service.ts
-buildGraph(workflow: WorkflowSpec): StateGraph<RunStateType> {
-  // Validate no cycles first
-  const validation = this.dependencyGraphService.validateNoCycles(workflow.steps);
+// agent-platform/src/workflows/campaign/campaign-build-minimal.workflow.ts
+@Injectable()
+export class CampaignBuildMinimalWorkflow {
+  constructor(private readonly skillNode: SkillNodeService) {}
 
-  const stateGraph = new StateGraph(RunStateAnnotation);
+  createGraph(): StateGraph<CampaignWorkflowStateType> {
+    const graph = new StateGraph(CampaignWorkflowState)
+      .addNode('game_config',
+        this.skillNode.createNode('game_config', 'game_config_from_template', (s) => ({
+          template_id: s.triggerPayload.template_id,
+          theme: s.triggerPayload.theme,
+        })),
+      )
+      .addNode('bgm',
+        this.skillNode.createNode('bgm', 'generate_bgm_track', (s) => ({
+          style: (s.triggerPayload.audio as Record<string, any>)?.style,
+        }), { maxAttempts: 2, backoffMs: 2000 }),
+      )
+      // ... more nodes
 
-  // Each step becomes a node
-  for (const stepSpec of workflow.steps) {
-    const nodeFunction = this.cachedStepExecutor.createNodeFunction(stepSpec);
-    stateGraph.addNode(stepSpec.stepId, nodeFunction);
+    graph
+      .addEdge('__start__', 'game_config')
+      .addEdge('__start__', 'bgm')
+      .addConditionalEdges('game_config', (s) => s.error ? '__end__' : 'continue',
+        { continue: 'bundle_game', __end__: '__end__' })
+      // ... more edges
+
+    return graph;
   }
-
-  // Entry steps (no dependencies) connect from START
-  const entrySteps = this.dependencyGraphService.getEntrySteps(workflow.steps);
-  for (const entryStep of entrySteps) {
-    stateGraph.addEdge(START, entryStep.stepId);
-  }
-
-  // Connect dependency edges
-  for (const stepSpec of workflow.steps) {
-    if (isTerminal) {
-      stateGraph.addEdge(stepSpec.stepId, END);
-    } else {
-      for (const dependent of dependents) {
-        stateGraph.addEdge(stepSpec.stepId, dependent);
-      }
-    }
-  }
-
-  return stateGraph;
 }
 ```
 
-**The state annotation** uses LangGraph's `Annotation.Root` with merge-map reducers. This is critical because parallel nodes produce partial state updates that must be merged:
+**The state annotation** uses LangGraph's `Annotation.Root` with merge reducers. This is critical because parallel nodes produce partial state updates that must be merged:
 
 ```typescript
-// agent-platform/src/run-engine/interfaces/langgraph-run-state.interface.ts
-export const RunStateAnnotation = Annotation.Root({
-  runId: Annotation<string>({ reducer: (_, update) => update }),
-  tenantId: Annotation<string>({ reducer: (_, update) => update }),
-  workflowName: Annotation<string>({ reducer: (_, update) => update }),
-  triggerPayload: Annotation<Record<string, unknown>>({ reducer: (_, update) => update }),
-
-  // These use merge-map reducers for parallel step results
-  stepResults: Annotation<Map<string, StepResult>>({ reducer: mergeMapReducer }),
-  artifacts: Annotation<Map<string, string[]>>({ reducer: mergeMapReducer }),
-
-  error: Annotation<string | null>({ reducer: (_, update) => update }),
+// agent-platform/src/workflows/campaign/interfaces/campaign-workflow-state.interface.ts
+export const CampaignWorkflowState = Annotation.Root({
+  runId: Annotation<string>({ reducer: (_current, update) => update }),
+  tenantId: Annotation<string>({ reducer: (_current, update) => update }),
+  triggerPayload: Annotation<Record<string, unknown>>({ reducer: (_current, update) => update }),
+  stepResults: Annotation<Record<string, SkillStepResult>>({
+    reducer: mergeStepResults,    // Merges results from parallel branches
+    default: () => ({}),
+  }),
+  baseRunOutputs: Annotation<Record<string, Record<string, unknown>>>({
+    reducer: (_current, update) => update,
+  }),
+  error: Annotation<string | null>({ reducer: (_current, update) => update }),
 });
 ```
 
-The `mergeMapReducer` merges Maps from parallel branches — when `intro_image` and `bgm` complete in parallel, their results are merged into the shared `stepResults` Map.
+The `mergeStepResults` reducer merges step results from parallel branches -- when `intro_image` and `bgm` complete in parallel, their results are merged into the shared `stepResults` record.
 
 ### 3. Step Execution
 
-Each node in the graph is a closure created by `CachedStepExecutorService.createNodeFunction()`. Here's the complete flow:
+Each node in the graph is a closure created by `SkillNodeService.createNode()`. Here's the complete flow:
 
 ```typescript
-// agent-platform/src/run-engine/services/cached-step-executor.service.ts
-createNodeFunction(stepSpec: StepSpec): (state: RunStateType) => Promise<Partial<RunStateType>> {
-  return async (state: RunStateType): Promise<Partial<RunStateType>> => {
-    // 1. Build the RunContext from current state
-    const context = this.buildRunContext(state);
-
-    // 2. Resolve inputs via the compiled input selector
+// agent-platform/src/workflows/campaign/services/skill-node.service.ts
+createNode(stepId: string, skillId: string, inputFn: InputFn, retry: RetryConfig = DEFAULT_RETRY): NodeFn {
+  return async (state: CampaignWorkflowStateType): Promise<Partial<CampaignWorkflowStateType>> => {
+    // 1. Resolve inputs via the provided input function
     let input: Record<string, unknown>;
     try {
-      input = stepSpec.inputSelector(context);
+      input = inputFn(state);
     } catch (error) {
-      return this.buildFailureUpdate(stepSpec.stepId, ...);
+      return this.buildFailure(stepId, startTime, error.message);
     }
 
-    // 3. Compute input hash for caching
-    const inputHash = this.inputHasherService.computeHash(input);
-    const cacheKey = this.inputHasherService.createCacheKeyFromHash(
-      workflowName, stepSpec.stepId, inputHash
-    );
+    // 2. Execute with retry (exponential backoff)
+    const result = await this.executeWithRetry(stepId, skillId, input, retry);
 
-    // 4. Update RunStep status to 'running'
-    await this.runEngineService.updateRunStepStatus(runStep.id, 'running');
-
-    // 5. Check cache (if enabled)
-    if (stepSpec.cachePolicy.enabled) {
-      const cached = await this.stepCacheService.get(cacheKey);
-      if (cached) {
-        // Cache hit! Update DB and return cached result
-        await this.runEngineService.updateRunStepStatus(runStep.id, 'completed', {
-          outputArtifactIds: cached.artifactIds,
-          cacheHit: true,
-          durationMs,
-        });
-        return this.buildSuccessUpdate(stepSpec.stepId, cached.artifactIds, true, ...);
-      }
-    }
-
-    // 6. Execute with retry
-    const result = await this.executeWithRetry(stepSpec, input, runStep.id);
-
-    // 7. On success: update DB, cache result
+    // 3. On success: return state update with step result
     if (result.ok) {
-      await this.runEngineService.updateRunStepStatus(runStep.id, 'completed', { ... });
-
-      if (stepSpec.cachePolicy.enabled) {
-        await this.stepCacheService.set({
-          cacheKey, workflowName, stepId, inputHash,
-          artifactIds, data: result.data, scope: stepSpec.cachePolicy.scope,
-        });
-      }
-
-      return this.buildSuccessUpdate(...);
+      const stepResult: SkillStepResult = { ok: true, data: result.data, artifactIds, durationMs };
+      return { stepResults: { [stepId]: stepResult } };
     }
 
-    // 8. On failure: update DB with error
-    await this.runEngineService.updateRunStepStatus(runStep.id, 'failed', { error: { ... } });
-    return this.buildFailureUpdate(...);
+    // 4. On failure: return state update with error (triggers conditional edge short-circuit)
+    return this.buildFailure(stepId, startTime, result.error);
   };
 }
 ```
@@ -254,55 +232,38 @@ createNodeFunction(stepSpec: StepSpec): (state: RunStateType) => Promise<Partial
 **Retry logic** uses exponential backoff:
 
 ```typescript
-private async executeWithRetry(stepSpec, input, runStepId): Promise<SkillResult> {
-  const { maxAttempts, backoffMs } = stepSpec.retryPolicy;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const result = await this.skillRunnerService.execute(stepSpec.skillId, input);
+private async executeWithRetry(stepId, skillId, input, retry): Promise<SkillResult> {
+  for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
+    const result = await this.skillRunner.execute(skillId, input);
     if (result.ok) return result;
 
-    if (attempt < maxAttempts) {
-      const delay = backoffMs * Math.pow(2, attempt - 1);  // Exponential backoff
-      await this.delay(delay);
-      await this.runEngineService.incrementStepAttempt(runStepId);
+    if (attempt < retry.maxAttempts) {
+      const delay = retry.backoffMs * Math.pow(2, attempt - 1);  // Exponential backoff
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 }
 ```
 
-### 4. Workflow YAML Loading and Compilation
+### 4. Input Resolution
 
-`WorkflowYamlLoaderService` performs extensive validation when loading workflows:
+Inputs are resolved inline via lambda functions defined in each workflow class. Each input function receives the current `CampaignWorkflowStateType` and returns the input object for the skill:
 
-```
-For each workflow YAML file:
-  1. Path traversal check (prevent ../../../etc/passwd attacks)
-  2. Parse YAML with JSON_SCHEMA mode
-  3. Validate name/version match between index and file
-  4. Validate against JSON Schema (agent-platform/src/run-engine/schemas/)
-  5. Validate every skill_id reference exists in the SkillCatalogService
-  6. Compile input selectors (YAML DSL → executable TypeScript functions)
-  7. Validate no cyclic dependencies in the step graph
-  8. Register in WorkflowRegistryService
-```
-
-**Input selector compilation** converts declarative YAML into functions:
-
-```yaml
-# YAML
-input_selector:
-  prompt:
-    source: step_output
-    step_id: plan
-    path: data.video_prompts[0].prompt
-```
-
-Becomes a TypeScript function:
 ```typescript
-(context: RunContext) => {
-  const stepOutput = context.stepOutputs.get('plan');
-  return getNestedValue(stepOutput, 'data.video_prompts[0].prompt');
-}
+// From trigger payload:
+(s) => ({ template_id: s.triggerPayload.template_id })
+
+// From a previous step's output:
+(s) => ({ game_config: s.stepResults['game_config']?.data })
+
+// From base run outputs (for update workflows):
+(s) => ({ plan_data: s.baseRunOutputs['plan']?.data })
+
+// Mixed sources:
+(s) => ({
+  prompt: s.stepResults['plan']?.data?.video_prompts?.[0]?.prompt,
+  brand_assets: s.triggerPayload.brand_assets,
+})
 ```
 
 ## Skill Runner: Complete Code Path
@@ -636,7 +597,6 @@ private validateImageUrl(url: string): void {
 
 ### Path Traversal Prevention
 
-- Workflow YAML loader validates file paths stay within the workflows directory
 - `AssembleCampaignManifestHandler` validates local paths resolve under `SKILLS_OUTPUT_DIR`
 - `StorageService` in common validates all paths before writing
 

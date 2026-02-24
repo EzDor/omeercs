@@ -1,6 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
 import { BaseEntity } from './base.entity';
-import type { RunStep } from './run-step.entity';
 import type { CampaignContext } from '@agentic-template/dto/src/campaign-context/campaign-context.interface';
 
 export type RunStatusType = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -21,7 +20,7 @@ export class Run extends BaseEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'workflow_name', type: 'varchar', length: 255 })
+  @Column({ name: 'workflow_name', type: 'varchar', length: 255, update: false })
   workflowName: string;
 
   @Column({ name: 'workflow_version', type: 'varchar', length: 50 })
@@ -54,7 +53,4 @@ export class Run extends BaseEntity {
 
   @Column({ name: 'duration_ms', type: 'integer', nullable: true })
   durationMs?: number;
-
-  @OneToMany('RunStep', 'run')
-  steps?: RunStep[];
 }

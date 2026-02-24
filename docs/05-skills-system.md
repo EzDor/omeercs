@@ -359,7 +359,7 @@ This service is the central registry that connects everything. At startup, it:
 3. Registers handler-based skills by mapping their handler path to the actual TypeScript class
 4. Makes skills available for lookup by `skillId` and `version`
 
-The Run Engine's `CachedStepExecutorService` calls `SkillCatalogService.getSkill(skillId)` to get the descriptor, then passes it to `SkillRunnerService` for execution.
+The `SkillNodeService` in the campaign workflows calls `SkillRunnerService.execute(skillId, input)`, which internally uses `SkillCatalogService.getSkill(skillId)` to get the descriptor for validation and handler lookup.
 
 ## Adding a New Skill
 
@@ -370,4 +370,4 @@ To add a new skill to the system:
 3. **For handler-based skills**: Create a handler class in `agent-platform/src/skills/handlers/your-skill.handler.ts` implementing the `SkillHandler` interface
 4. **For template-based skills**: Create a prompt template in `agent-platform/prompts/your_skill/1.0.0.md`
 5. **Register** the handler in `SkillCatalogService` (if handler-based)
-6. **Add the step** to a workflow YAML in `agent-platform/workflows/`
+6. **Add the step** as a node in the appropriate workflow class in `agent-platform/src/workflows/campaign/`

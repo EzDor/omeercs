@@ -41,12 +41,11 @@ The system follows a **decoupled microservices** pattern where the API server ne
 │  └──────────┬────────────┴──────────────────────────────────┘  │
 │             │                                                   │
 │  ┌──────────▼───────────┐                                      │
-│  │     Run Engine       │  Loads YAML workflows, builds        │
-│  │                      │  LangGraph state machines,           │
-│  │  ┌────────────────┐  │  executes steps with caching         │
-│  │  │ Workflow Builder│  │                                      │
-│  │  │ Step Executor   │  │                                      │
-│  │  │ Cache Service   │  │                                      │
+│  │  Campaign Workflows  │  TypeScript workflow classes,         │
+│  │                      │  direct LangGraph StateGraph,        │
+│  │  ┌────────────────┐  │  skill node execution with retry     │
+│  │  │ SkillNodeService│  │                                      │
+│  │  │ WorkflowEngine │  │                                      │
 │  │  └───────┬────────┘  │                                      │
 │  └──────────┼───────────┘                                      │
 │             │                                                   │
@@ -111,7 +110,7 @@ The system uses **BullMQ** with Valkey (Redis-compatible) for async job processi
 
 ### RUN_ORCHESTRATION Queue
 
-Used by the **Run Engine** for campaign workflows. This is the primary execution path.
+Used by **Campaign Workflows** for campaign build and update workflows. This is the primary execution path.
 
 ```
 API Center                    Valkey                    Agent Platform
@@ -122,7 +121,7 @@ API Center                    Valkey                    Agent Platform
     │    tenantId               │                           │
     │  })                       │                           │
     │ ─────────────────────────▶│                           │
-    │                           │  LangGraphRunProcessor    │
+    │                           │  CampaignRunProcessor     │
     │                           │◀──────────────────────────│
     │                           │  picks up job             │
     │                           │                           │
@@ -135,10 +134,10 @@ API Center                    Valkey                    Agent Platform
 
 Used by the **Workflow Orchestration** system for LangGraph workflows with PostgreSQL checkpointing. Supports workflow pause/resume from checkpoints.
 
-### Why Two Systems?
+### Why Two Queues?
 
-- **Run Engine**: Optimized for the campaign build pipeline. Provides YAML-defined workflows, input-based caching, dependency graphs, and artifact tracking. Purpose-built for deterministic multi-step generation.
-- **Workflow Orchestration**: General-purpose LangGraph execution with checkpointing. Used for chat workflows and other conversational/iterative patterns.
+- **RUN_ORCHESTRATION**: Used by `CampaignRunProcessor` for campaign workflows. Each workflow is a TypeScript class that builds a LangGraph `StateGraph` directly, with `SkillNodeService` providing retry-wrapped skill execution as graph nodes.
+- **WORKFLOW_ORCHESTRATION**: General-purpose LangGraph execution with checkpointing. Used for chat workflows and other conversational/iterative patterns.
 
 ## Data Flow: Campaign Build (End to End)
 
@@ -152,37 +151,29 @@ This is the complete flow when a user clicks "Generate Campaign":
 3. API Center: CampaignController.generate()
    - Validates campaign is in 'draft' or 'failed' status
    - Updates campaign status to 'generating'
-   - Calls RunEngineApiService.triggerRun()
-       ↓
-4. RunEngineApiService:
    - Creates a Run entity (status: 'queued')
    - Enqueues job to RUN_ORCHESTRATION queue
    - Returns { runId, status: 'queued' } immediately
        ↓
-5. Agent Platform: LangGraphRunProcessor picks up the job
+4. Agent Platform: CampaignRunProcessor picks up the job
        ↓
-6. WorkflowYamlLoaderService:
-   - Loads campaign.build.v1.yaml
-   - Compiles input selectors (YAML DSL → TypeScript functions)
-   - Returns WorkflowSpec with typed steps
+5. CampaignRunProcessor:
+   - Fetches the Run entity from the database
+   - Looks up the workflow class by workflowName (e.g., CampaignBuildWorkflow)
+   - Calls workflow.createGraph() to build the LangGraph StateGraph
+   - Loads base run outputs if this is an update workflow
        ↓
-7. RunEngineService:
-   - Creates RunStep entities for each step (status: 'pending')
-   - DependencyGraphService sorts steps topologically
+6. WorkflowEngineService:
+   - Compiles and executes the StateGraph with PostgreSQL checkpointing
+   - Steps run in parallel where edges allow
        ↓
-8. LangGraphWorkflowBuilderService:
-   - Builds a LangGraph StateGraph from the WorkflowSpec
-   - Each step becomes a node in the graph
-   - Edges follow the dependency graph (steps run in parallel when possible)
+7. Graph execution begins. For each node:
+   a. SkillNodeService resolves inputs via the node's input function
+   b. Executes the skill via SkillRunnerService with retry logic
+   c. On failure, sets state.error to short-circuit downstream conditional edges
+   d. Returns state update with step result merged into stepResults
        ↓
-9. Graph execution begins. For each step:
-   a. CachedStepExecutor resolves inputs via InputSelector
-   b. InputHasherService computes SHA256 of the resolved inputs
-   c. StepCacheService checks for a cache hit
-   d. If cached → return cached artifacts, mark step 'completed' + cacheHit=true
-   e. If not cached → SkillRunnerService.execute()
-       ↓
-10. SkillRunnerService:
+8. SkillRunnerService:
     - Looks up the skill descriptor from SkillCatalogService
     - Validates input against the skill's input_schema (Ajv)
     - Routes to handler:
@@ -190,14 +181,13 @@ This is the complete flow when a user clicks "Generate Campaign":
       • Template-based skill → Routes to LlmGenerationService
     - Validates output against the skill's output_schema
     - Stores artifacts via StorageService
-    - Caches the result via StepCacheService
        ↓
-11. When all steps complete:
+9. When all steps complete:
     - Run status → 'completed'
     - Campaign status → 'live'
     - Campaign.bundleUrl → points to the generated game bundle
        ↓
-12. Frontend polls GET /api/runs/:runId for status updates
+10. Frontend polls GET /api/runs/:runId for status updates
     - Displays step-by-step progress
     - Shows the final playable campaign when complete
 ```

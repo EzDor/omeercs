@@ -1,17 +1,20 @@
-import { IsString, IsObject, IsOptional, IsUUID, IsEnum } from 'class-validator';
+import { IsString, IsObject, IsOptional, IsUUID, IsEnum, IsIn } from 'class-validator';
 
 export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export type TriggerType = 'initial' | 'update';
 
-export interface StepsSummary {
-  total: number;
-  pending: number;
-  running: number;
-  completed: number;
-  skipped: number;
-  failed: number;
-}
+export const VALID_WORKFLOW_NAMES = [
+  'campaign.build',
+  'campaign.build.minimal',
+  'campaign.update_intro',
+  'campaign.update_audio',
+  'campaign.update_outcome',
+  'campaign.update_game_config',
+  'campaign.replace_3d_asset',
+] as const;
+
+export type ValidWorkflowName = (typeof VALID_WORKFLOW_NAMES)[number];
 
 export interface RunError {
   code: string;
@@ -22,6 +25,7 @@ export interface RunError {
 
 export class TriggerRunRequest {
   @IsString()
+  @IsIn([...VALID_WORKFLOW_NAMES])
   workflowName: string;
 
   @IsOptional()
@@ -54,7 +58,6 @@ export class RunResponse {
   status: RunStatus;
   baseRunId?: string;
   error?: RunError;
-  stepsSummary?: StepsSummary;
   startedAt?: Date;
   completedAt?: Date;
   durationMs?: number;
