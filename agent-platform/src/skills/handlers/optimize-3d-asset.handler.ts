@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
-import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
+import { Asset3DProviderRegistry } from '@agentic-template/common/src/providers/registries/asset3d-provider.registry';
+import { MeshyAsset3dAdapter } from '@agentic-template/common/src/providers/adapters/meshy-3d.adapter';
 import { Optimize3DAssetInput, Optimize3DAssetOutput, OptimizationMetrics } from '@agentic-template/dto/src/skills/optimize-3d-asset.dto';
 import { Model3DFormat } from '@agentic-template/dto/src/skills/generate-3d-asset.dto';
 import { SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
@@ -15,16 +15,13 @@ const DEFAULT_OPTIMIZATION_LEVEL = 'balanced';
 @Injectable()
 export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput, Optimize3DAssetOutput> {
   private readonly logger = new Logger(Optimize3DAssetHandler.name);
-  private readonly llmClient: LiteLLMHttpClient;
-  private readonly defaultModel: string;
   private readonly outputDir: string;
-  private readonly optimizationTimeout: number;
 
-  constructor(private readonly configService: ConfigService) {
-    this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
-    this.defaultModel = configService.get<string>('MODEL_3D_OPTIMIZATION_MODEL') || 'gltf-transform';
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly asset3DProviderRegistry: Asset3DProviderRegistry,
+  ) {
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
-    this.optimizationTimeout = configService.get<number>('MODEL_3D_OPTIMIZATION_TIMEOUT_MS') || 600000;
   }
 
   async execute(input: Optimize3DAssetInput, context: SkillExecutionContext): Promise<SkillResult<Optimize3DAssetOutput>> {
@@ -34,7 +31,6 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
     this.logger.log(`Executing optimize_3d_asset for tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
-      // Validate input model exists
       const validateStart = Date.now();
       if (!this.isValidModelUri(input.model_uri)) {
         return skillFailure(`Invalid or inaccessible model URI: ${input.model_uri}`, 'INVALID_MODEL_URI', {
@@ -43,73 +39,25 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
       }
       timings['validate'] = Date.now() - validateStart;
 
-      // Determine output format
       const format = input.specs?.format || this.getFormatFromUri(input.model_uri) || DEFAULT_FORMAT;
       const optimizationLevel = input.constraints.optimization_level || DEFAULT_OPTIMIZATION_LEVEL;
 
-      // Call 3D optimization API
       const optimizationStart = Date.now();
-      const model = input.provider || this.defaultModel;
-
+      const provider = this.asset3DProviderRegistry.getProvider() as MeshyAsset3dAdapter;
       const modelUrl = this.resolveModelUrl(input.model_uri);
 
-      const response = await this.llmClient.model3DOptimization({
-        model,
-        model_url: modelUrl,
-        output_format: format,
-        optimization_level: optimizationLevel,
-        target_platform: input.constraints.target_platform,
-        max_triangles: input.constraints.geometry?.max_triangles,
-        max_vertices: input.constraints.geometry?.max_vertices,
-        simplification_ratio: input.constraints.geometry?.simplification_ratio,
-        preserve_uv_seams: input.constraints.geometry?.preserve_uv_seams,
-        preserve_hard_edges: input.constraints.geometry?.preserve_hard_edges,
-        texture_max_resolution: input.constraints.textures?.max_resolution,
-        texture_format: input.constraints.textures?.format,
-        texture_quality: input.constraints.textures?.quality,
-        compress_textures: input.constraints.textures?.compress,
-        atlas_textures: input.constraints.textures?.atlas_textures,
-        generate_lods: input.constraints.lods?.generate,
-        lod_count: input.constraints.lods?.count,
-        draco_compression: input.specs?.draco_compression,
-        draco_compression_level: input.specs?.draco_compression_level,
-        meshopt_compression: input.specs?.meshopt_compression,
-        max_file_size_bytes: input.constraints.max_file_size_bytes,
+      const result = await provider.optimize3DAndWait(modelUrl, {
+        prompt: `Optimize 3D model with ${optimizationLevel} settings`,
+        format,
+        polyCountTarget: input.constraints.geometry?.max_triangles,
       });
-
-      // Handle async optimization if needed
-      let optimizedData = response.data?.[0];
-
-      if (response.status === 'pending' || response.status === 'processing') {
-        this.logger.log(`3D optimization is async, waiting for completion (ID: ${response.id})`);
-        const statusResult = await this.llmClient.waitForModel3DOptimization(response.id!, this.optimizationTimeout);
-
-        if (statusResult.status === 'failed') {
-          return skillFailure(statusResult.error || '3D optimization failed', 'OPTIMIZATION_FAILED', {
-            timings_ms: { total: Date.now() - startTime, ...timings },
-          });
-        }
-
-        if (statusResult.data) {
-          optimizedData = statusResult.data;
-        }
-      }
 
       timings['optimization'] = Date.now() - optimizationStart;
 
-      const optimizedUrl = optimizedData?.url;
-      if (!optimizedUrl) {
-        return skillFailure('No optimized model URL in response', 'NO_MODEL_URL', {
-          timings_ms: { total: Date.now() - startTime, ...timings },
-        });
-      }
-
-      // Download and save the optimized model
       const saveStart = Date.now();
-      const savedModelInfo = await this.saveModel(optimizedUrl, context.executionId, format);
+      const savedModelInfo = await this.saveModel(result.uri, context.executionId, format);
       timings['save'] = Date.now() - saveStart;
 
-      // Copy original if requested
       let originalModelUri = input.model_uri;
       if (input.keep_original) {
         const copyStart = Date.now();
@@ -117,21 +65,7 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
         timings['copy_original'] = Date.now() - copyStart;
       }
 
-      // Download LODs if present
-      let lodInfo: Optimize3DAssetOutput['lods'];
-      if (optimizedData?.lods && optimizedData.lods.urls && optimizedData.lods.urls.length > 0) {
-        const lodStart = Date.now();
-        const savedLods = await this.saveLods(optimizedData.lods.urls, context.executionId, format);
-        timings['save_lods'] = Date.now() - lodStart;
-        lodInfo = {
-          count: savedLods.length,
-          uris: savedLods.map((l) => l.uri),
-          triangle_counts: optimizedData.lods.triangle_counts || [],
-        };
-      }
-
-      // Calculate metrics
-      const metrics = this.calculateMetrics(optimizedData);
+      const metrics = this.calculateMetrics(undefined);
 
       const totalTime = Date.now() - startTime;
       this.logger.log(`3D asset optimized successfully in ${totalTime}ms`);
@@ -142,20 +76,12 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
         format,
         file_size_bytes: savedModelInfo.fileSize,
         geometry: {
-          triangles: optimizedData?.triangles || 0,
-          vertices: optimizedData?.vertices || 0,
-          materials: optimizedData?.materials || 1,
+          triangles: 0,
+          vertices: 0,
+          materials: 1,
         },
-        textures: optimizedData?.textures
-          ? {
-              count: optimizedData.textures.count,
-              total_size_bytes: optimizedData.textures.total_size_bytes,
-              resolution: optimizedData.textures.resolution,
-              format: optimizedData.textures.format,
-              compressed: optimizedData.textures.compressed,
-            }
-          : undefined,
-        lods: lodInfo,
+        textures: undefined,
+        lods: undefined,
         metrics,
         processing_params: {
           original_uri: input.model_uri,
@@ -187,25 +113,12 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
         },
       ];
 
-      if (lodInfo?.uris) {
-        lodInfo.uris.forEach((uri, idx) => {
-          artifacts.push({
-            artifact_type: 'model/3d-lod',
-            uri,
-            metadata: {
-              lod_level: idx,
-              triangles: lodInfo.triangle_counts[idx],
-            },
-          });
-        });
-      }
-
       return skillSuccess(output, artifacts, {
         timings_ms: { total: totalTime, ...timings },
         provider_calls: [
           {
-            provider: 'litellm',
-            model,
+            provider: result.metadata.providerId,
+            model: result.metadata.model,
             duration_ms: timings['optimization'],
           },
         ],
@@ -221,11 +134,9 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
   }
 
   private isValidModelUri(uri: string): boolean {
-    // Check if it's a URL
     if (uri.startsWith('http://') || uri.startsWith('https://')) {
       return true;
     }
-    // Check if it's a local file that exists
     return fs.existsSync(uri);
   }
 
@@ -236,14 +147,9 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
   }
 
   private resolveModelUrl(uri: string): string {
-    // If it's already a URL, return it
     if (uri.startsWith('http://') || uri.startsWith('https://')) {
       return uri;
     }
-
-    // For local files, we would need to upload to a temporary storage
-    // For now, we'll assume the API can handle file:// URIs or the file is accessible
-    // In production, this would upload to S3/GCS and return a signed URL
     return uri;
   }
 
@@ -294,38 +200,6 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
     }
 
     return filePath;
-  }
-
-  private async saveLods(lodUrls: string[], executionId: string, format: Model3DFormat): Promise<{ uri: string; size: number }[]> {
-    const outputPath = path.join(this.outputDir, executionId, 'lods');
-    if (!fs.existsSync(outputPath)) {
-      fs.mkdirSync(outputPath, { recursive: true });
-    }
-
-    const results: { uri: string; size: number }[] = [];
-
-    for (let i = 0; i < lodUrls.length; i++) {
-      const url = lodUrls[i];
-      const response = await fetch(url);
-      if (!response.ok) {
-        this.logger.warn(`Failed to download LOD ${i}: ${response.statusText}`);
-        continue;
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const filename = `lod_${i}.${format}`;
-      const filePath = path.join(outputPath, filename);
-
-      fs.writeFileSync(filePath, buffer);
-      const stats = fs.statSync(filePath);
-
-      results.push({
-        uri: filePath,
-        size: stats.size,
-      });
-    }
-
-    return results;
   }
 
   private calculateMetrics(

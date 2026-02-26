@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
-import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
+import { VideoProviderRegistry } from '@agentic-template/common/src/providers/registries/video-provider.registry';
+import { NanoBananaVideoAdapter } from '@agentic-template/common/src/providers/adapters/nano-banana-video.adapter';
 import { GenerateOutcomeVideoLoseInput, GenerateOutcomeVideoOutput } from '@agentic-template/dto/src/skills/generate-outcome-video.dto';
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
@@ -14,24 +14,15 @@ const DEFAULT_LOSE_TEXT = 'Better luck next time!';
 @Injectable()
 export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOutcomeVideoLoseInput, GenerateOutcomeVideoOutput> {
   private readonly logger = new Logger(GenerateOutcomeVideoLoseHandler.name);
-  private readonly llmClient: LiteLLMHttpClient;
-  private readonly defaultModel: string;
   private readonly outputDir: string;
-  private readonly videoGenerationTimeout: number;
 
-  private readonly useStubProvider: boolean;
+  private readonly ALLOWED_VIDEO_DOMAINS = ['runway-cdn.com', 'storage.googleapis.com', 'replicate.delivery', 'api.stability.ai', 'stability.ai', 'api.nanobanana.com'];
 
-  private readonly ALLOWED_VIDEO_DOMAINS = ['runway-cdn.com', 'storage.googleapis.com', 'replicate.delivery', 'api.stability.ai', 'stability.ai'];
-
-  constructor(private readonly configService: ConfigService) {
-    this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
-    this.defaultModel = configService.get<string>('VIDEO_GENERATION_MODEL') || 'runway-gen3';
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly videoProviderRegistry: VideoProviderRegistry,
+  ) {
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
-    this.videoGenerationTimeout = configService.get<number>('VIDEO_GENERATION_TIMEOUT_MS') || 300000;
-    this.useStubProvider = configService.get<string>('VIDEO_PROVIDER_STUB') === 'true';
-    if (this.useStubProvider && configService.get<string>('NODE_ENV') === 'production') {
-      throw new Error('Stub video provider must not be used in production');
-    }
   }
 
   async execute(input: GenerateOutcomeVideoLoseInput, context: SkillExecutionContext): Promise<SkillResult<GenerateOutcomeVideoOutput>> {
@@ -41,73 +32,39 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
     this.logger.log(`Executing generate_outcome_video_lose for tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
-      if (this.useStubProvider) {
-        return this.executeStub(input, context, startTime, timings);
-      }
-
-      // Build the lose video prompt
       const promptStart = Date.now();
       const videoPrompt = this.buildLoseVideoPrompt(input);
       timings['prompt_build'] = Date.now() - promptStart;
 
-      // Determine video specs
       const specs = this.normalizeSpecs(input.specs);
 
-      // Process any background assets
-      let imageUrl: string | undefined;
+      let inputUris: string[] | undefined;
       if (input.assets) {
         const backgroundAsset = input.assets.find((a) => a.type === 'background');
         if (backgroundAsset) {
           const imageData = this.prepareImageData(backgroundAsset.uri);
-          imageUrl = imageData.isUrl ? imageData.value : undefined;
+          if (imageData.isUrl) {
+            inputUris = [imageData.value];
+          }
         }
       }
 
-      // Call video generation API
       const generationStart = Date.now();
-      const model = input.provider || this.defaultModel;
+      const provider = this.videoProviderRegistry.getProvider() as NanoBananaVideoAdapter;
 
-      const response = await this.llmClient.videoGeneration({
-        model,
+      const result = await provider.generateVideoAndWait({
         prompt: videoPrompt,
-        image_url: imageUrl,
-        duration: specs.duration_sec,
+        durationSec: specs.duration_sec,
         fps: specs.fps,
-        width: specs.width,
-        height: specs.height,
+        resolution: `${specs.width}x${specs.height}`,
+        inputUris,
         seed: input.seed,
       });
 
-      // Handle async generation if needed
-      let videoData = response.data?.[0];
-
-      if (response.status === 'pending' || response.status === 'processing') {
-        this.logger.log(`Video generation is async, waiting for completion (ID: ${response.id})`);
-        const statusResult = await this.llmClient.waitForVideoGeneration(response.id!, this.videoGenerationTimeout);
-
-        if (statusResult.status === 'failed') {
-          return skillFailure(statusResult.error || 'Video generation failed', 'GENERATION_FAILED', {
-            timings_ms: { total: Date.now() - startTime, ...timings },
-          });
-        }
-
-        if (statusResult.data) {
-          videoData = statusResult.data;
-        }
-      }
-
       timings['generation'] = Date.now() - generationStart;
 
-      const videoUrl = videoData?.url;
-      if (!videoUrl) {
-        return skillFailure('No video URL in response', 'NO_VIDEO_URL', {
-          timings_ms: { total: Date.now() - startTime, ...timings },
-        });
-      }
-
-      // Download and save the video
       const saveStart = Date.now();
-      const savedVideoInfo = await this.saveVideo(videoUrl, context.executionId, specs.format);
+      const savedVideoInfo = await this.saveVideo(result.uri, context.executionId, specs.format);
       timings['save'] = Date.now() - saveStart;
 
       const totalTime = Date.now() - startTime;
@@ -118,10 +75,10 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
       const output: GenerateOutcomeVideoOutput = {
         video_uri: savedVideoInfo.uri,
         outcome_type: 'lose',
-        duration_sec: videoData?.duration_sec || specs.duration_sec,
-        width: videoData?.width || specs.width,
-        height: videoData?.height || specs.height,
-        fps: videoData?.fps || specs.fps,
+        duration_sec: specs.duration_sec,
+        width: specs.width,
+        height: specs.height,
+        fps: specs.fps,
         format: specs.format,
         codec: specs.codec,
         file_size_bytes: savedVideoInfo.fileSize,
@@ -129,7 +86,7 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
           prompt: videoPrompt,
           outcome_text: loseText,
           seed: input.seed,
-          model,
+          model: result.metadata.model,
         },
       };
 
@@ -153,8 +110,8 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
           timings_ms: { total: totalTime, ...timings },
           provider_calls: [
             {
-              provider: 'litellm',
-              model,
+              provider: result.metadata.providerId,
+              model: result.metadata.model,
               duration_ms: timings['generation'],
             },
           ],
@@ -173,14 +130,12 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
   private buildLoseVideoPrompt(input: GenerateOutcomeVideoLoseInput): string {
     const parts: string[] = [];
 
-    // Start with custom prompt if provided
     if (input.prompt) {
       parts.push(input.prompt);
     } else {
       parts.push('Create an encouraging "try again" animation');
     }
 
-    // Add theme elements
     if (input.theme) {
       if (input.theme.mood) {
         const moodDescriptions: Record<string, string> = {
@@ -203,11 +158,9 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
       }
     }
 
-    // Add lose text context (encouraging tone)
     const loseText = input.lose_text || input.text_overlay?.text || DEFAULT_LOSE_TEXT;
     parts.push(`displaying "${loseText}" with an encouraging tone`);
 
-    // Make sure it's not discouraging
     parts.push('maintaining a positive, motivating atmosphere');
 
     return parts.join(', ');
@@ -255,39 +208,6 @@ export class GenerateOutcomeVideoLoseHandler implements SkillHandler<GenerateOut
     }
 
     throw new Error(`Invalid image URI: ${imageUri}`);
-  }
-
-  private async executeStub(
-    input: GenerateOutcomeVideoLoseInput,
-    context: SkillExecutionContext,
-    startTime: number,
-    timings: Record<string, number>,
-  ): Promise<SkillResult<GenerateOutcomeVideoOutput>> {
-    this.logger.log(`Using stub video provider for lose outcome`);
-    const specs = this.normalizeSpecs(input.specs);
-    const outputPath = path.join(this.outputDir, context.executionId);
-    await fsPromises.mkdir(outputPath, { recursive: true });
-    const filePath = path.join(outputPath, `outcome-lose.${specs.format}`);
-    await fsPromises.writeFile(filePath, Buffer.alloc(1024));
-    const loseText = input.lose_text || input.text_overlay?.text || DEFAULT_LOSE_TEXT;
-    const totalTime = Date.now() - startTime;
-
-    return skillSuccess(
-      {
-        video_uri: filePath,
-        outcome_type: 'lose',
-        duration_sec: specs.duration_sec,
-        width: specs.width,
-        height: specs.height,
-        fps: specs.fps,
-        format: specs.format,
-        codec: specs.codec,
-        file_size_bytes: 1024,
-        generation_params: { prompt: 'stub', outcome_text: loseText, model: 'stub-generator' },
-      },
-      [{ artifact_type: 'video/outcome-lose', uri: filePath, metadata: { outcome_type: 'lose', duration_sec: specs.duration_sec, width: specs.width, height: specs.height } }],
-      { timings_ms: { total: totalTime, ...timings }, provider_calls: [{ provider: 'stub', model: 'stub-generator', duration_ms: 0 }] },
-    );
   }
 
   private validateVideoUrl(url: string): void {

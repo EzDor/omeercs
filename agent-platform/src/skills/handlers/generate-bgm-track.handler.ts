@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
-import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
 import { AudioProviderRegistry } from '@agentic-template/common/src/providers/registries/audio-provider.registry';
+import { SunoBgmAdapter } from '@agentic-template/common/src/providers/adapters/suno-bgm.adapter';
 import { GenerateBgmTrackInput, GenerateBgmTrackOutput } from '@agentic-template/dto/src/skills/generate-bgm-track.dto';
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
@@ -42,27 +41,13 @@ interface NormalizedSpecs {
 @Injectable()
 export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInput, GenerateBgmTrackOutput> {
   private readonly logger = new Logger(GenerateBgmTrackHandler.name);
-  private readonly llmClient: LiteLLMHttpClient;
-  private readonly defaultModel: string;
   private readonly outputDir: string;
-  private readonly audioGenerationTimeout: number;
-  private readonly useStubProvider: boolean;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly audioProviderRegistry: AudioProviderRegistry,
   ) {
-    this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
-    this.defaultModel = configService.get<string>('AUDIO_GENERATION_MODEL') || 'suno-v3';
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
-    this.audioGenerationTimeout = configService.get<number>('AUDIO_GENERATION_TIMEOUT_MS') || 300000;
-    const stubEnvValue = configService.get<string>('AUDIO_PROVIDER_STUB');
-    this.useStubProvider = stubEnvValue === 'true';
-    this.logger.log(`GenerateBgmTrackHandler initialized: AUDIO_PROVIDER_STUB='${stubEnvValue}', useStubProvider=${this.useStubProvider}`);
-  }
-
-  private isAsyncGenerationInProgress(status: string | undefined): boolean {
-    return status === 'pending' || status === 'processing';
   }
 
   private getEnergyLevelDescription(energyLevel: number): string {
@@ -138,7 +123,7 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
     const startTime = Date.now();
     const timings: Record<string, number> = {};
 
-    this.logger.log(`Executing generate_bgm_track for tenant ${context.tenantId}, execution ${context.executionId} (stubMode=${this.useStubProvider})`);
+    this.logger.log(`Executing generate_bgm_track for tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
       const promptStart = Date.now();
@@ -148,57 +133,21 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       const specs = this.normalizeSpecs(input.specs);
       const bpm = input.bpm || DEFAULT_BPM;
 
-      if (this.useStubProvider) {
-        return this.executeWithStubProvider(input, specs, bpm, musicPrompt, startTime, timings);
-      }
-
       const generationStart = Date.now();
-      const model = input.provider || this.defaultModel;
+      const bgmProvider = this.audioProviderRegistry.routeByAudioType('bgm') as SunoBgmAdapter;
 
-      const response = await this.llmClient.audioGeneration({
-        model,
+      const result = await bgmProvider.generateAudioAndWait({
         prompt: musicPrompt,
-        duration_sec: input.duration_sec,
-        format: specs.format,
-        sample_rate: specs.sample_rate,
-        bitrate_kbps: specs.bitrate_kbps,
+        durationSec: input.duration_sec,
+        audioType: 'music',
+        sampleRate: specs.sample_rate,
         channels: specs.channels,
-        seed: input.seed,
-        bpm,
-        loopable: input.loopable ?? true,
-        genre: input.style.genre,
-        mood: input.style.mood,
-        instruments: input.style.instruments,
       });
-
-      let audioData = response.data?.[0];
-
-      if (this.isAsyncGenerationInProgress(response.status)) {
-        this.logger.log(`Audio generation is async, waiting for completion (ID: ${response.id})`);
-        const statusResult = await this.llmClient.waitForAudioGeneration(response.id!, this.audioGenerationTimeout);
-
-        if (statusResult.status === 'failed') {
-          return skillFailure(statusResult.error || 'Audio generation failed', 'GENERATION_FAILED', {
-            timings_ms: { total: Date.now() - startTime, ...timings },
-          });
-        }
-
-        if (statusResult.data) {
-          audioData = statusResult.data;
-        }
-      }
 
       timings['generation'] = Date.now() - generationStart;
 
-      const audioUrl = audioData?.url;
-      if (!audioUrl) {
-        return skillFailure('No audio URL in response', 'NO_AUDIO_URL', {
-          timings_ms: { total: Date.now() - startTime, ...timings },
-        });
-      }
-
       const saveStart = Date.now();
-      const savedAudioInfo = await this.saveAudio(audioUrl, context.executionId, specs.format);
+      const savedAudioInfo = await this.saveAudio(result.uri, context.executionId, specs.format);
       timings['save'] = Date.now() - saveStart;
 
       const totalTime = Date.now() - startTime;
@@ -206,9 +155,9 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
 
       const output = this.buildOutput(
         savedAudioInfo.uri,
-        audioData?.duration_sec || input.duration_sec,
-        audioData?.bpm || bpm,
-        { ...specs, sample_rate: audioData?.sample_rate || specs.sample_rate, bitrate_kbps: audioData?.bitrate_kbps || specs.bitrate_kbps },
+        result.metadata.durationSec,
+        bpm,
+        { ...specs, sample_rate: result.metadata.sampleRate, channels: result.metadata.channels },
         savedAudioInfo.fileSize,
         input.loopable ?? true,
         {
@@ -217,11 +166,11 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
           bpm,
           custom_prompt: input.custom_prompt,
           seed: input.seed,
-          model,
+          model: result.metadata.model,
         },
       );
 
-      return this.buildSuccessResult(output, savedAudioInfo.uri, totalTime, timings, 'litellm', model);
+      return this.buildSuccessResult(output, savedAudioInfo.uri, totalTime, timings, result.metadata.providerId, result.metadata.model);
     } catch (error) {
       return this.handleExecutionError(error, startTime, timings, 'Failed to generate BGM track');
     }
@@ -295,56 +244,5 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       uri: filePath,
       fileSize: stats.size,
     };
-  }
-
-  private async executeWithStubProvider(
-    input: GenerateBgmTrackInput,
-    specs: NormalizedSpecs,
-    bpm: number,
-    musicPrompt: string,
-    startTime: number,
-    timings: Record<string, number>,
-  ): Promise<SkillResult<GenerateBgmTrackOutput>> {
-    const generationStart = Date.now();
-    this.logger.log(`Using stub audio provider for testing`);
-
-    try {
-      const stubProvider = this.audioProviderRegistry.getProvider('stub');
-      const result = await stubProvider.generateAudio({
-        prompt: musicPrompt,
-        durationSec: input.duration_sec,
-        sampleRate: specs.sample_rate,
-        channels: specs.channels,
-        audioType: 'music',
-      });
-
-      timings['generation'] = Date.now() - generationStart;
-      const totalTime = Date.now() - startTime;
-
-      this.logger.log(`Stub BGM track generated successfully in ${totalTime}ms at ${result.uri}`);
-
-      const fileSizeBytes = fs.existsSync(result.uri) ? fs.statSync(result.uri).size : 0;
-
-      const output = this.buildOutput(
-        result.uri,
-        result.metadata.durationSec,
-        bpm,
-        { ...specs, format: result.metadata.format, sample_rate: result.metadata.sampleRate, channels: result.metadata.channels },
-        fileSizeBytes,
-        input.loopable ?? true,
-        {
-          style: input.style.genre,
-          mood: input.style.mood,
-          bpm,
-          custom_prompt: input.custom_prompt,
-          seed: input.seed,
-          model: 'stub-generator',
-        },
-      );
-
-      return this.buildSuccessResult(output, result.uri, totalTime, timings, 'stub', 'stub-generator');
-    } catch (error) {
-      return this.handleExecutionError(error, startTime, timings, 'Stub provider failed');
-    }
   }
 }

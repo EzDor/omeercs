@@ -12,6 +12,8 @@ const DEFAULT_FPS = 24;
 const MIN_DURATION_SEC = 1;
 const MAX_DURATION_SEC = 300;
 const SUPPORTED_RESOLUTION_PATTERN = /^\d{3,5}x\d{3,5}$/;
+const DEFAULT_POLL_INTERVAL_MS = 5000;
+const DEFAULT_TIMEOUT_MS = 300000;
 
 @Injectable()
 export class NanoBananaVideoAdapter implements VideoProviderAdapter {
@@ -61,6 +63,53 @@ export class NanoBananaVideoAdapter implements VideoProviderAdapter {
       this.logger.error(`[${this.providerId}] Generation failed in ${durationMs}ms: ${(error as Error).message}`);
       throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, this.providerId, (error as Error).message, { originalError: String(error) });
     }
+  }
+
+  async generateVideoAndWait(
+    params: VideoGenerationParams,
+    pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  ): Promise<VideoGenerationResult> {
+    const submitResult = await this.generateVideo(params);
+    const jobId = submitResult.uri;
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const status = await this.getJobStatus(jobId);
+
+      if (status.status === 'completed') {
+        return {
+          uri: status.video_url,
+          metadata: submitResult.metadata,
+        };
+      }
+
+      if (status.status === 'failed') {
+        throw new ProviderError(
+          ProviderErrorCode.GENERATION_FAILED,
+          this.providerId,
+          status.error || `Video generation failed for job ${jobId}`,
+        );
+      }
+
+      this.logger.debug(`[${this.providerId}] Job ${jobId} status: ${status.status}, progress: ${status.progress ?? 'unknown'}%`);
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new ProviderError(
+      ProviderErrorCode.GENERATION_FAILED,
+      this.providerId,
+      `Video generation timed out after ${timeoutMs}ms for job ${jobId}`,
+    );
+  }
+
+  private async getJobStatus(jobId: string): Promise<{ status: string; video_url: string; progress?: number; error?: string }> {
+    this.validateApiKey();
+
+    const statusUrl = this.apiUrl.replace(/\/generate$/, '') + `/${jobId}/status`;
+
+    const response = await axios.get(statusUrl, this.buildRequestConfig());
+    return response.data as { status: string; video_url: string; progress?: number; error?: string };
   }
 
   supportsParams(params: VideoGenerationParams): boolean {

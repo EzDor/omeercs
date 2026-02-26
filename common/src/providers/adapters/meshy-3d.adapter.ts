@@ -10,6 +10,8 @@ const DEFAULT_POLY_COUNT_TARGET = 50000;
 const MAX_SUPPORTED_POLY_COUNT = 50000;
 const SUPPORTED_FORMATS = ['glb', 'gltf'];
 const DEFAULT_FORMAT = 'glb';
+const DEFAULT_POLL_INTERVAL_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 600000;
 
 @Injectable()
 export class MeshyAsset3dAdapter implements Asset3DProviderAdapter {
@@ -74,6 +76,131 @@ export class MeshyAsset3dAdapter implements Asset3DProviderAdapter {
       this.logger.error(`[${this.providerId}] Generation failed in ${durationMs}ms: ${(error as Error).message}`);
       throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, this.providerId, (error as Error).message, { originalError: String(error) });
     }
+  }
+
+  async generate3DAndWait(
+    params: Asset3DGenerationParams,
+    pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  ): Promise<Asset3DGenerationResult> {
+    const submitResult = await this.generate3D(params);
+    const jobId = submitResult.uri;
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const status = await this.getJobStatus(jobId);
+
+      if (status.status === 'SUCCEEDED') {
+        return {
+          uri: status.model_url,
+          metadata: { ...submitResult.metadata, rawResponse: status },
+        };
+      }
+
+      if (status.status === 'FAILED' || status.status === 'EXPIRED') {
+        throw new ProviderError(
+          ProviderErrorCode.GENERATION_FAILED,
+          this.providerId,
+          status.error || `3D generation failed for job ${jobId}`,
+        );
+      }
+
+      this.logger.debug(`[${this.providerId}] Job ${jobId} status: ${status.status}, progress: ${status.progress ?? 'unknown'}%`);
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new ProviderError(
+      ProviderErrorCode.GENERATION_FAILED,
+      this.providerId,
+      `3D generation timed out after ${timeoutMs}ms for job ${jobId}`,
+    );
+  }
+
+  async optimize3DAndWait(
+    modelUrl: string,
+    params: Partial<Asset3DGenerationParams>,
+    pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  ): Promise<Asset3DGenerationResult> {
+    this.validateApiKey();
+
+    const optimizeUrl = this.apiUrl.replace(/\/text-to-3d$/, '/refine');
+
+    const response = await axios.post(
+      optimizeUrl,
+      {
+        preview_task_id: modelUrl,
+        texture_richness: 'high',
+        format: params.format || DEFAULT_FORMAT,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    const jobId = this.extractJobId(response.data);
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const status = await this.getJobStatus(jobId);
+
+      if (status.status === 'SUCCEEDED') {
+        return {
+          uri: status.model_url,
+          metadata: {
+            providerId: this.providerId,
+            model: 'meshy-refine',
+            format: params.format || DEFAULT_FORMAT,
+            polyCount: params.polyCountTarget || DEFAULT_POLY_COUNT_TARGET,
+            hasTextures: true,
+            hasAnimations: false,
+            materialCount: 1,
+            rawResponse: status,
+          },
+        };
+      }
+
+      if (status.status === 'FAILED' || status.status === 'EXPIRED') {
+        throw new ProviderError(
+          ProviderErrorCode.GENERATION_FAILED,
+          this.providerId,
+          status.error || `3D optimization failed for job ${jobId}`,
+        );
+      }
+
+      this.logger.debug(`[${this.providerId}] Optimization ${jobId} status: ${status.status}, progress: ${status.progress ?? 'unknown'}%`);
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new ProviderError(
+      ProviderErrorCode.GENERATION_FAILED,
+      this.providerId,
+      `3D optimization timed out after ${timeoutMs}ms for job ${jobId}`,
+    );
+  }
+
+  private async getJobStatus(jobId: string): Promise<{ status: string; model_url: string; progress?: number; error?: string }> {
+    this.validateApiKey();
+
+    const statusUrl = this.apiUrl.replace(/\/text-to-3d$/, '') + `/text-to-3d/${jobId}`;
+
+    const response = await axios.get(statusUrl, {
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = response.data as Record<string, unknown>;
+    const modelUrls = data.model_urls as Record<string, string> | undefined;
+    return {
+      status: String(data.status || 'PENDING'),
+      model_url: String(modelUrls?.glb || data.model_url || ''),
+      progress: data.progress as number | undefined,
+      error: data.task_error as string | undefined,
+    };
   }
 
   supportsParams(params: Asset3DGenerationParams): boolean {

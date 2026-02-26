@@ -12,6 +12,8 @@ const OUTPUT_SAMPLE_RATE = 44100;
 const OUTPUT_CHANNELS = 1;
 const MIN_DURATION_SEC = 0.5;
 const MAX_DURATION_SEC = 5;
+const DEFAULT_POLL_INTERVAL_MS = 5000;
+const DEFAULT_TIMEOUT_MS = 300000;
 
 @Injectable()
 export class NanoBananaSfxAdapter implements AudioProviderAdapter {
@@ -82,6 +84,58 @@ export class NanoBananaSfxAdapter implements AudioProviderAdapter {
       this.logger.error(`[${this.providerId}] Generation failed in ${durationMs}ms: ${(error as Error).message}`);
       throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, this.providerId, (error as Error).message, { originalError: String(error) });
     }
+  }
+
+  async generateAudioAndWait(
+    params: AudioGenerationParams,
+    pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  ): Promise<AudioGenerationResult> {
+    const submitResult = await this.generateAudio(params);
+    const jobId = submitResult.uri;
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const status = await this.getJobStatus(jobId);
+
+      if (status.status === 'completed') {
+        return {
+          uri: status.audio_url,
+          metadata: submitResult.metadata,
+        };
+      }
+
+      if (status.status === 'failed') {
+        throw new ProviderError(
+          ProviderErrorCode.GENERATION_FAILED,
+          this.providerId,
+          status.error || `SFX generation failed for job ${jobId}`,
+        );
+      }
+
+      this.logger.debug(`[${this.providerId}] Job ${jobId} status: ${status.status}, progress: ${status.progress ?? 'unknown'}%`);
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new ProviderError(
+      ProviderErrorCode.GENERATION_FAILED,
+      this.providerId,
+      `SFX generation timed out after ${timeoutMs}ms for job ${jobId}`,
+    );
+  }
+
+  private async getJobStatus(jobId: string): Promise<{ status: string; audio_url: string; progress?: number; error?: string }> {
+    this.validateApiKey();
+
+    const statusUrl = this.apiUrl.replace(/\/sfx$/, '') + `/sfx/${jobId}/status`;
+
+    const response = await axios.get(statusUrl, {
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data as { status: string; audio_url: string; progress?: number; error?: string };
   }
 
   supportsParams(params: AudioGenerationParams): boolean {

@@ -9,6 +9,8 @@ import { SkillResult } from '@agentic-template/dto/src/skills/skill-result.inter
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 import { ImageProviderRegistry } from '@agentic-template/common/src/providers/registries/image-provider.registry';
 import { AudioProviderRegistry } from '@agentic-template/common/src/providers/registries/audio-provider.registry';
+import { VideoProviderRegistry } from '@agentic-template/common/src/providers/registries/video-provider.registry';
+import { Asset3DProviderRegistry } from '@agentic-template/common/src/providers/registries/asset3d-provider.registry';
 import { CampaignPlanFromBriefHandler } from '../handlers/campaign-plan-from-brief.handler';
 import { GameConfigFromTemplateHandler } from '../handlers/game-config-from-template.handler';
 import { ReviewAssetQualityHandler } from '../handlers/review-asset-quality.handler';
@@ -69,6 +71,8 @@ export class SkillCatalogService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly imageProviderRegistry: ImageProviderRegistry,
     private readonly audioProviderRegistry: AudioProviderRegistry,
+    private readonly videoProviderRegistry: VideoProviderRegistry,
+    private readonly asset3DProviderRegistry: Asset3DProviderRegistry,
     private readonly templateManifestLoader: TemplateManifestLoaderService,
     private readonly templateConfigValidator: TemplateConfigValidatorService,
   ) {
@@ -397,14 +401,14 @@ export class SkillCatalogService implements OnModuleInit {
       { skillId: 'review_asset_quality', create: () => new ReviewAssetQualityHandler(this.configService) },
       { skillId: 'generate_intro_image', create: () => new GenerateIntroImageHandler(this.configService, this.imageProviderRegistry) },
       { skillId: 'segment_start_button', create: () => new SegmentStartButtonHandler(this.configService) },
-      { skillId: 'generate_intro_video_loop', create: () => new GenerateIntroVideoLoopHandler(this.configService) },
-      { skillId: 'generate_outcome_video_win', create: () => new GenerateOutcomeVideoWinHandler(this.configService) },
-      { skillId: 'generate_outcome_video_lose', create: () => new GenerateOutcomeVideoLoseHandler(this.configService) },
+      { skillId: 'generate_intro_video_loop', create: () => new GenerateIntroVideoLoopHandler(this.configService, this.videoProviderRegistry) },
+      { skillId: 'generate_outcome_video_win', create: () => new GenerateOutcomeVideoWinHandler(this.configService, this.videoProviderRegistry) },
+      { skillId: 'generate_outcome_video_lose', create: () => new GenerateOutcomeVideoLoseHandler(this.configService, this.videoProviderRegistry) },
       { skillId: 'generate_bgm_track', create: () => new GenerateBgmTrackHandler(this.configService, this.audioProviderRegistry) },
-      { skillId: 'generate_sfx_pack', create: () => new GenerateSfxPackHandler(this.configService) },
+      { skillId: 'generate_sfx_pack', create: () => new GenerateSfxPackHandler(this.configService, this.audioProviderRegistry) },
       { skillId: 'mix_audio_for_game', create: () => new MixAudioForGameHandler(this.configService) },
-      { skillId: 'generate_3d_asset', create: () => new Generate3DAssetHandler(this.configService) },
-      { skillId: 'optimize_3d_asset', create: () => new Optimize3DAssetHandler(this.configService) },
+      { skillId: 'generate_3d_asset', create: () => new Generate3DAssetHandler(this.configService, this.asset3DProviderRegistry) },
+      { skillId: 'optimize_3d_asset', create: () => new Optimize3DAssetHandler(this.configService, this.asset3DProviderRegistry) },
       { skillId: 'generate_threejs_code', create: () => new GenerateThreejsCodeHandler(this.configService) },
       { skillId: 'validate_bundle', create: () => new ValidateBundleHandler(this.configService) },
       {
