@@ -1,16 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Asset3DProviderRegistry } from '@agentic-template/common/src/providers/registries/asset3d-provider.registry';
-import { MeshyAsset3dAdapter } from '@agentic-template/common/src/providers/adapters/meshy-3d.adapter';
+import { ProviderError } from '@agentic-template/common/src/providers/errors/provider.error';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { Generate3DAssetInput, Generate3DAssetOutput, Model3DFormat, Model3DStyle } from '@agentic-template/dto/src/skills/generate-3d-asset.dto';
 import { SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
+import { isAllowedUrl, fetchWithTimeout } from './network-safety.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 
 const DEFAULT_FORMAT: Model3DFormat = 'glb';
 const DEFAULT_MAX_TRIANGLES = 50000;
-const DEFAULT_TEXTURE_RESOLUTION = '1024';
 
 @Injectable()
 export class Generate3DAssetHandler implements SkillHandler<Generate3DAssetInput, Generate3DAssetOutput> {
@@ -39,7 +40,10 @@ export class Generate3DAssetHandler implements SkillHandler<Generate3DAssetInput
       const maxTriangles = input.poly_budget?.max_triangles || DEFAULT_MAX_TRIANGLES;
 
       const generationStart = Date.now();
-      const provider = this.asset3DProviderRegistry.getProvider() as MeshyAsset3dAdapter;
+      const provider = this.asset3DProviderRegistry.getProvider();
+      if (!provider.generate3DAndWait) {
+        throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, provider.providerId, 'Provider does not support synchronous 3D generation');
+      }
 
       const result = await provider.generate3DAndWait({
         prompt: model3DPrompt,
@@ -111,7 +115,8 @@ export class Generate3DAssetHandler implements SkillHandler<Generate3DAssetInput
       const totalTime = Date.now() - startTime;
       this.logger.error(`Failed to generate 3D asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(error instanceof Error ? error.message : 'Unknown error during 3D generation', 'EXECUTION_ERROR', {
+      const message = error instanceof ProviderError ? error.getUserSafeMessage() : error instanceof Error ? error.message : 'Unknown error during 3D generation';
+      return skillFailure(message, 'EXECUTION_ERROR', {
         timings_ms: { total: totalTime, ...timings },
       });
     }
@@ -170,13 +175,22 @@ export class Generate3DAssetHandler implements SkillHandler<Generate3DAssetInput
     return parts.join(', ');
   }
 
+  private sanitizeExecutionId(executionId: string): string {
+    return executionId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 100);
+  }
+
   private async saveModel(modelUrl: string, executionId: string, format: Model3DFormat): Promise<{ uri: string; fileSize: number }> {
-    const outputPath = path.join(this.outputDir, executionId);
+    const safeId = this.sanitizeExecutionId(executionId);
+    const outputPath = path.join(this.outputDir, safeId);
     if (!fs.existsSync(outputPath)) {
       fs.mkdirSync(outputPath, { recursive: true });
     }
 
-    const response = await fetch(modelUrl);
+    if (!isAllowedUrl(modelUrl)) {
+      throw new Error('Blocked URL (SSRF prevention)');
+    }
+
+    const response = await fetchWithTimeout(modelUrl);
     if (!response.ok) {
       throw new Error(`Failed to download model: ${response.statusText}`);
     }

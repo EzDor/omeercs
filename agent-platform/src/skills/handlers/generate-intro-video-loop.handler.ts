@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { VideoProviderRegistry } from '@agentic-template/common/src/providers/registries/video-provider.registry';
-import { NanoBananaVideoAdapter } from '@agentic-template/common/src/providers/adapters/nano-banana-video.adapter';
+import { ProviderError } from '@agentic-template/common/src/providers/errors/provider.error';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
+import { isAllowedUrl } from '@agentic-template/common/src/providers/network-safety.utils';
 import { GenerateIntroVideoLoopInput, GenerateIntroVideoLoopOutput } from '@agentic-template/dto/src/skills/generate-intro-video-loop.dto';
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
-import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
@@ -38,7 +39,10 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
       const specs = this.normalizeSpecs(input.specs);
 
       const generationStart = Date.now();
-      const provider = this.videoProviderRegistry.getProvider() as NanoBananaVideoAdapter;
+      const provider = this.videoProviderRegistry.getProvider();
+      if (!provider.generateVideoAndWait) {
+        throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, provider.providerId, 'Provider does not support synchronous video generation');
+      }
 
       const result = await provider.generateVideoAndWait({
         prompt: motionPrompt,
@@ -109,7 +113,8 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
       const totalTime = Date.now() - startTime;
       this.logger.error(`Failed to generate intro video loop: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(error instanceof Error ? error.message : 'Unknown error during video generation', 'EXECUTION_ERROR', {
+      const message = error instanceof ProviderError ? error.getUserSafeMessage() : error instanceof Error ? error.message : 'Unknown error during video generation';
+      return skillFailure(message, 'EXECUTION_ERROR', {
         timings_ms: { total: totalTime, ...timings },
       });
     }
@@ -174,30 +179,15 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     };
   }
 
-  private validateLocalPath(uri: string): void {
-    const resolved = path.resolve(uri);
-    const allowedBase = path.resolve(this.outputDir) + path.sep;
-    if (!resolved.startsWith(allowedBase)) {
-      throw new Error(`Access denied: path outside allowed directory`);
-    }
-  }
-
   private prepareImageData(imageUri: string): { value: string; isUrl: boolean } {
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+      if (!isAllowedUrl(imageUri)) {
+        throw new Error('Blocked image URL (SSRF prevention)');
+      }
       return { value: imageUri, isUrl: true };
     }
 
-    this.validateLocalPath(imageUri);
-
-    if (fs.existsSync(imageUri)) {
-      const buffer = fs.readFileSync(imageUri);
-      const base64 = buffer.toString('base64');
-      const ext = path.extname(imageUri).toLowerCase().slice(1);
-      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-      return { value: `data:${mimeType};base64,${base64}`, isUrl: false };
-    }
-
-    throw new Error(`Invalid image URI: ${imageUri}`);
+    throw new Error('Local image files must be uploaded to a URL before video generation');
   }
 
   private validateVideoUrl(url: string): void {

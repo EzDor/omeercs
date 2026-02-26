@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AudioProviderRegistry } from '@agentic-template/common/src/providers/registries/audio-provider.registry';
-import { SunoBgmAdapter } from '@agentic-template/common/src/providers/adapters/suno-bgm.adapter';
+import { ProviderError } from '@agentic-template/common/src/providers/errors/provider.error';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { GenerateBgmTrackInput, GenerateBgmTrackOutput } from '@agentic-template/dto/src/skills/generate-bgm-track.dto';
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
@@ -112,8 +113,8 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
 
   private handleExecutionError(error: unknown, startTime: number, timings: Record<string, number>, logPrefix: string): SkillResult<GenerateBgmTrackOutput> {
     const totalTime = Date.now() - startTime;
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    this.logger.error(`${logPrefix}: ${message}`);
+    const message = error instanceof ProviderError ? error.getUserSafeMessage() : error instanceof Error ? error.message : 'Unknown error';
+    this.logger.error(`${logPrefix}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     return skillFailure(message, 'EXECUTION_ERROR', {
       timings_ms: { total: totalTime, ...timings },
     });
@@ -134,7 +135,10 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
       const bpm = input.bpm || DEFAULT_BPM;
 
       const generationStart = Date.now();
-      const bgmProvider = this.audioProviderRegistry.routeByAudioType('bgm') as SunoBgmAdapter;
+      const bgmProvider = this.audioProviderRegistry.routeByAudioType('bgm');
+      if (!bgmProvider.generateAudioAndWait) {
+        throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, bgmProvider.providerId, 'Provider does not support synchronous audio generation');
+      }
 
       const result = await bgmProvider.generateAudioAndWait({
         prompt: musicPrompt,
@@ -146,8 +150,9 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
 
       timings['generation'] = Date.now() - generationStart;
 
+      const actualFormat = result.metadata.format || specs.format;
       const saveStart = Date.now();
-      const savedAudioInfo = await this.saveAudio(result.uri, context.executionId, specs.format);
+      const savedAudioInfo = await this.saveAudio(result.uri, context.executionId, actualFormat);
       timings['save'] = Date.now() - saveStart;
 
       const totalTime = Date.now() - startTime;
@@ -157,7 +162,7 @@ export class GenerateBgmTrackHandler implements SkillHandler<GenerateBgmTrackInp
         savedAudioInfo.uri,
         result.metadata.durationSec,
         bpm,
-        { ...specs, sample_rate: result.metadata.sampleRate, channels: result.metadata.channels },
+        { ...specs, format: actualFormat, sample_rate: result.metadata.sampleRate, channels: result.metadata.channels },
         savedAudioInfo.fileSize,
         input.loopable ?? true,
         {

@@ -4,8 +4,11 @@ import axios from 'axios';
 import { AudioProviderAdapter, AudioGenerationParams, AudioGenerationResult } from '@agentic-template/dto/src/providers/interfaces/audio-provider.interface';
 import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { ProviderError } from '../errors/provider.error';
+import { validateProviderBaseUrl } from '../network-safety.utils';
 
 const DEFAULT_API_URL = 'https://api.suno.ai/v1/generate';
+const AXIOS_TIMEOUT_MS = 30000;
+const MAX_PROMPT_LENGTH = 5000;
 const DEFAULT_DURATION_SEC = 60;
 const DEFAULT_FORMAT = 'mp3';
 const OUTPUT_SAMPLE_RATE = 44100;
@@ -25,6 +28,9 @@ export class SunoBgmAdapter implements AudioProviderAdapter {
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('SUNO_API_KEY') || '';
     this.apiUrl = this.configService.get<string>('SUNO_API_URL') || DEFAULT_API_URL;
+    if (this.apiUrl !== DEFAULT_API_URL) {
+      validateProviderBaseUrl(this.apiUrl, this.providerId);
+    }
   }
 
   async generateAudio(params: AudioGenerationParams): Promise<AudioGenerationResult> {
@@ -51,6 +57,7 @@ export class SunoBgmAdapter implements AudioProviderAdapter {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
+          timeout: AXIOS_TIMEOUT_MS,
         },
       );
 
@@ -87,11 +94,7 @@ export class SunoBgmAdapter implements AudioProviderAdapter {
     }
   }
 
-  async generateAudioAndWait(
-    params: AudioGenerationParams,
-    pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-  ): Promise<AudioGenerationResult> {
+  async generateAudioAndWait(params: AudioGenerationParams, pollIntervalMs = DEFAULT_POLL_INTERVAL_MS, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<AudioGenerationResult> {
     const submitResult = await this.generateAudio(params);
     const jobId = submitResult.uri;
 
@@ -107,36 +110,34 @@ export class SunoBgmAdapter implements AudioProviderAdapter {
       }
 
       if (status.status === 'failed') {
-        throw new ProviderError(
-          ProviderErrorCode.GENERATION_FAILED,
-          this.providerId,
-          status.error || `Audio generation failed for job ${jobId}`,
-        );
+        throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, this.providerId, status.error || `Audio generation failed for job ${jobId}`);
       }
 
       this.logger.debug(`[${this.providerId}] Job ${jobId} status: ${status.status}, progress: ${status.progress ?? 'unknown'}%`);
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
-    throw new ProviderError(
-      ProviderErrorCode.GENERATION_FAILED,
-      this.providerId,
-      `Audio generation timed out after ${timeoutMs}ms for job ${jobId}`,
-    );
+    throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, this.providerId, `Audio generation timed out after ${timeoutMs}ms for job ${jobId}`);
   }
 
   private async getJobStatus(jobId: string): Promise<{ status: string; audio_url: string; progress?: number; error?: string }> {
     this.validateApiKey();
 
-    const statusUrl = this.apiUrl.replace(/\/generate$/, '') + `/${jobId}/status`;
+    const statusUrl = this.buildStatusUrl(jobId);
 
     const response = await axios.get(statusUrl, {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
       },
+      timeout: AXIOS_TIMEOUT_MS,
     });
     return response.data as { status: string; audio_url: string; progress?: number; error?: string };
+  }
+
+  private buildStatusUrl(jobId: string): string {
+    const base = new URL(this.apiUrl);
+    base.pathname = base.pathname.replace(/\/generate$/, '') + `/${jobId}/status`;
+    return base.toString();
   }
 
   supportsParams(params: AudioGenerationParams): boolean {
@@ -149,6 +150,9 @@ export class SunoBgmAdapter implements AudioProviderAdapter {
   private validatePrompt(prompt: string): void {
     if (!prompt || prompt.trim().length === 0) {
       throw new ProviderError(ProviderErrorCode.INVALID_PARAMS, this.providerId, 'Prompt is required and cannot be empty');
+    }
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      throw new ProviderError(ProviderErrorCode.INVALID_PARAMS, this.providerId, `Prompt exceeds maximum length of ${MAX_PROMPT_LENGTH} characters`);
     }
   }
 

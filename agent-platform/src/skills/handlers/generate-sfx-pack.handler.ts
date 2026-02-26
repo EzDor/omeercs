@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AudioProviderRegistry } from '@agentic-template/common/src/providers/registries/audio-provider.registry';
-import { NanoBananaSfxAdapter } from '@agentic-template/common/src/providers/adapters/nano-banana-sfx.adapter';
+import { ProviderError } from '@agentic-template/common/src/providers/errors/provider.error';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { GenerateSfxPackInput, GenerateSfxPackOutput, GeneratedSfx, SfxRequest } from '@agentic-template/dto/src/skills/generate-sfx-pack.dto';
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
+import { isAllowedUrl, fetchWithTimeout } from './network-safety.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -42,7 +44,10 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
       let totalSize = 0;
 
       const generationStart = Date.now();
-      const sfxProvider = this.audioProviderRegistry.routeByAudioType('sfx') as NanoBananaSfxAdapter;
+      const sfxProvider = this.audioProviderRegistry.routeByAudioType('sfx');
+      if (!sfxProvider.generateAudioAndWait) {
+        throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, sfxProvider.providerId, 'Provider does not support synchronous audio generation');
+      }
 
       for (const sfxRequest of input.sfx_list) {
         const variations = sfxRequest.variations || 1;
@@ -67,7 +72,12 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
             const filename = variations > 1 ? `${safeName}_${varIndex + 1}.${safeFormat}` : `${safeName}.${safeFormat}`;
             const filePath = path.join(outputPath, path.basename(filename));
 
-            const fileResponse = await fetch(result.uri);
+            if (!isAllowedUrl(result.uri)) {
+              this.logger.warn(`Blocked SFX download URL for ${sfxRequest.name} (SSRF prevention)`);
+              continue;
+            }
+
+            const fileResponse = await fetchWithTimeout(result.uri);
             if (!fileResponse.ok) {
               this.logger.warn(`Failed to download SFX ${sfxRequest.name}: ${fileResponse.statusText}`);
               continue;
@@ -167,7 +177,7 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
           provider_calls: [
             {
               provider: sfxProvider.providerId,
-              model: sfxProvider.providerId,
+              model: 'nano-banana-sfx',
               duration_ms: timings['generation'],
             },
           ],
@@ -177,7 +187,8 @@ export class GenerateSfxPackHandler implements SkillHandler<GenerateSfxPackInput
       const totalTime = Date.now() - startTime;
       this.logger.error(`Failed to generate SFX pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(error instanceof Error ? error.message : 'Unknown error during SFX generation', 'EXECUTION_ERROR', {
+      const message = error instanceof ProviderError ? error.getUserSafeMessage() : error instanceof Error ? error.message : 'Unknown error during SFX generation';
+      return skillFailure(message, 'EXECUTION_ERROR', {
         timings_ms: { total: totalTime, ...timings },
       });
     }

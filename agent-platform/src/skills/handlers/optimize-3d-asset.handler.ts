@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Asset3DProviderRegistry } from '@agentic-template/common/src/providers/registries/asset3d-provider.registry';
-import { MeshyAsset3dAdapter } from '@agentic-template/common/src/providers/adapters/meshy-3d.adapter';
+import { ProviderError } from '@agentic-template/common/src/providers/errors/provider.error';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
 import { Optimize3DAssetInput, Optimize3DAssetOutput, OptimizationMetrics } from '@agentic-template/dto/src/skills/optimize-3d-asset.dto';
 import { Model3DFormat } from '@agentic-template/dto/src/skills/generate-3d-asset.dto';
 import { SkillResult, SkillArtifact, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
+import { isAllowedUrl, fetchWithTimeout } from './network-safety.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -43,10 +45,13 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
       const optimizationLevel = input.constraints.optimization_level || DEFAULT_OPTIMIZATION_LEVEL;
 
       const optimizationStart = Date.now();
-      const provider = this.asset3DProviderRegistry.getProvider() as MeshyAsset3dAdapter;
-      const modelUrl = this.resolveModelUrl(input.model_uri);
+      const provider = this.asset3DProviderRegistry.getProvider();
+      if (!provider.optimize3DAndWait) {
+        throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, provider.providerId, 'Provider does not support synchronous 3D optimization');
+      }
+      const previewTaskId = this.extractPreviewTaskId(input.model_uri);
 
-      const result = await provider.optimize3DAndWait(modelUrl, {
+      const result = await provider.optimize3DAndWait(previewTaskId, {
         prompt: `Optimize 3D model with ${optimizationLevel} settings`,
         format,
         polyCountTarget: input.constraints.geometry?.max_triangles,
@@ -65,7 +70,12 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
         timings['copy_original'] = Date.now() - copyStart;
       }
 
-      const metrics = this.calculateMetrics(undefined);
+      const rawResponse = result.metadata.rawResponse as Record<string, unknown> | undefined;
+      const metrics = this.calculateMetrics({
+        triangles: (rawResponse?.triangles as number) || undefined,
+        vertices: (rawResponse?.vertices as number) || undefined,
+        file_size_bytes: savedModelInfo.fileSize,
+      });
 
       const totalTime = Date.now() - startTime;
       this.logger.log(`3D asset optimized successfully in ${totalTime}ms`);
@@ -76,9 +86,9 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
         format,
         file_size_bytes: savedModelInfo.fileSize,
         geometry: {
-          triangles: 0,
-          vertices: 0,
-          materials: 1,
+          triangles: (rawResponse?.triangles as number) || 0,
+          vertices: (rawResponse?.vertices as number) || 0,
+          materials: (rawResponse?.materials as number) || 1,
         },
         textures: undefined,
         lods: undefined,
@@ -127,7 +137,8 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
       const totalTime = Date.now() - startTime;
       this.logger.error(`Failed to optimize 3D asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(error instanceof Error ? error.message : 'Unknown error during 3D optimization', 'EXECUTION_ERROR', {
+      const message = error instanceof ProviderError ? error.getUserSafeMessage() : error instanceof Error ? error.message : 'Unknown error during 3D optimization';
+      return skillFailure(message, 'EXECUTION_ERROR', {
         timings_ms: { total: totalTime, ...timings },
       });
     }
@@ -146,20 +157,29 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
     return validFormats.includes(extension as Model3DFormat) ? (extension as Model3DFormat) : null;
   }
 
-  private resolveModelUrl(uri: string): string {
+  private extractPreviewTaskId(uri: string): string {
     if (uri.startsWith('http://') || uri.startsWith('https://')) {
-      return uri;
+      throw new Error('Expected a Meshy preview task ID, not a URL. Pass the task ID from generate3D result.');
     }
     return uri;
   }
 
+  private sanitizeExecutionId(executionId: string): string {
+    return executionId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 100);
+  }
+
   private async saveModel(modelUrl: string, executionId: string, format: Model3DFormat): Promise<{ uri: string; fileSize: number }> {
-    const outputPath = path.join(this.outputDir, executionId);
+    const safeId = this.sanitizeExecutionId(executionId);
+    const outputPath = path.join(this.outputDir, safeId);
     if (!fs.existsSync(outputPath)) {
       fs.mkdirSync(outputPath, { recursive: true });
     }
 
-    const response = await fetch(modelUrl);
+    if (!isAllowedUrl(modelUrl)) {
+      throw new Error('Blocked URL (SSRF prevention)');
+    }
+
+    const response = await fetchWithTimeout(modelUrl);
     if (!response.ok) {
       throw new Error(`Failed to download optimized model: ${response.statusText}`);
     }
@@ -179,7 +199,8 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
   }
 
   private async copyOriginal(originalUri: string, executionId: string): Promise<string> {
-    const outputPath = path.join(this.outputDir, executionId);
+    const safeId = this.sanitizeExecutionId(executionId);
+    const outputPath = path.join(this.outputDir, safeId);
     if (!fs.existsSync(outputPath)) {
       fs.mkdirSync(outputPath, { recursive: true });
     }
@@ -189,7 +210,10 @@ export class Optimize3DAssetHandler implements SkillHandler<Optimize3DAssetInput
     const filePath = path.join(outputPath, filename);
 
     if (originalUri.startsWith('http://') || originalUri.startsWith('https://')) {
-      const response = await fetch(originalUri);
+      if (!isAllowedUrl(originalUri)) {
+        throw new Error('Blocked URL (SSRF prevention)');
+      }
+      const response = await fetchWithTimeout(originalUri);
       if (!response.ok) {
         throw new Error(`Failed to download original model: ${response.statusText}`);
       }

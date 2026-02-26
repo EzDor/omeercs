@@ -51,6 +51,10 @@ export class StubAudioAdapter implements AudioProviderAdapter {
     };
   }
 
+  async generateAudioAndWait(params: AudioGenerationParams): Promise<AudioGenerationResult> {
+    return this.generateAudio(params);
+  }
+
   supportsParams(params: AudioGenerationParams): boolean {
     if (params.durationSec !== undefined && (params.durationSec < 1 || params.durationSec > 300)) {
       return false;
