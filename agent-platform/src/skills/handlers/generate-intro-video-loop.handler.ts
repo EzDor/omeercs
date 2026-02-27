@@ -1,35 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LiteLLMHttpClient } from '@agentic-template/common/src/llm/litellm-http.client';
-import { LiteLLMClientFactory } from '@agentic-template/common/src/llm/litellm-client.factory';
+import { VideoProviderRegistry } from '@agentic-template/common/src/providers/registries/video-provider.registry';
+import { ProviderError } from '@agentic-template/common/src/providers/errors/provider.error';
+import { ProviderErrorCode } from '@agentic-template/dto/src/providers/types/provider-error.interface';
+import { isAllowedUrl } from '@agentic-template/common/src/providers/network-safety.utils';
 import { GenerateIntroVideoLoopInput, GenerateIntroVideoLoopOutput } from '@agentic-template/dto/src/skills/generate-intro-video-loop.dto';
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
-import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 @Injectable()
 export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntroVideoLoopInput, GenerateIntroVideoLoopOutput> {
   private readonly logger = new Logger(GenerateIntroVideoLoopHandler.name);
-  private readonly llmClient: LiteLLMHttpClient;
-  private readonly defaultModel: string;
   private readonly outputDir: string;
-  private readonly videoGenerationTimeout: number;
 
-  private readonly useStubProvider: boolean;
+  private readonly ALLOWED_VIDEO_DOMAINS = ['runway-cdn.com', 'storage.googleapis.com', 'replicate.delivery', 'api.stability.ai', 'stability.ai', 'api.nanobanana.com'];
 
-  private readonly ALLOWED_VIDEO_DOMAINS = ['runway-cdn.com', 'storage.googleapis.com', 'replicate.delivery', 'api.stability.ai', 'stability.ai'];
-
-  constructor(private readonly configService: ConfigService) {
-    this.llmClient = LiteLLMClientFactory.createClientFromConfig(configService);
-    this.defaultModel = configService.get<string>('VIDEO_GENERATION_MODEL') || 'runway-gen3';
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly videoProviderRegistry: VideoProviderRegistry,
+  ) {
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
-    this.videoGenerationTimeout = configService.get<number>('VIDEO_GENERATION_TIMEOUT_MS') || 300000;
-    this.useStubProvider = configService.get<string>('VIDEO_PROVIDER_STUB') === 'true';
-    if (this.useStubProvider && configService.get<string>('NODE_ENV') === 'production') {
-      throw new Error('Stub video provider must not be used in production');
-    }
   }
 
   async execute(input: GenerateIntroVideoLoopInput, context: SkillExecutionContext): Promise<SkillResult<GenerateIntroVideoLoopOutput>> {
@@ -39,68 +31,32 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     this.logger.log(`Executing generate_intro_video_loop for tenant ${context.tenantId}, execution ${context.executionId}`);
 
     try {
-      if (this.useStubProvider) {
-        return this.executeStub(input, context, startTime, timings);
-      }
-
-      // Prepare image for video generation
       const prepareStart = Date.now();
       const imageData = this.prepareImageData(input.image_uri);
       timings['prepare'] = Date.now() - prepareStart;
 
-      // Build motion prompt
       const motionPrompt = this.buildMotionPrompt(input);
-
-      // Determine video specs
       const specs = this.normalizeSpecs(input.specs);
 
-      // Call video generation API
       const generationStart = Date.now();
-      const model = input.provider || this.defaultModel;
+      const provider = this.videoProviderRegistry.getProvider();
+      if (!provider.generateVideoAndWait) {
+        throw new ProviderError(ProviderErrorCode.GENERATION_FAILED, provider.providerId, 'Provider does not support synchronous video generation');
+      }
 
-      const response = await this.llmClient.videoGeneration({
-        model,
+      const result = await provider.generateVideoAndWait({
         prompt: motionPrompt,
-        image_url: imageData.isUrl ? imageData.value : undefined,
-        image_base64: !imageData.isUrl ? imageData.value : undefined,
-        duration: specs.duration_sec,
+        durationSec: specs.duration_sec,
         fps: specs.fps,
-        width: specs.width,
-        height: specs.height,
+        resolution: `${specs.width}x${specs.height}`,
+        inputUris: imageData.isUrl ? [imageData.value] : undefined,
         seed: input.seed,
       });
 
-      // Handle async generation if needed
-      let videoData = response.data?.[0];
-
-      if (response.status === 'pending' || response.status === 'processing') {
-        // Wait for async generation to complete
-        this.logger.log(`Video generation is async, waiting for completion (ID: ${response.id})`);
-        const statusResult = await this.llmClient.waitForVideoGeneration(response.id!, this.videoGenerationTimeout);
-
-        if (statusResult.status === 'failed') {
-          return skillFailure(statusResult.error || 'Video generation failed', 'GENERATION_FAILED', {
-            timings_ms: { total: Date.now() - startTime, ...timings },
-          });
-        }
-
-        if (statusResult.data) {
-          videoData = statusResult.data;
-        }
-      }
-
       timings['generation'] = Date.now() - generationStart;
 
-      const videoUrl = videoData?.url;
-      if (!videoUrl) {
-        return skillFailure('No video URL in response', 'NO_VIDEO_URL', {
-          timings_ms: { total: Date.now() - startTime, ...timings },
-        });
-      }
-
-      // Download and save the video
       const saveStart = Date.now();
-      const savedVideoInfo = await this.saveVideo(videoUrl, context.executionId, specs.format);
+      const savedVideoInfo = await this.saveVideo(result.uri, context.executionId, specs.format);
       timings['save'] = Date.now() - saveStart;
 
       const totalTime = Date.now() - startTime;
@@ -108,10 +64,10 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
 
       const output: GenerateIntroVideoLoopOutput = {
         video_uri: savedVideoInfo.uri,
-        duration_sec: videoData?.duration_sec || specs.duration_sec,
-        width: videoData?.width || specs.width,
-        height: videoData?.height || specs.height,
-        fps: videoData?.fps || specs.fps,
+        duration_sec: specs.duration_sec,
+        width: specs.width,
+        height: specs.height,
+        fps: specs.fps,
         format: specs.format,
         codec: specs.codec,
         file_size_bytes: savedVideoInfo.fileSize,
@@ -121,7 +77,7 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
           motion_type: input.motion_params?.motion_type,
           motion_prompt: motionPrompt,
           seed: input.seed,
-          model,
+          model: result.metadata.model,
         },
       };
 
@@ -146,8 +102,8 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
           timings_ms: { total: totalTime, ...timings },
           provider_calls: [
             {
-              provider: 'litellm',
-              model,
+              provider: result.metadata.providerId,
+              model: result.metadata.model,
               duration_ms: timings['generation'],
             },
           ],
@@ -157,55 +113,22 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
       const totalTime = Date.now() - startTime;
       this.logger.error(`Failed to generate intro video loop: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
-      return skillFailure(error instanceof Error ? error.message : 'Unknown error during video generation', 'EXECUTION_ERROR', {
+      const message = error instanceof ProviderError ? error.getUserSafeMessage() : error instanceof Error ? error.message : 'Unknown error during video generation';
+      return skillFailure(message, 'EXECUTION_ERROR', {
         timings_ms: { total: totalTime, ...timings },
       });
     }
   }
 
-  private async executeStub(
-    input: GenerateIntroVideoLoopInput,
-    context: SkillExecutionContext,
-    startTime: number,
-    timings: Record<string, number>,
-  ): Promise<SkillResult<GenerateIntroVideoLoopOutput>> {
-    this.logger.log(`Using stub video provider for intro video loop`);
-    const specs = this.normalizeSpecs(input.specs);
-    const outputPath = path.join(this.outputDir, context.executionId);
-    await fsPromises.mkdir(outputPath, { recursive: true });
-    const filePath = path.join(outputPath, `intro-loop.${specs.format}`);
-    await fsPromises.writeFile(filePath, Buffer.alloc(1024));
-    const totalTime = Date.now() - startTime;
-
-    return skillSuccess(
-      {
-        video_uri: filePath,
-        duration_sec: specs.duration_sec,
-        width: specs.width,
-        height: specs.height,
-        fps: specs.fps,
-        format: specs.format,
-        codec: specs.codec,
-        file_size_bytes: 1024,
-        is_loopable: true,
-        generation_params: { source_image_uri: input.image_uri, motion_prompt: 'stub', model: 'stub-generator' },
-      },
-      [{ artifact_type: 'video/intro-loop', uri: filePath, metadata: { duration_sec: specs.duration_sec, width: specs.width, height: specs.height, is_loopable: true } }],
-      { timings_ms: { total: totalTime, ...timings }, provider_calls: [{ provider: 'stub', model: 'stub-generator', duration_ms: 0 }] },
-    );
-  }
-
   private buildMotionPrompt(input: GenerateIntroVideoLoopInput): string {
     const parts: string[] = [];
 
-    // Start with custom motion prompt if provided
     if (input.motion_prompt) {
       parts.push(input.motion_prompt);
     } else {
       parts.push('Create a subtle, seamless looping animation');
     }
 
-    // Add motion parameters
     if (input.motion_params) {
       const { motion_type, direction, intensity } = input.motion_params;
 
@@ -231,7 +154,6 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
       }
     }
 
-    // Add loop requirements
     if (input.loop_config?.seamless !== false) {
       parts.push('ensuring seamless loop transition');
     }
@@ -257,30 +179,15 @@ export class GenerateIntroVideoLoopHandler implements SkillHandler<GenerateIntro
     };
   }
 
-  private validateLocalPath(uri: string): void {
-    const resolved = path.resolve(uri);
-    const allowedBase = path.resolve(this.outputDir) + path.sep;
-    if (!resolved.startsWith(allowedBase)) {
-      throw new Error(`Access denied: path outside allowed directory`);
-    }
-  }
-
   private prepareImageData(imageUri: string): { value: string; isUrl: boolean } {
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+      if (!isAllowedUrl(imageUri)) {
+        throw new Error('Blocked image URL (SSRF prevention)');
+      }
       return { value: imageUri, isUrl: true };
     }
 
-    this.validateLocalPath(imageUri);
-
-    if (fs.existsSync(imageUri)) {
-      const buffer = fs.readFileSync(imageUri);
-      const base64 = buffer.toString('base64');
-      const ext = path.extname(imageUri).toLowerCase().slice(1);
-      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-      return { value: `data:${mimeType};base64,${base64}`, isUrl: false };
-    }
-
-    throw new Error(`Invalid image URI: ${imageUri}`);
+    throw new Error('Local image files must be uploaded to a URL before video generation');
   }
 
   private validateVideoUrl(url: string): void {

@@ -62,4 +62,6 @@ export interface VideoProviderAdapter {
    * Useful for parameter validation before submission.
    */
   supportsParams?(params: VideoGenerationParams): boolean;
+
+  generateVideoAndWait?(params: VideoGenerationParams, pollIntervalMs?: number, timeoutMs?: number): Promise<VideoGenerationResult>;
 }

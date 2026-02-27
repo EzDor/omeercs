@@ -45,6 +45,13 @@ export function isAllowedUrl(url: string): boolean {
   }
 }
 
+export function validateProviderBaseUrl(url: string, providerId: string): void {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`Provider ${providerId} base URL must use HTTPS`);
+  }
+}
+
 export async function fetchWithTimeout(url: string, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);

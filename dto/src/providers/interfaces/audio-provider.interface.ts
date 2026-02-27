@@ -62,4 +62,6 @@ export interface AudioProviderAdapter {
    * Useful for parameter validation before submission.
    */
   supportsParams?(params: AudioGenerationParams): boolean;
+
+  generateAudioAndWait?(params: AudioGenerationParams, pollIntervalMs?: number, timeoutMs?: number): Promise<AudioGenerationResult>;
 }

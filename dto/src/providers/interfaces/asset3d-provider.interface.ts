@@ -65,4 +65,8 @@ export interface Asset3DProviderAdapter {
    * Useful for parameter validation before submission.
    */
   supportsParams?(params: Asset3DGenerationParams): boolean;
+
+  generate3DAndWait?(params: Asset3DGenerationParams, pollIntervalMs?: number, timeoutMs?: number): Promise<Asset3DGenerationResult>;
+
+  optimize3DAndWait?(previewTaskId: string, params: Partial<Asset3DGenerationParams>, pollIntervalMs?: number, timeoutMs?: number): Promise<Asset3DGenerationResult>;
 }
