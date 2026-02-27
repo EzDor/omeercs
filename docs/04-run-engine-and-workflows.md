@@ -27,14 +27,24 @@ WorkflowEngineService         <-- Compiles and executes the graph with PostgreSQ
 Workflows are defined as injectable NestJS classes in `agent-platform/src/workflows/campaign/`. Each class has a `createGraph()` method that builds a LangGraph `StateGraph` with nodes and edges defined inline.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { StateGraph } from '@langchain/langgraph';
 import { SkillNodeService } from './services/skill-node.service';
 import { CampaignWorkflowState, CampaignWorkflowStateType } from './interfaces/campaign-workflow-state.interface';
 
 @Injectable()
 export class CampaignBuildMinimalWorkflow {
+  private readonly logger = new Logger(CampaignBuildMinimalWorkflow.name);
+
   constructor(private readonly skillNode: SkillNodeService) {}
+
+  private shouldContinue(state: CampaignWorkflowStateType) {
+    return state.error ? '__end__' : 'continue';
+  }
+
+  private stepData(state: CampaignWorkflowStateType, stepId: string): Record<string, any> | undefined {
+    return state.stepResults[stepId]?.data as Record<string, any> | undefined;
+  }
 
   createGraph(): StateGraph<CampaignWorkflowStateType> {
     const graph = new StateGraph(CampaignWorkflowState)
@@ -44,6 +54,8 @@ export class CampaignBuildMinimalWorkflow {
           template_id: s.triggerPayload.template_id,
           theme: s.triggerPayload.theme,
           difficulty: s.triggerPayload.difficulty,
+          color_scheme: s.triggerPayload.color_scheme,
+          copy: s.triggerPayload.copy,
         })),
       )
       .addNode(
@@ -54,6 +66,7 @@ export class CampaignBuildMinimalWorkflow {
           (s) => ({
             style: (s.triggerPayload.audio as Record<string, any>)?.style,
             duration_sec: (s.triggerPayload.audio as Record<string, any>)?.duration_sec,
+            custom_prompt: (s.triggerPayload.audio as Record<string, any>)?.prompt,
             loopable: true,
           }),
           { maxAttempts: 2, backoffMs: 2000 },
@@ -61,32 +74,50 @@ export class CampaignBuildMinimalWorkflow {
       )
       .addNode(
         'bundle_game',
-        this.skillNode.createNode('bundle_game', 'bundle_game_template', (s) => ({
-          game_config: s.stepResults['game_config']?.data,
-          audio_uri: s.stepResults['bgm']?.data?.audio_uri,
-          template_id: s.triggerPayload.template_id,
-        })),
+        this.skillNode.createNode(
+          'bundle_game',
+          'bundle_game_template',
+          (s) => ({
+            game_config: this.stepData(s, 'game_config'),
+            audio_uri: this.stepData(s, 'bgm')?.audio_uri,
+            template_id: s.triggerPayload.template_id,
+          }),
+          { maxAttempts: 2, backoffMs: 2000 },
+        ),
       )
       .addNode(
         'manifest',
-        this.skillNode.createNode('manifest', 'assemble_campaign_manifest', (s) => ({
-          campaign_id: s.triggerPayload.campaign_id,
-          game_bundle_uri: s.stepResults['bundle_game']?.data?.bundle_uri,
-        })),
+        this.skillNode.createNode(
+          'manifest',
+          'assemble_campaign_manifest',
+          (s) => ({
+            campaign_id: s.triggerPayload.campaign_id,
+            campaign_name: s.triggerPayload.campaign_name,
+            intro_video_uri: s.triggerPayload.intro_video_uri,
+            outcome_videos: s.triggerPayload.outcome_videos,
+            game_bundle_uri: this.stepData(s, 'bundle_game')?.bundle_uri,
+            button_config: s.triggerPayload.button_config,
+            rules: s.triggerPayload.rules,
+            branding: s.triggerPayload.branding,
+          }),
+          { maxAttempts: 1, backoffMs: 1000 },
+        ),
       );
 
     graph
       .addEdge('__start__', 'game_config')
       .addEdge('__start__', 'bgm')
-      .addConditionalEdges('game_config', (s) => s.error ? '__end__' : 'continue', { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges('bgm', (s) => s.error ? '__end__' : 'continue', { continue: 'bundle_game', __end__: '__end__' })
-      .addConditionalEdges('bundle_game', (s) => s.error ? '__end__' : 'continue', { continue: 'manifest', __end__: '__end__' })
+      .addConditionalEdges('game_config', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
+      .addConditionalEdges('bgm', (s) => this.shouldContinue(s), { continue: 'bundle_game', __end__: '__end__' })
+      .addConditionalEdges('bundle_game', (s) => this.shouldContinue(s), { continue: 'manifest', __end__: '__end__' })
       .addEdge('manifest', '__end__');
 
-    return graph;
+    return graph as unknown as StateGraph<CampaignWorkflowStateType>;
   }
 }
 ```
+
+Workflows use private helper methods like `shouldContinue()` and `stepData()` to keep node definitions clean. The `shouldContinue()` method centralizes the error-check routing pattern, and `stepData()` provides typed access to previous step outputs.
 
 ### Input Resolution
 
@@ -94,13 +125,13 @@ Inputs are resolved inline via lambda functions that receive the current workflo
 
 ### Retry Policy
 
-Each node can specify a retry configuration:
+Each node can specify a retry configuration (default: `{ maxAttempts: 2, backoffMs: 1000 }`):
 
 ```typescript
 this.skillNode.createNode('intro_image', 'generate_intro_image', inputFn, { maxAttempts: 2, backoffMs: 2000 })
 ```
 
-`SkillNodeService` handles exponential backoff retries internally.
+`SkillNodeService` handles exponential backoff retries internally. The backoff delay doubles on each attempt (`backoffMs * 2^(attempt-1)`).
 
 ### Conditional Edges (Error Propagation)
 
@@ -110,82 +141,78 @@ Workflows use LangGraph conditional edges to short-circuit on errors. If any ste
 
 All workflows are registered in `CampaignRunProcessor` via a `Map<workflowName, WorkflowClass>`. Workflow name constants are defined in `agent-platform/src/workflows/campaign/campaign-workflow.constants.ts`:
 
-| Workflow | Class | Purpose |
-|----------|-------|---------|
-| `campaign.build` | `CampaignBuildWorkflow` | Full end-to-end campaign generation (18 steps) |
-| `campaign.build.minimal` | `CampaignBuildMinimalWorkflow` | Minimal build for testing (4 steps) |
-| `campaign.update_intro` | `CampaignUpdateIntroWorkflow` | Regenerate intro video/image only |
-| `campaign.update_outcome` | `CampaignUpdateOutcomeWorkflow` | Regenerate win/lose outcome videos |
-| `campaign.update_audio` | `CampaignUpdateAudioWorkflow` | Regenerate BGM and SFX |
-| `campaign.update_game_config` | `CampaignUpdateGameConfigWorkflow` | Regenerate game configuration |
-| `campaign.replace_3d_asset` | `CampaignReplace3dAssetWorkflow` | Replace 3D assets |
+| Workflow | Class | Steps | Purpose |
+|----------|-------|-------|---------|
+| `campaign.build` | `CampaignBuildWorkflow` | 18 | Full end-to-end campaign generation |
+| `campaign.build.minimal` | `CampaignBuildMinimalWorkflow` | 4 | Minimal build for testing |
+| `campaign.update_intro` | `CampaignUpdateIntroWorkflow` | 5 | Regenerate intro image, video, button segmentation |
+| `campaign.update_outcome` | `CampaignUpdateOutcomeWorkflow` | 4 | Regenerate win/lose outcome videos |
+| `campaign.update_audio` | `CampaignUpdateAudioWorkflow` | 6 | Regenerate BGM, SFX, audio mix, and re-bundle |
+| `campaign.update_game_config` | `CampaignUpdateGameConfigWorkflow` | 4 | Regenerate game configuration and re-bundle |
+| `campaign.replace_3d_asset` | `CampaignReplace3dAssetWorkflow` | 5 | Generate, optimize, and swap a 3D asset |
 
 ## The campaign.build Workflow (Full Pipeline)
 
 This is the main workflow with 18 steps. Here's the dependency graph showing which steps can run in parallel:
 
 ```
-                    +---------------+
-                    |   TRIGGER     |
-                    |  (brief,      |
-                    |   constraints)|
-                    +--+---+---+---+
-                       |   |   |
-          +------------+   |   +------------+
-          v                v                 v
-    +----------+    +------------+    +--------------+
-    |   plan   |    | intel_plan |    |intel_theme_  |
-    |          |    |            |    |brief         |
-    +--+-------+    +------------+    +--------------+
-       |
-       +----------------------------------------------+
-       |                    |              |           |
-       v                    v              v           v
- +-----------+      +------------+  +----------+  +----------+
- |intro_image|      | intel_copy |  |   bgm    |  |   sfx    |
- +--+--+--+--+      +------------+  +----+-----+  +----+-----+
-    |  |  |                               |             |
-    |  |  +----------+                    +------+------+
-    |  |             |                           v
-    v  v             v                    +------------+
-+------+ +--------+ +---------------+    | audio_mix  |
-|intro_| |intro_  | |intel_theme_   |    +------+-----+
-|video | |button_ | |image          |           |
-+------+ |segmen- | +---------------+           |
-         |tation  |                              |
-         +--------+                              |
-                                                 |
-       +--------------------+                    |
-       v                    v                    |
- +------------+      +-------------+            |
- |outcome_win |      |outcome_lose |            |
- +------------+      +-------------+            |
-                                                 |
-       +---------+                               |
-       v         v                               v
- +-----------+  +----------+             +------------+
- |game_config|  |          |             |            |
- +-----+-----+  |          |             |            |
-       |        |          |             |            |
-       +--------+----------+             |            |
-                v                        v            |
-          +----------+                                |
-          |bundle_   |<-------------------------------+
-          |game      |
-          +----+-----+
-               |
-    +----------+----------+
-    v                     v
-+----------+       +----------+
-|qa_bundle |       | manifest | <-- Depends on 9 steps
-+----------+       +----+-----+
-                        v
-                 +--------------+
-                 |review_smoke  |
-                 +--------------+
+                         +---------------+
+                         |   TRIGGER     |
+                         |  (brief,      |
+                         |   constraints)|
+                         +--+---+---+---+
+                            |   |   |
+               +------------+   |   +------------+
+               v                v                 v
+         +----------+    +------------+    +--------------+
+         |   plan   |    | intel_plan |    |intel_theme_  |
+         |          |    |            |    |brief         |
+         +----+-----+    +-----+------+    +------+-------+
+              |                |                   |
+              |  (all 7 fan out from plan)         |
+    +---------+-----+-----+-----+-----+-----+     |
+    |         |     |     |     |     |     |     |
+    v         v     v     v     v     v     v     |
++-------+ +-----+ +---+ +---+ +------+ +------+  |
+|intro_ | |intel| |bgm| |sfx| |out-  | |out-  |  |
+|image  | |copy | |   | |   | |come_ | |come_ |  |
++--+--+-+ +-----+ +-+-+ +-+-+ |win   | |lose  |  |
+   |  |              |     |   +------+ +------+  |
+   |  +-------+      +--+--+                      |
+   |          |         v                          |
+   v          v   +----------+                     |
++------+ +------+ |audio_mix |                     |
+|intro_| |intro_| +----+-----+                     |
+|video | |btn_  |      |                           |
++--+---+ |segm. |      |                           |
+   |     +--+---+      |                           |
+   |        |          |                           |
+   v        v          v                           |
+   |        |   +-----------+                      |
+   |        |   |game_config|                      |
+   |        |   +-----+-----+                      |
+   |        |         |                            |
+   |        |         +---+                        |
+   |        |             v                        |
+   |        |       +----------+                   |
+   |        +------>|bundle_   |<------------------+
+   +--------------->|game      |
+                    +----+-----+
+                         |
+              +----------+----------+
+              v                     v
+         +----------+       +----------+
+         |qa_bundle |       | manifest | <-- Depends on 9 steps
+         +----------+       +----+-----+
+                                  v
+                           +--------------+
+                           |review_smoke  |
+                           +--------------+
+
+  intel_theme_image also fans out from intro_image (not shown for clarity)
 ```
 
-**Parallelism**: Steps with no dependencies on each other run concurrently. For example, `plan`, `intel_plan`, and `intel_theme_brief` all start simultaneously. After `plan` completes, `intro_image`, `intel_copy`, `bgm`, `sfx`, `game_config`, `outcome_win`, and `outcome_lose` all start in parallel.
+**Parallelism**: Steps with no dependencies on each other run concurrently. Three steps start simultaneously from the trigger: `plan`, `intel_plan`, and `intel_theme_brief`. After `plan` completes, seven steps fan out in parallel: `intro_image`, `intel_copy`, `bgm`, `sfx`, `game_config`, `outcome_win`, and `outcome_lose`. After `intro_image` completes, three more steps fan out: `intel_theme_image`, `intro_button_segmentation`, and `intro_video`. The `manifest` step waits for 9 upstream dependencies before executing.
 
 ## Key Services
 

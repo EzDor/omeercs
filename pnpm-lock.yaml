@@ -60,9 +60,6 @@ importers:
       '@agentic-template/dto':
         specifier: workspace:*
         version: link:../dto
-      '@anthropic-ai/sdk':
-        specifier: ^0.74.0
-        version: 0.74.0(zod@4.1.13)
       '@clerk/backend':
         specifier: ^2.17.1
         version: 2.25.0(react@19.2.1)
@@ -102,6 +99,9 @@ importers:
       '@nestjs/typeorm':
         specifier: ^10.0.2
         version: 10.0.2(@nestjs/common@11.1.9)(@nestjs/core@11.1.9)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.28)
+      '@opencode-ai/sdk':
+        specifier: ^1.2.15
+        version: 1.2.15
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
@@ -797,19 +797,6 @@ packages:
       - chokidar
     dev: true
 
-  /@anthropic-ai/sdk@0.74.0(zod@4.1.13):
-    resolution: {integrity: sha512-srbJV7JKsc5cQ6eVuFzjZO7UR3xEPJqPamHFIe29bs38Ij2IripoAhC0S5NslNbaFUYqBKypmmpzMTpqfHEUDw==}
-    hasBin: true
-    peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
-    peerDependenciesMeta:
-      zod:
-        optional: true
-    dependencies:
-      json-schema-to-ts: 3.1.1
-      zod: 4.1.13
-    dev: false
-
   /@asamuzakjp/css-color@3.2.0:
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
     dependencies:
@@ -1204,11 +1191,6 @@ packages:
     transitivePeerDependencies:
       - supports-color
     dev: true
-
-  /@babel/runtime@7.28.6:
-    resolution: {integrity: sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA==}
-    engines: {node: '>=6.9.0'}
-    dev: false
 
   /@babel/template@7.27.2:
     resolution: {integrity: sha512-LPDZ85aEJyYSd18/DkjNh4/y1ntkE5KwUHWTiqgRxruuZL2F1yuHligVHLvcHY2vMHXttKFpJn6LwfI7cw7ODw==}
@@ -3111,6 +3093,10 @@ packages:
   /@one-ini/wasm@0.1.1:
     resolution: {integrity: sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw==}
     dev: true
+
+  /@opencode-ai/sdk@1.2.15:
+    resolution: {integrity: sha512-NUJNlyBCdZ4R0EBLjJziEQOp2XbRPJosaMcTcWSWO5XJPKGUpz0u8ql+5cR8K+v2RJ+hp2NobtNwpjEYfe6BRQ==}
+    dev: false
 
   /@paralleldrive/cuid2@2.3.1:
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
@@ -7599,14 +7585,6 @@ packages:
     engines: {node: ^18.17.0 || >=20.5.0}
     dev: true
 
-  /json-schema-to-ts@3.1.1:
-    resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
-    engines: {node: '>=16'}
-    dependencies:
-      '@babel/runtime': 7.28.6
-      ts-algebra: 2.0.0
-    dev: false
-
   /json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
     dev: true
@@ -9724,10 +9702,6 @@ packages:
     dependencies:
       punycode: 2.3.1
     dev: true
-
-  /ts-algebra@2.0.0:
-    resolution: {integrity: sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw==}
-    dev: false
 
   /ts-api-utils@2.1.0(typescript@5.8.3):
     resolution: {integrity: sha512-CUgTZL1irw8u29bzrOD/nH85jqyc74D6SshFgujOIA7osm2Rz7dYH77agkx7H4FBNxDq7Cjf+IjaX/8zwFW+ZQ==}

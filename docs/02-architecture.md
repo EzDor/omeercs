@@ -69,10 +69,13 @@ The system follows a **decoupled microservices** pattern where the API server ne
     │  │ Gemini       │  └─────────────────────┘ │
     │  │ OpenAI       │                           │
     │  │ Anthropic    │  ┌─────────────────────┐ │
-    │  └──────────────┘  │   PostgreSQL 17     │ │
-    │                    │   port 5432         │ │
-    │                    │   Schema: app       │ │
-    │                    └─────────────────────┘ │
+    │  └──────────────┘  │ OpenCode (embedded) │ │
+    │                    │ Code gen agent via   │ │
+    │  ┌──────────────┐  │ @opencode-ai/sdk    │ │
+    │  │ PostgreSQL 17│  └─────────────────────┘ │
+    │  │  port 5432   │                           │
+    │  │  Schema: app │                           │
+    │  └──────────────┘                           │
     └─────────────────────────────────────────────┘
 ```
 

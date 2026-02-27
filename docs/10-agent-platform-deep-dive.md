@@ -17,7 +17,13 @@ agent-platform/src/
 │   ├── *.workflow.ts              # Workflow classes (each builds a LangGraph StateGraph)
 │   └── campaign-workflows.module.ts
 ├── skills/                        # Skill execution system
-│   ├── handlers/                  # 20 handler implementations
+│   ├── handlers/                  # Standard handler implementations
+│   ├── opencode/                  # OpenCode agent-based handlers
+│   │   ├── opencode.module.ts     # NestJS module (OpenCodeService, CodeSafetyService)
+│   │   ├── opencode.service.ts    # Embedded OpenCode server and session management
+│   │   ├── code-safety.service.ts # Dangerous pattern denylist for generated code
+│   │   ├── opencode-generate-threejs-code.handler.ts
+│   │   └── opencode-bundle-game-template.handler.ts
 │   ├── interfaces/                # SkillHandler interface
 │   ├── services/                  # Skill catalog service
 │   └── skill-runner/              # Skill execution engine
@@ -431,9 +437,12 @@ private getHandlerDefinitions(): Array<{ skillId: string; create: () => SkillHan
     { skillId: 'campaign_plan_from_brief',   create: () => new CampaignPlanFromBriefHandler(this.configService) },
     { skillId: 'generate_intro_image',       create: () => new GenerateIntroImageHandler(this.configService, this.imageProviderRegistry) },
     { skillId: 'generate_bgm_track',         create: () => new GenerateBgmTrackHandler(this.configService, this.audioProviderRegistry) },
-    { skillId: 'bundle_game_template',       create: () => new BundleGameTemplateHandler(
-      this.configService, this.templateManifestLoader, this.templateConfigValidator,
-      new GenerateThreejsCodeHandler(this.configService),
+    { skillId: 'generate_threejs_code',      create: () => new OpenCodeGenerateThreejsCodeHandler(
+      this.configService, this.openCodeService, this.codeSafetyService,
+    )},
+    { skillId: 'bundle_game_template',       create: () => new OpenCodeBundleGameTemplateHandler(
+      this.configService, this.openCodeService, this.codeSafetyService,
+      this.templateManifestLoader, this.templateConfigValidator,
       new ValidateBundleHandler(this.configService),
     )},
     // ... 19 handlers total
@@ -441,7 +450,7 @@ private getHandlerDefinitions(): Array<{ skillId: string; create: () => SkillHan
 }
 ```
 
-Each handler receives only the dependencies it needs. Some handlers (like `BundleGameTemplateHandler`) compose other handlers internally.
+Each handler receives only the dependencies it needs. The OpenCode-based handlers receive `OpenCodeService` and `CodeSafetyService` from the `OpenCodeModule`, which is imported by `SkillRunnerModule`. The `OpenCodeBundleGameTemplateHandler` composes `ValidateBundleHandler` internally for its self-healing loop.
 
 ### Descriptor Validation
 
