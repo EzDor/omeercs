@@ -18,4 +18,5 @@
 - **No README files**: NEVER create README files unless explicitly requested.
 - **No barrel files (index.ts)**: NEVER create index.ts re-export files. Always import directly from the source file. Exception: index.ts files with actual implementation logic.
 - **Env file sync**: Every change to `.env.local` must also be applied to `.env`.
+- **No tests**: NEVER write unit tests, integration tests, or any test files unless explicitly requested.
 - **Check docs with Context7**: When working with 3rd party libraries or APIs, use the Context7 MCP tool (`mcp__context7__resolve-library-id` and `mcp__context7__query-docs`) to fetch up-to-date documentation before implementing.

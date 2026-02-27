@@ -14,9 +14,8 @@ import { isAllowedUrl, fetchWithTimeout } from '../handlers/network-safety.utils
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import * as pathModule from 'path';
 
-const GAME_TEMPLATES_PATH = pathModule.resolve(__dirname, '../../../../..', 'templates', 'games');
+const GAME_TEMPLATES_PATH = path.resolve(__dirname, '../../../../..', 'templates', 'games');
 const DEFAULT_VERSION = '1.0.0';
 
 @Injectable()
@@ -37,7 +36,8 @@ export class OpenCodeBundleGameTemplateHandler implements SkillHandler<BundleGam
   ) {
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.templatesDir = configService.get<string>('GAME_TEMPLATES_DIR') || GAME_TEMPLATES_PATH;
-    this.maxHealingIterations = parseInt(configService.get<string>('BUNDLE_HEALING_MAX_ITERATIONS') || '3', 10);
+    const parsed = parseInt(configService.get<string>('BUNDLE_HEALING_MAX_ITERATIONS') || '3', 10);
+    this.maxHealingIterations = Number.isNaN(parsed) || parsed < 1 ? 3 : Math.min(parsed, 10);
     this.promptsDir = path.resolve(__dirname, '..', '..', 'prompt-registry', 'prompts');
   }
 
@@ -129,8 +129,11 @@ export class OpenCodeBundleGameTemplateHandler implements SkillHandler<BundleGam
       const optimizationsApplied = this.applyOptimizations(input.optimization, timings);
 
       const healingStart = Date.now();
-      const validationOutput = await this.selfHealingLoop(bundlePath, sessionResult.sessionId, context, timings);
+      const validationOutput = await this.selfHealingLoop(bundlePath, sessionResult.sessionId, context, timings, templateManifest.title);
       timings['self_healing_total'] = Date.now() - healingStart;
+
+      const postHealScripts = this.getScriptFilenames(scriptsDir);
+      this.writeIndexHtml(bundlePath, postHealScripts, templateManifest.title);
 
       const allFiles = this.getAllFiles(bundlePath, bundlePath);
       const manifest = this.createManifest(bundleId, input.template_id, input.version || DEFAULT_VERSION, allFiles, assetFiles, optimizationsApplied);
@@ -182,7 +185,13 @@ export class OpenCodeBundleGameTemplateHandler implements SkillHandler<BundleGam
     }
   }
 
-  private async selfHealingLoop(bundlePath: string, sessionId: string, context: SkillExecutionContext, timings: Record<string, number>): Promise<ValidateBundleOutput | undefined> {
+  private async selfHealingLoop(
+    bundlePath: string,
+    sessionId: string,
+    context: SkillExecutionContext,
+    timings: Record<string, number>,
+    title: string,
+  ): Promise<ValidateBundleOutput | undefined> {
     let lastValidationOutput: ValidateBundleOutput | undefined;
 
     for (let iteration = 1; iteration <= this.maxHealingIterations; iteration++) {
@@ -226,7 +235,7 @@ export class OpenCodeBundleGameTemplateHandler implements SkillHandler<BundleGam
       }
 
       const scriptFiles = this.getScriptFilenames(path.join(bundlePath, 'scripts'));
-      this.writeIndexHtml(bundlePath, scriptFiles, 'Game');
+      this.writeIndexHtml(bundlePath, scriptFiles, title);
     }
 
     return lastValidationOutput;
@@ -342,12 +351,11 @@ export class OpenCodeBundleGameTemplateHandler implements SkillHandler<BundleGam
   }
 
   private escapeHtml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   private writeIndexHtml(bundlePath: string, scriptFiles: string[], title: string): void {
-    const safeFilename = /^[a-zA-Z0-9_-]+\.js$/;
-    const safeScripts = scriptFiles.filter((f) => safeFilename.test(f));
+    const safeScripts = scriptFiles.filter((f) => this.codeSafetyService.validateFilename(f));
     const scriptTags = safeScripts.map((f) => `  <script src="scripts/${f}" type="module" defer></script>`).join('\n');
 
     const html = `<!DOCTYPE html>

@@ -10,9 +10,10 @@ import { LlmGenerationService } from './services/llm-generation.service';
 import { SkillCatalogService } from '../services/skill-catalog.service';
 import { PromptRegistryModule } from '../../prompt-registry/prompt-registry.module';
 import { TemplateSystemModule } from '../../template-system/template-system.module';
+import { OpenCodeModule } from '../opencode/opencode.module';
 
 @Module({
-  imports: [ConfigModule, PromptRegistryModule, ProvidersModule, TemplateSystemModule],
+  imports: [ConfigModule, PromptRegistryModule, ProvidersModule, TemplateSystemModule, OpenCodeModule],
   providers: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService, SkillCatalogService],
   exports: [SkillRunnerService, WorkspaceService, SecretsService, ExecutionContextService, SchemaValidatorService, LlmGenerationService],
 })

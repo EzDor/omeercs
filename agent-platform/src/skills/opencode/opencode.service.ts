@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createOpencode } from '@opencode-ai/sdk';
-import type { Session, Part } from '@opencode-ai/sdk';
+import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk';
+import type { Session, TextPartInput } from '@opencode-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -11,8 +11,8 @@ export interface OpenCodeSessionResult {
 }
 
 interface OpenCodeInstance {
-  client: ReturnType<Awaited<ReturnType<typeof createOpencode>>['client']> extends infer C ? C : never;
-  server: ReturnType<Awaited<ReturnType<typeof createOpencode>>['server']> extends infer S ? S : never;
+  client: OpencodeClient;
+  server: { url: string; close(): void };
 }
 
 @Injectable()
@@ -20,6 +20,7 @@ export class OpenCodeService implements OnModuleDestroy {
   private readonly logger = new Logger(OpenCodeService.name);
   private readonly model: string;
   private instance: OpenCodeInstance | null = null;
+  private initPromise: Promise<OpenCodeInstance> | null = null;
 
   constructor(private readonly configService: ConfigService) {
     this.model = configService.get<string>('OPENCODE_MODEL') || 'anthropic/claude-opus-4-6';
@@ -27,7 +28,19 @@ export class OpenCodeService implements OnModuleDestroy {
 
   private async ensureInstance(): Promise<OpenCodeInstance> {
     if (this.instance) return this.instance;
+    if (this.initPromise) return this.initPromise;
 
+    this.initPromise = this.createInstance();
+    try {
+      const instance = await this.initPromise;
+      return instance;
+    } catch (err) {
+      this.initPromise = null;
+      throw err;
+    }
+  }
+
+  private async createInstance(): Promise<OpenCodeInstance> {
     this.logger.log('Starting embedded OpenCode server...');
     const { client, server } = await createOpencode({
       hostname: '127.0.0.1',
@@ -37,8 +50,9 @@ export class OpenCodeService implements OnModuleDestroy {
       },
     });
 
-    this.instance = { client, server } as OpenCodeInstance;
-    this.logger.log(`OpenCode server started at ${(server as { url?: string }).url || '127.0.0.1'}`);
+    this.instance = { client, server };
+    this.initPromise = null;
+    this.logger.log(`OpenCode server started at ${server.url}`);
     return this.instance;
   }
 
@@ -62,7 +76,7 @@ export class OpenCodeService implements OnModuleDestroy {
     fs.writeFileSync(path.join(workspaceDir, 'opencode.json'), JSON.stringify(config, null, 2));
   }
 
-  async executeSession(params: { workspaceDir: string; systemPrompt: string; userPrompt: string; signal?: AbortSignal }): Promise<OpenCodeSessionResult> {
+  async executeSession(params: { workspaceDir: string; systemPrompt: string; userPrompt: string }): Promise<OpenCodeSessionResult> {
     const { workspaceDir, systemPrompt, userPrompt } = params;
     const instance = await this.ensureInstance();
 
@@ -77,14 +91,14 @@ export class OpenCodeService implements OnModuleDestroy {
       path: { id: sessionId },
       body: {
         noReply: true,
-        parts: [{ type: 'text', text: systemPrompt } as Part],
+        parts: [{ type: 'text', text: systemPrompt } as TextPartInput],
       },
     });
 
     const response = await instance.client.session.prompt({
       path: { id: sessionId },
       body: {
-        parts: [{ type: 'text', text: userPrompt } as Part],
+        parts: [{ type: 'text', text: userPrompt } as TextPartInput],
       },
     });
 
@@ -93,13 +107,13 @@ export class OpenCodeService implements OnModuleDestroy {
     return { sessionId, textParts };
   }
 
-  async sendFollowUp(params: { sessionId: string; prompt: string; signal?: AbortSignal }): Promise<string[]> {
+  async sendFollowUp(params: { sessionId: string; prompt: string }): Promise<string[]> {
     const instance = await this.ensureInstance();
 
     const response = await instance.client.session.prompt({
       path: { id: params.sessionId },
       body: {
-        parts: [{ type: 'text', text: params.prompt } as Part],
+        parts: [{ type: 'text', text: params.prompt } as TextPartInput],
       },
     });
 
@@ -123,7 +137,7 @@ export class OpenCodeService implements OnModuleDestroy {
     if (this.instance) {
       this.logger.log('Shutting down OpenCode server...');
       try {
-        (this.instance.server as { close?: () => void }).close?.();
+        this.instance.server.close();
       } catch (err) {
         this.logger.warn(`OpenCode server shutdown error: ${err instanceof Error ? err.message : 'Unknown'}`);
       }

@@ -17,6 +17,14 @@ const DANGEROUS_PATTERNS: RegExp[] = [
   /\bexecSync\b/,
   /\bexecFile\b/,
   /\bspawnSync\b/,
+  /\bfetch\s*\(/,
+  /\bXMLHttpRequest\b/,
+  /\bnew\s+WebSocket\s*\(/,
+  /\bdocument\.createElement\b/,
+  /\bimportScripts\s*\(/,
+  /\bwindow\.open\s*\(/,
+  /\blocation\s*\.\s*(href|assign|replace)\b/,
+  /\batob\s*\(/,
 ];
 
 export interface CodeSafetyViolation {
