@@ -1,7 +1,7 @@
 template_id: quiz
 version: "1.0.0"
 title: "Quiz"
-description: "3D quiz game with animated question panels, raycaster answer selection, score tracking, and prize tier assignment"
+description: "Mobile-optimized 3D quiz game with animated question panels, tap-to-answer selection, score tracking, and prize tier assignment"
 
 config_schema:
   type: object

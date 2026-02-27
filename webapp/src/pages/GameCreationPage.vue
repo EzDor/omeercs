@@ -268,7 +268,7 @@ onUnmounted(() => {
       </div>
 
       <div v-if="showTemplateSelector" class="form-group">
-        <label for="template-select">Game Template:</label>
+        <label for="template-select">Mobile Game Template:</label>
         <select id="template-select" v-model="selectedTemplate">
           <option v-for="t in gameTemplates" :key="t" :value="t">
             {{ t.replace('_', ' ') }}

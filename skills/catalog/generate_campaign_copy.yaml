@@ -2,7 +2,7 @@ skill_id: generate_campaign_copy
 version: "1.0.0"
 title: Generate Campaign Copy
 description: |
-  Generates marketing copy variations for gamified campaign experiences.
+  Generates marketing copy variations for mobile game campaign experiences.
   Produces multiple distinct variations per copy type with tone matching and character limits.
   Uses structured LLM output with schema validation and automatic retry.
 
@@ -11,6 +11,8 @@ tags:
   - ai
   - copy
   - marketing
+  - mobile
+  - game
 
 template_type: LLM_JSON_GENERATION
 template_config:

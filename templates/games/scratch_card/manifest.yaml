@@ -1,7 +1,7 @@
 template_id: scratch_card
 version: "1.0.0"
 title: "Scratch Card"
-description: "3D scratch card game with shader-based scratch layer, UV-mapped touch interaction, and percentage-based auto-reveal"
+description: "Mobile-optimized 3D scratch card game with shader-based scratch layer, finger-driven touch interaction, and percentage-based auto-reveal"
 
 config_schema:
   type: object

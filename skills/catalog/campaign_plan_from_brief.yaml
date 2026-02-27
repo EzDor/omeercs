@@ -5,15 +5,16 @@ skill_id: campaign_plan_from_brief
 version: "1.0.0"
 title: Campaign Plan from Brief
 description: |
-  Generates a comprehensive campaign plan from a marketing brief.
+  Generates a comprehensive campaign plan from a marketing brief for mobile game campaigns.
   Uses Claude for structured JSON output with schema validation.
-  Outputs include theme, tone, required assets, game template choice, and video prompts.
+  Outputs include theme, tone, required assets, mobile game template choice, and video prompts.
 
 tags:
   - planning
   - ai
   - campaign
   - configuration
+  - mobile
 
 input_schema:
   type: object

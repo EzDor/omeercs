@@ -1,7 +1,7 @@
 template_id: memory_match
 version: "1.0.0"
 title: "Memory Match"
-description: "3D card-flipping memory game with grid layout, pair matching, move counting, and configurable win conditions"
+description: "Mobile-optimized 3D card-flipping memory game with tap-to-flip grid layout, pair matching, move counting, and configurable win conditions"
 
 config_schema:
   type: object

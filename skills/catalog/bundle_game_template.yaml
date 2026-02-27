@@ -5,8 +5,8 @@ skill_id: bundle_game_template
 version: "1.0.0"
 title: Bundle Game Template
 description: |
-  Bundles a game template with configuration and assets into a deployable web package.
-  Creates a self-contained bundle with all necessary files, generates a manifest,
+  Bundles a mobile game template with configuration and assets into a deployable web package.
+  Creates a self-contained bundle for mobile deployment with all necessary files, generates a manifest,
   and optionally applies optimizations like minification and compression.
   Outputs a ready-to-deploy web bundle with bundle_manifest.json.
 
@@ -17,6 +17,7 @@ tags:
   - web
   - deployment
   - assets
+  - mobile
 
 input_schema:
   type: object

@@ -1,4 +1,4 @@
-You are generating Three.js r170+ game code for a 3D quiz game. The game presents questions on 3D panels, allows the player to select answers via raycaster-based tap/click, provides visual and audio feedback, tracks the score, and assigns a prize tier at the end.
+You are generating Three.js r170+ game code for a mobile-optimized 3D quiz game. This game primarily runs on smartphones, so all layout, interaction, and performance decisions must be mobile-first. The game presents questions on 3D panels, allows the player to select answers via raycaster-based tap/click, provides visual and audio feedback, tracks the score, and assigns a prize tier at the end.
 
 Read all game configuration from window.GAME_CONFIG. The config contains questions (array of objects with text, answers, and optional timer_seconds), randomize_questions, randomize_answers, show_correct_answer, and prize_tiers (array with min_score, max_score, prize_id). The sealed outcome token is at window.GAME_CONFIG.sealed_outcome_token and is used for server-side answer verification.
 
@@ -170,3 +170,14 @@ Animation utilities wrapping GSAP. Provides createQuestionEntrance(panel, button
 
 // FILE: main.js
 Entry point that imports all other modules. Reads window.GAME_CONFIG. Orchestrates startup: load assets, set up scene, initialize game logic, bind interactions, start the render loop. Shows a "Tap to Start" overlay until the first user interaction to enable audio. Dispatches "gameReady" when initialization is complete. Exports a destroy() function that tears down all subsystems, kills GSAP tweens, disposes geometries and materials, and removes event listeners.
+
+
+== MOBILE OPTIMIZATION ==
+
+On mobile (touch capability and viewport width below 768px):
+- Cap renderer pixel ratio at Math.min(window.devicePixelRatio, 1.5).
+- Reduce celebration particle counts to 50% of desktop values.
+- Ensure answer buttons have a minimum tap target equivalent to 44x44 CSS pixels in 3D space.
+- For portrait orientation (window.innerHeight > window.innerWidth): increase camera FOV to 70 and move camera back by 1 unit on Z so all answer buttons remain visible.
+- Prevent default on touch events to stop browser scroll and pull-to-refresh during gameplay.
+- Question text canvas font size must be no smaller than 36px on the 1024x512 canvas for mobile readability.
