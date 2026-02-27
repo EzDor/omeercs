@@ -190,6 +190,9 @@ model_list:
 | `WORKFLOW_RECURSION_LIMIT` | — | Max LangGraph recursion depth |
 | `WORKFLOW_MAX_STEPS` | — | Max steps in a workflow run |
 | `WORKFLOW_TIMEOUT_MS` | — | Max workflow execution time |
+| **OpenCode** | | |
+| `OPENCODE_MODEL` | `anthropic/claude-opus-4-6` | LLM model used by the embedded OpenCode agent for code generation |
+| `BUNDLE_HEALING_MAX_ITERATIONS` | `3` | Max self-healing validation loop iterations for game bundling (capped at 10) |
 | **Provider Stubs** | | |
 | `IMAGE_PROVIDER_STUB` | `false` | Use placeholder images instead of real generation |
 | `VIDEO_PROVIDER_STUB` | `false` | Use placeholder videos |

@@ -48,7 +48,7 @@ All handlers follow these patterns:
 | **Video** | `GenerateIntroVideoLoopHandler`, `GenerateOutcomeVideoWinHandler`, `GenerateOutcomeVideoLoseHandler` | Video generation |
 | **Audio** | `GenerateBgmTrackHandler`, `GenerateSfxPackHandler`, `MixAudioForGameHandler` | Audio generation and processing |
 | **3D** | `Generate3DAssetHandler`, `Optimize3DAssetHandler` | 3D model generation and optimization |
-| **Game** | `GenerateThreejsCodeHandler`, `BundleGameTemplateHandler`, `GameConfigFromTemplateHandler` | Game code generation and bundling |
+| **Game** | `OpenCodeGenerateThreejsCodeHandler`, `OpenCodeBundleGameTemplateHandler`, `GameConfigFromTemplateHandler` | Game code generation and bundling (via OpenCode agent) |
 | **Validation** | `ValidateBundleHandler`, `ValidateGameBundleHandler`, `ReviewAssetQualityHandler` | Quality assurance |
 | **Assembly** | `AssembleCampaignManifestHandler` | Final campaign packaging |
 
@@ -317,54 +317,77 @@ Optimizes existing 3D models for target platforms (reducing polygon count, compr
 
 ## Game Handlers
 
-### GenerateThreejsCodeHandler
+### OpenCode Module
 
-**File**: `agent-platform/src/skills/handlers/generate-threejs-code.handler.ts` (319 lines)
+**File**: `agent-platform/src/skills/opencode/opencode.module.ts`
 
-Generates Three.js game code using the Claude API (Anthropic SDK directly, not LiteLLM).
+The OpenCode module provides sandboxed LLM-driven code generation using the `@opencode-ai/sdk`. It exports two services consumed by the game handlers:
+
+**OpenCodeService** (`opencode.service.ts`): Manages an embedded OpenCode server and agent sessions.
+- Starts an OpenCode server on `127.0.0.1` with a random port at first use (lazy initialization with concurrency guard)
+- Creates sessions with a system prompt and user prompt, then collects text responses
+- Supports follow-up prompts within the same session (used by the self-healing loop)
+- Writes a restrictive `opencode.json` config per workspace that denies `bash`, `webfetch`, and `task` tools
+- Shuts down the server on module destroy
+- Configurable model via `OPENCODE_MODEL` env var (default: `anthropic/claude-opus-4-6`)
+
+**CodeSafetyService** (`code-safety.service.ts`): Validates generated code against a denylist of dangerous patterns.
+- **Filename validation**: Only allows `/^[a-zA-Z0-9_-]+\.js$/`
+- **Content validation**: Scans for dangerous patterns including:
+  - `eval()`, `new Function()`, `require()`, dynamic `import()`
+  - `process`, `__dirname`, `__filename`, `child_process`
+  - `fs.`, `execSync`, `execFile`, `spawnSync`
+  - `fetch()`, `XMLHttpRequest`, `new WebSocket()`, `document.createElement`
+  - `importScripts()`, `window.open()`, `location.href/assign/replace`, `atob()`
+- **Path bounds validation**: Ensures file paths don't escape the workspace directory
+- **Workspace scanning**: Validates all `.js` files in a subdirectory at once
+
+### OpenCodeGenerateThreejsCodeHandler
+
+**File**: `agent-platform/src/skills/opencode/opencode-generate-threejs-code.handler.ts`
+
+Generates Three.js game code using an embedded OpenCode agent session.
 
 **How it works**:
 1. Validates the template ID against an allowlist: `spin_wheel`, `quiz`, `scratch_card`, `memory_match`
-2. Loads prompt files from the filesystem:
+2. Loads prompt files from the prompt registry:
    - `threejs-system.prompt.txt` — system-level instructions for code generation
    - `{template_id}.prompt.txt` — template-specific instructions
    - Path traversal protection on prompt file loading
 3. Builds a user prompt containing game config, asset mappings, scene overrides, and template manifest
-4. Calls Claude directly via `@anthropic-ai/sdk` (not LiteLLM) with max 16K tokens
-5. Parses `// FILE: filename.js` headers from the response to extract multiple code files
-6. Validates each filename against a safe pattern: `/^[a-zA-Z0-9_-]+\.js$/`
-7. Runs a **code safety scanner** checking for dangerous patterns:
-   - `eval()`, `new Function()`, `require()`, dynamic `import()`
-   - `process`, `__dirname`, `__filename`, `child_process`
-   - `fs.`, `execSync`, `execFile`, `spawnSync`
-8. On failure (empty output or safety violations), retries with the error description fed back to Claude
-9. Writes validated code files to `{ASSET_STORAGE_DIR}/{executionId}/generated_code/`
+4. Creates a workspace with a `scripts/` subdirectory for the agent to write files into
+5. Executes an OpenCode agent session with the system and user prompts — the agent writes `.js` files directly to the workspace using its file tools
+6. Runs `CodeSafetyService.validateWorkspaceFiles()` to scan all generated scripts for dangerous patterns
+7. Collects generated code files from the `scripts/` directory with purpose inference from filenames
 
-**File purpose mapping**: Filenames map to purposes: `scene-setup.js` → `scene_setup`, `game-logic.js` → `game_logic`, `asset-loader.js` → `asset_loader`, etc.
+**File purpose mapping**: Filenames map to purposes: `scene-setup.js` → `scene_setup`, `game-logic.js` → `game_logic`, `asset-loader.js` → `asset_loader`, etc. Unrecognized filenames are inferred by keyword matching.
 
-**Retry**: Up to 3 attempts with exponential backoff (1s, 2s, 4s).
+**Key difference from the previous implementation**: Instead of calling the Anthropic SDK directly and parsing `// FILE:` markers from text responses, the handler delegates to an OpenCode agent that writes files directly to disk using its built-in tools.
 
-### BundleGameTemplateHandler
+### OpenCodeBundleGameTemplateHandler
 
-**File**: `agent-platform/src/skills/handlers/bundle-game-template.handler.ts` (606 lines)
+**File**: `agent-platform/src/skills/opencode/opencode-bundle-game-template.handler.ts`
 
-Assembles a complete playable game bundle from generated code, templates, and assets.
+Assembles a complete playable game bundle by using an OpenCode agent for code generation, then running a self-healing validation loop.
 
 **How it works**:
 1. Validates the template ID against the templates directory (prevents path traversal)
 2. Loads the template manifest via `TemplateManifestLoaderService`
 3. Validates game config against the manifest's schema via `TemplateConfigValidatorService`
-4. **Primary pipeline** (manifest-based):
-   a. Calls `GenerateThreejsCodeHandler` to generate game code
-   b. Writes generated code files to `scripts/` directory
-   c. Writes Three.js and GSAP runtime placeholders to `lib/`
-   d. Writes `game_config.json` (with sealed outcome token if present)
-   e. Generates `index.html` with script tags (XSS-safe filename filtering and HTML escaping)
-   f. Copies assets (images, audio, video, models) from URIs to the bundle
-   g. Runs `ValidateBundleHandler` for headless browser validation
-   h. Creates a `bundle_manifest.json` with SHA256 checksums for all files
-5. **Legacy pipeline** (fallback): If manifest loading or code generation fails, falls back to copying static template files directly
-6. Returns bundle URI, manifest URI, total size, file count, and optimization flags
+4. Copies assets (images, audio, video, models) from URIs to the bundle
+5. Writes Three.js and GSAP runtime placeholders to `lib/`
+6. Writes `game_config.json` (with sealed outcome token if present)
+7. Executes an OpenCode agent session — the agent writes game scripts to `scripts/` using its file tools
+8. Runs `CodeSafetyService.validateWorkspaceFiles()` on the generated scripts
+9. Generates `index.html` with script tags for all valid script files
+10. **Self-healing loop** (up to `BUNDLE_HEALING_MAX_ITERATIONS`, default 3, max 10):
+    a. Runs `ValidateBundleHandler` for headless browser validation
+    b. If validation passes, breaks out of the loop
+    c. If validation fails, builds error feedback from failed checks and sends it as a follow-up prompt to the same OpenCode session
+    d. The agent fixes the code in place using read/edit tools
+    e. Re-runs code safety validation after each fix
+    f. Regenerates `index.html` to pick up any new/renamed scripts
+11. Creates `bundle_manifest.json` with SHA256 checksums for all files
 
 **Asset handling**:
 - Remote URLs: Validated via `isAllowedUrl()`, downloaded with `fetchWithTimeout()`
@@ -373,9 +396,11 @@ Assembles a complete playable game bundle from generated code, templates, and as
 
 **Security**:
 - Template ID cannot contain `..` or be an absolute path
-- Script filenames in HTML are filtered through `/^[a-zA-Z0-9_-]+\.js$/`
-- HTML title is escaped to prevent XSS
+- Script filenames in HTML are filtered through `CodeSafetyService.validateFilename()`
+- HTML title is escaped (including single quotes) to prevent XSS
 - Bundle checksum is a SHA256 hash of all individual file checksums concatenated
+- OpenCode agent workspace config denies `bash`, `webfetch`, and `task` tools
+- Code safety validation runs after initial generation AND after each healing iteration
 
 ### GameConfigFromTemplateHandler
 
@@ -585,7 +610,7 @@ Stub implementations:
 
 | Handler | Max Attempts | Backoff | Feedback |
 |---------|-------------|---------|----------|
-| `GenerateThreejsCodeHandler` | 3 | Exponential (1s, 2s, 4s) | Error message fed back to Claude |
+| `OpenCodeBundleGameTemplateHandler` (self-healing) | 3 (configurable, max 10) | Per-iteration | Validation errors fed back to OpenCode agent session |
 | `CampaignPlanFromBriefHandler` | 2 | 1s fixed delay | Parse error fed back to LLM |
 | `GameConfigFromTemplateHandler` | 2 | 1s fixed delay | None (simple retry) |
 | `LlmGenerationService` (template skills) | 3 | Exponential | Validation critique fed back |

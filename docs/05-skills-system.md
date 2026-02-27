@@ -6,6 +6,20 @@ The skills system is how the platform actually "does things." Every unit of work
 
 **Location**: `agent-platform/src/skills/`
 
+```
+agent-platform/src/skills/
+├── handlers/                  # Standard skill handler implementations
+├── opencode/                  # OpenCode agent-based handlers (sandboxed code generation)
+│   ├── opencode.module.ts     # NestJS module exporting OpenCodeService and CodeSafetyService
+│   ├── opencode.service.ts    # Manages embedded OpenCode server and agent sessions
+│   ├── code-safety.service.ts # Validates generated code against dangerous patterns
+│   ├── opencode-generate-threejs-code.handler.ts
+│   └── opencode-bundle-game-template.handler.ts
+├── interfaces/                # SkillHandler interface
+├── services/                  # Skill catalog service
+└── skill-runner/              # Skill execution engine
+```
+
 ## Two Types of Skills
 
 ### 1. Handler-Based Skills
@@ -210,14 +224,14 @@ This ensures that skills always receive well-formed inputs and produce well-form
 
 | Skill ID | Type | Description |
 |----------|------|-------------|
-| `bundle_game_template` | Handler | Packages the game template code with all generated assets into a playable bundle |
+| `bundle_game_template` | Handler (OpenCode) | Generates Three.js game code via OpenCode agent, bundles with assets, and runs a self-healing validation loop |
 | `validate_game_bundle` | Handler | Validates the bundle structure, manifest, assets, and configuration |
 
 ### G) Code Generation & Validation (2 skills)
 
 | Skill ID | Type | Description |
 |----------|------|-------------|
-| `generate_threejs_code` | Handler | Generates Three.js game code using Claude AI agent |
+| `generate_threejs_code` | Handler (OpenCode) | Generates Three.js game code using an embedded OpenCode agent with sandboxed code safety validation |
 | `validate_bundle` | Handler | Headless validation of game bundles using Puppeteer |
 
 ### H) Campaign Manifest (1 skill)
@@ -368,6 +382,7 @@ To add a new skill to the system:
 1. **Create the YAML descriptor** in `skills/catalog/your_skill.yaml` with input/output schemas
 2. **Add it to** `skills/catalog/index.yaml`
 3. **For handler-based skills**: Create a handler class in `agent-platform/src/skills/handlers/your-skill.handler.ts` implementing the `SkillHandler` interface
-4. **For template-based skills**: Create a prompt template in `agent-platform/prompts/your_skill/1.0.0.md`
-5. **Register** the handler in `SkillCatalogService` (if handler-based)
-6. **Add the step** as a node in the appropriate workflow class in `agent-platform/src/workflows/campaign/`
+4. **For OpenCode agent skills**: Create a handler in `agent-platform/src/skills/opencode/` that uses `OpenCodeService` for LLM-driven code generation with `CodeSafetyService` for sandboxed validation
+5. **For template-based skills**: Create a prompt template in `agent-platform/prompts/your_skill/1.0.0.md`
+6. **Register** the handler in `SkillCatalogService` (if handler-based or OpenCode-based)
+7. **Add the step** as a node in the appropriate workflow class in `agent-platform/src/workflows/campaign/`
