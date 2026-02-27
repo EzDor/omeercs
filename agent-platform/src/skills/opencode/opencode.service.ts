@@ -62,12 +62,7 @@ export class OpenCodeService implements OnModuleDestroy {
     fs.writeFileSync(path.join(workspaceDir, 'opencode.json'), JSON.stringify(config, null, 2));
   }
 
-  async executeSession(params: {
-    workspaceDir: string;
-    systemPrompt: string;
-    userPrompt: string;
-    signal?: AbortSignal;
-  }): Promise<OpenCodeSessionResult> {
+  async executeSession(params: { workspaceDir: string; systemPrompt: string; userPrompt: string; signal?: AbortSignal }): Promise<OpenCodeSessionResult> {
     const { workspaceDir, systemPrompt, userPrompt } = params;
     const instance = await this.ensureInstance();
 
@@ -98,11 +93,7 @@ export class OpenCodeService implements OnModuleDestroy {
     return { sessionId, textParts };
   }
 
-  async sendFollowUp(params: {
-    sessionId: string;
-    prompt: string;
-    signal?: AbortSignal;
-  }): Promise<string[]> {
+  async sendFollowUp(params: { sessionId: string; prompt: string; signal?: AbortSignal }): Promise<string[]> {
     const instance = await this.ensureInstance();
 
     const response = await instance.client.session.prompt({

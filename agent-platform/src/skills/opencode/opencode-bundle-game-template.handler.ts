@@ -182,12 +182,7 @@ export class OpenCodeBundleGameTemplateHandler implements SkillHandler<BundleGam
     }
   }
 
-  private async selfHealingLoop(
-    bundlePath: string,
-    sessionId: string,
-    context: SkillExecutionContext,
-    timings: Record<string, number>,
-  ): Promise<ValidateBundleOutput | undefined> {
+  private async selfHealingLoop(bundlePath: string, sessionId: string, context: SkillExecutionContext, timings: Record<string, number>): Promise<ValidateBundleOutput | undefined> {
     let lastValidationOutput: ValidateBundleOutput | undefined;
 
     for (let iteration = 1; iteration <= this.maxHealingIterations; iteration++) {
@@ -457,11 +452,7 @@ ${scriptTags}
     return assetFiles;
   }
 
-  private async copyAudioAssets(
-    audioUri: string,
-    assetsDir: string,
-    assetFiles: { audio: string[] },
-  ): Promise<void> {
+  private async copyAudioAssets(audioUri: string, assetsDir: string, assetFiles: { audio: string[] }): Promise<void> {
     const audioDir = path.join(assetsDir, 'audio');
     this.ensureDirectoryExists(audioDir);
 
@@ -493,11 +484,7 @@ ${scriptTags}
     }
   }
 
-  private categorizeAsset(
-    assetType: string,
-    relativePath: string,
-    assetFiles: { images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] },
-  ): void {
+  private categorizeAsset(assetType: string, relativePath: string, assetFiles: { images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] }): void {
     switch (assetType) {
       case 'image':
         assetFiles.images.push(relativePath);
