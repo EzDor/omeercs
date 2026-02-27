@@ -24,12 +24,14 @@ import { GenerateSfxPackHandler } from '../handlers/generate-sfx-pack.handler';
 import { MixAudioForGameHandler } from '../handlers/mix-audio-for-game.handler';
 import { Generate3DAssetHandler } from '../handlers/generate-3d-asset.handler';
 import { Optimize3DAssetHandler } from '../handlers/optimize-3d-asset.handler';
-import { BundleGameTemplateHandler } from '../handlers/bundle-game-template.handler';
 import { ValidateGameBundleHandler } from '../handlers/validate-game-bundle.handler';
 import { AssembleCampaignManifestHandler } from '../handlers/assemble-campaign-manifest.handler';
-import { GenerateThreejsCodeHandler } from '../handlers/generate-threejs-code.handler';
 import { ValidateBundleHandler } from '../handlers/validate-bundle.handler';
 import { ExtractThemeFromImageHandler } from '../handlers/extract-theme-from-image.handler';
+import { OpenCodeGenerateThreejsCodeHandler } from '../opencode/opencode-generate-threejs-code.handler';
+import { OpenCodeBundleGameTemplateHandler } from '../opencode/opencode-bundle-game-template.handler';
+import { OpenCodeService } from '../opencode/opencode.service';
+import { CodeSafetyService } from '../opencode/code-safety.service';
 import { TemplateManifestLoaderService } from '../../template-system/services/template-manifest-loader.service';
 import { TemplateConfigValidatorService } from '../../template-system/services/template-config-validator.service';
 
@@ -75,6 +77,8 @@ export class SkillCatalogService implements OnModuleInit {
     private readonly asset3DProviderRegistry: Asset3DProviderRegistry,
     private readonly templateManifestLoader: TemplateManifestLoaderService,
     private readonly templateConfigValidator: TemplateConfigValidatorService,
+    private readonly openCodeService: OpenCodeService,
+    private readonly codeSafetyService: CodeSafetyService,
   ) {
     this.catalogPath = this.resolveCatalogPath();
   }
@@ -409,16 +413,17 @@ export class SkillCatalogService implements OnModuleInit {
       { skillId: 'mix_audio_for_game', create: () => new MixAudioForGameHandler(this.configService) },
       { skillId: 'generate_3d_asset', create: () => new Generate3DAssetHandler(this.configService, this.asset3DProviderRegistry) },
       { skillId: 'optimize_3d_asset', create: () => new Optimize3DAssetHandler(this.configService, this.asset3DProviderRegistry) },
-      { skillId: 'generate_threejs_code', create: () => new GenerateThreejsCodeHandler(this.configService) },
+      { skillId: 'generate_threejs_code', create: () => new OpenCodeGenerateThreejsCodeHandler(this.configService, this.openCodeService, this.codeSafetyService) },
       { skillId: 'validate_bundle', create: () => new ValidateBundleHandler(this.configService) },
       {
         skillId: 'bundle_game_template',
         create: () =>
-          new BundleGameTemplateHandler(
+          new OpenCodeBundleGameTemplateHandler(
             this.configService,
+            this.openCodeService,
+            this.codeSafetyService,
             this.templateManifestLoader,
             this.templateConfigValidator,
-            new GenerateThreejsCodeHandler(this.configService),
             new ValidateBundleHandler(this.configService),
           ),
       },

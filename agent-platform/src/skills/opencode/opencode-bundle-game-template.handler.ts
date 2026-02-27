@@ -6,41 +6,46 @@ import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler
 import { TemplateManifest } from '@agentic-template/dto/src/template-system/template-manifest.interface';
 import { TemplateManifestLoaderService } from '../../template-system/services/template-manifest-loader.service';
 import { TemplateConfigValidatorService } from '../../template-system/services/template-config-validator.service';
-import { GenerateThreejsCodeHandler } from './generate-threejs-code.handler';
-import { ValidateBundleHandler, ValidateBundleOutput } from './validate-bundle.handler';
+import { OpenCodeService } from './opencode.service';
+import { CodeSafetyService } from './code-safety.service';
+import { ValidateBundleHandler, ValidateBundleOutput } from '../handlers/validate-bundle.handler';
 import { GenerateThreejsCodeInput } from '@agentic-template/dto/src/skills/generate-threejs-code.dto';
+import { isAllowedUrl, fetchWithTimeout } from '../handlers/network-safety.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { isAllowedUrl, fetchWithTimeout } from './network-safety.utils';
-
 import * as pathModule from 'path';
 
 const GAME_TEMPLATES_PATH = pathModule.resolve(__dirname, '../../../../..', 'templates', 'games');
 const DEFAULT_VERSION = '1.0.0';
 
 @Injectable()
-export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplateInput, BundleGameTemplateOutput> {
-  private readonly logger = new Logger(BundleGameTemplateHandler.name);
+export class OpenCodeBundleGameTemplateHandler implements SkillHandler<BundleGameTemplateInput, BundleGameTemplateOutput> {
+  private readonly logger = new Logger(OpenCodeBundleGameTemplateHandler.name);
   private readonly outputDir: string;
   private readonly templatesDir: string;
+  private readonly maxHealingIterations: number;
+  private readonly promptsDir: string;
 
   constructor(
     private readonly configService: ConfigService,
+    private readonly openCodeService: OpenCodeService,
+    private readonly codeSafetyService: CodeSafetyService,
     private readonly manifestLoader: TemplateManifestLoaderService,
     private readonly configValidator: TemplateConfigValidatorService,
-    private readonly codeGenHandler: GenerateThreejsCodeHandler,
     private readonly validateHandler: ValidateBundleHandler,
   ) {
     this.outputDir = configService.get<string>('SKILLS_OUTPUT_DIR') || '/tmp/skills/output';
     this.templatesDir = configService.get<string>('GAME_TEMPLATES_DIR') || GAME_TEMPLATES_PATH;
+    this.maxHealingIterations = parseInt(configService.get<string>('BUNDLE_HEALING_MAX_ITERATIONS') || '3', 10);
+    this.promptsDir = path.resolve(__dirname, '..', '..', 'prompt-registry', 'prompts');
   }
 
   async execute(input: BundleGameTemplateInput, context: SkillExecutionContext): Promise<SkillResult<BundleGameTemplateOutput>> {
     const startTime = Date.now();
     const timings: Record<string, number> = {};
 
-    this.logger.log(`Executing bundle_game_template for template ${input.template_id}, tenant ${context.tenantId}, execution ${context.executionId}`);
+    this.logger.log(`Executing bundle_game_template via OpenCode for template ${input.template_id}, execution ${context.executionId}`);
 
     try {
       const bundleId = `bundle_${context.executionId}_${Date.now()}`;
@@ -64,8 +69,9 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
         const loadResult = this.manifestLoader.loadManifest(input.template_id, input.version);
         templateManifest = loadResult.manifest;
       } catch {
-        this.logger.warn(`No manifest found for ${input.template_id}, using legacy pipeline`);
-        return this.executeLegacyPipeline(input, context, bundleId, bundlePath, startTime, timings);
+        return skillFailure(`No manifest found for template: ${input.template_id}`, 'MANIFEST_NOT_FOUND', {
+          timings_ms: { total: Date.now() - startTime, ...timings },
+        });
       }
       timings['load_manifest'] = Date.now() - manifestStart;
 
@@ -77,37 +83,9 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
         this.logger.warn(`Game config validation warnings: ${validationResult.errors.join('; ')}. Proceeding with defaults.`);
       }
 
-      const codeGenStart = Date.now();
-      const codeGenInput: GenerateThreejsCodeInput = {
-        template_id: input.template_id,
-        template_manifest: templateManifest,
-        game_config: input.game_config,
-        asset_mappings: input.assets?.map((a) => ({ slot_id: a.slot, uri: a.uri, type: a.type, format: a.content_type })),
-        scene_overrides: input.scene_overrides,
-        sealed_outcome_token: input.sealed_outcome_token,
-      };
-
-      let codeGenResult;
-      try {
-        codeGenResult = await this.codeGenHandler.execute(codeGenInput, context);
-      } catch (codeGenError) {
-        this.logger.warn(`Code generation threw: ${codeGenError instanceof Error ? codeGenError.message : 'Unknown'}, falling back to legacy pipeline`);
-        return this.executeLegacyPipeline(input, context, bundleId, bundlePath, startTime, timings);
-      }
-      timings['code_generation'] = Date.now() - codeGenStart;
-
-      if (!codeGenResult.ok || !codeGenResult.data) {
-        this.logger.warn(`Code generation failed: ${codeGenResult.error || 'Unknown error'}, falling back to legacy pipeline`);
-        return this.executeLegacyPipeline(input, context, bundleId, bundlePath, startTime, timings);
-      }
-
-      const assembleStart = Date.now();
-      const scriptsDir = path.join(bundlePath, 'scripts');
-      this.ensureDirectoryExists(scriptsDir);
-
-      for (const codeFile of codeGenResult.data.code_files) {
-        fs.writeFileSync(path.join(scriptsDir, codeFile.filename), codeFile.content);
-      }
+      const assetsStart = Date.now();
+      const assetFiles = await this.copyAssets(input.assets, bundlePath, input.audio_uri);
+      timings['copy_assets'] = Date.now() - assetsStart;
 
       this.writeThreeJsRuntime(bundlePath);
       this.writeGsapRuntime(bundlePath);
@@ -116,28 +94,43 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
       const configPath = path.join(bundlePath, 'game_config.json');
       this.writeJsonFile(configPath, gameConfig);
 
-      const scriptFiles = codeGenResult.data.code_files.map((f) => f.filename);
+      const codeGenStart = Date.now();
+      const codeGenInput = this.buildCodeGenInput(input, templateManifest);
+      const systemPrompt = this.loadPromptFile('threejs-system.prompt.txt');
+      const templatePrompt = this.loadPromptFile(`${input.template_id.replace(/_/g, '-')}.prompt.txt`);
+      const userPrompt = this.buildUserPrompt(codeGenInput);
+      const agentSystemPrompt = this.buildAgentSystemPrompt(systemPrompt);
+      const agentUserPrompt = `## Template Instructions\n\n${templatePrompt}\n\n## Generation Request\n\n${userPrompt}`;
+
+      const scriptsDir = path.join(bundlePath, 'scripts');
+      this.ensureDirectoryExists(scriptsDir);
+
+      const sessionResult = await this.openCodeService.executeSession({
+        workspaceDir: bundlePath,
+        systemPrompt: agentSystemPrompt,
+        userPrompt: agentUserPrompt,
+      });
+      timings['code_generation'] = Date.now() - codeGenStart;
+
+      const safetyResult = this.codeSafetyService.validateWorkspaceFiles(bundlePath, 'scripts');
+      if (!safetyResult.valid) {
+        const reasons = [
+          ...safetyResult.violations.map((v) => `${v.filename}: forbidden pattern ${v.pattern}`),
+          ...safetyResult.invalidFilenames.map((f) => `invalid filename: ${f}`),
+        ];
+        return skillFailure(`Code safety validation failed: ${reasons.join('; ')}`, 'CODE_SAFETY_VIOLATION', {
+          timings_ms: { total: Date.now() - startTime, ...timings },
+        });
+      }
+
+      const scriptFiles = this.getScriptFilenames(scriptsDir);
       this.writeIndexHtml(bundlePath, scriptFiles, templateManifest.title);
-
-      const assetsStart = Date.now();
-      const assetFiles = await this.copyAssets(input.assets, bundlePath, input.audio_uri);
-      timings['copy_assets'] = Date.now() - assetsStart;
-
-      timings['assemble_bundle'] = Date.now() - assembleStart;
 
       const optimizationsApplied = this.applyOptimizations(input.optimization, timings);
 
-      const validateStart = Date.now();
-      const validateResult = await this.validateHandler.execute({ bundle_dir: bundlePath, entry_point: 'index.html' }, context);
-      timings['validate_bundle'] = Date.now() - validateStart;
-
-      let validationOutput: ValidateBundleOutput | undefined;
-      if (validateResult.ok && validateResult.data) {
-        validationOutput = validateResult.data;
-        if (!validateResult.data.valid) {
-          this.logger.warn(`Bundle validation failed: ${validateResult.data.errors.join('; ')}`);
-        }
-      }
+      const healingStart = Date.now();
+      const validationOutput = await this.selfHealingLoop(bundlePath, sessionResult.sessionId, context, timings);
+      timings['self_healing_total'] = Date.now() - healingStart;
 
       const allFiles = this.getAllFiles(bundlePath, bundlePath);
       const manifest = this.createManifest(bundleId, input.template_id, input.version || DEFAULT_VERSION, allFiles, assetFiles, optimizationsApplied);
@@ -189,79 +182,168 @@ export class BundleGameTemplateHandler implements SkillHandler<BundleGameTemplat
     }
   }
 
-  private async executeLegacyPipeline(
-    input: BundleGameTemplateInput,
-    context: SkillExecutionContext,
-    bundleId: string,
+  private async selfHealingLoop(
     bundlePath: string,
-    startTime: number,
+    sessionId: string,
+    context: SkillExecutionContext,
     timings: Record<string, number>,
-  ): Promise<SkillResult<BundleGameTemplateOutput>> {
-    const templatePath = path.join(this.templatesDir, input.template_id);
-    const copyStart = Date.now();
-    await this.copyTemplateFiles(templatePath, bundlePath);
-    timings['copy_template'] = Date.now() - copyStart;
+  ): Promise<ValidateBundleOutput | undefined> {
+    let lastValidationOutput: ValidateBundleOutput | undefined;
 
-    const configStart = Date.now();
-    const configPath = path.join(bundlePath, 'game_config.json');
-    this.writeJsonFile(configPath, input.game_config);
-    timings['write_config'] = Date.now() - configStart;
+    for (let iteration = 1; iteration <= this.maxHealingIterations; iteration++) {
+      const iterStart = Date.now();
+      this.logger.log(`Self-healing loop iteration ${iteration}/${this.maxHealingIterations}`);
 
-    const assetsStart = Date.now();
-    const assetFiles = await this.copyAssets(input.assets, bundlePath, input.audio_uri);
-    timings['copy_assets'] = Date.now() - assetsStart;
+      const validateResult = await this.validateHandler.execute({ bundle_dir: bundlePath, entry_point: 'index.html' }, context);
+      timings[`validate_iteration_${iteration}`] = Date.now() - iterStart;
 
-    const optimizationsApplied = this.applyOptimizations(input.optimization, timings);
+      if (!validateResult.ok || !validateResult.data) {
+        this.logger.warn(`Validation execution failed at iteration ${iteration}: ${validateResult.error || 'Unknown'}`);
+        break;
+      }
 
-    const allFiles = this.getAllFiles(bundlePath, bundlePath);
-    const manifest = this.createManifest(bundleId, input.template_id, input.version || DEFAULT_VERSION, allFiles, assetFiles, optimizationsApplied);
-    const manifestPath = path.join(bundlePath, 'bundle_manifest.json');
-    this.writeJsonFile(manifestPath, manifest);
+      lastValidationOutput = validateResult.data;
 
-    const totalSizeBytes = allFiles.reduce((acc, f) => acc + f.size_bytes, 0);
-    const totalTime = Date.now() - startTime;
+      if (validateResult.data.valid) {
+        this.logger.log(`Bundle validation passed at iteration ${iteration}`);
+        break;
+      }
 
-    const output: BundleGameTemplateOutput = {
-      bundle_uri: bundlePath,
-      manifest_uri: manifestPath,
-      manifest,
-      total_size_bytes: totalSizeBytes,
-      file_count: allFiles.length,
-      entry_point: manifest.entry_point,
-      optimizations_applied: optimizationsApplied,
+      if (iteration >= this.maxHealingIterations) {
+        this.logger.warn(`Max healing iterations reached. Last errors: ${validateResult.data.errors.join('; ')}`);
+        break;
+      }
+
+      const errorFeedback = this.buildErrorFeedback(validateResult.data);
+      this.logger.log(`Sending error feedback to OpenCode agent for iteration ${iteration + 1}`);
+
+      const fixStart = Date.now();
+      await this.openCodeService.sendFollowUp({
+        sessionId,
+        prompt: errorFeedback,
+      });
+      timings[`fix_iteration_${iteration}`] = Date.now() - fixStart;
+
+      const safetyResult = this.codeSafetyService.validateWorkspaceFiles(bundlePath, 'scripts');
+      if (!safetyResult.valid) {
+        this.logger.warn(`Code safety check failed after fix iteration ${iteration}, stopping healing loop`);
+        break;
+      }
+
+      const scriptFiles = this.getScriptFilenames(path.join(bundlePath, 'scripts'));
+      this.writeIndexHtml(bundlePath, scriptFiles, 'Game');
+    }
+
+    return lastValidationOutput;
+  }
+
+  private buildErrorFeedback(validation: ValidateBundleOutput): string {
+    const sections = ['The bundle validation found the following issues. Please fix them by editing the files in the `scripts/` directory.', ''];
+
+    if (validation.errors.length > 0) {
+      sections.push('## Errors');
+      for (const error of validation.errors) {
+        sections.push(`- ${error}`);
+      }
+      sections.push('');
+    }
+
+    const failedChecks = validation.checks.filter((c) => !c.passed);
+    if (failedChecks.length > 0) {
+      sections.push('## Failed Checks');
+      for (const check of failedChecks) {
+        sections.push(`- **${check.name}**: ${check.details || 'Failed'}`);
+      }
+      sections.push('');
+    }
+
+    sections.push('Use the read and edit tools to inspect and fix the JavaScript files in `scripts/`.');
+    sections.push('Do NOT use eval, new Function, require, or dynamic imports.');
+    sections.push('Ensure window.GAME_CONFIG is accessed correctly and the gameReady event is dispatched.');
+
+    return sections.join('\n');
+  }
+
+  private buildCodeGenInput(input: BundleGameTemplateInput, templateManifest: TemplateManifest): GenerateThreejsCodeInput {
+    return {
+      template_id: input.template_id,
+      template_manifest: templateManifest,
+      game_config: input.game_config,
+      asset_mappings: input.assets?.map((a) => ({ slot_id: a.slot, uri: a.uri, type: a.type, format: a.content_type })),
+      scene_overrides: input.scene_overrides,
+      sealed_outcome_token: input.sealed_outcome_token,
     };
+  }
 
-    const artifacts: SkillArtifact[] = [
-      {
-        artifact_type: 'bundle/game',
-        uri: bundlePath,
-        metadata: { bundle_id: bundleId, template_id: input.template_id, file_count: allFiles.length, total_size_bytes: totalSizeBytes },
-      },
-      {
-        artifact_type: 'json/bundle-manifest',
-        uri: manifestPath,
-        metadata: { version: manifest.version },
-      },
+  private buildAgentSystemPrompt(coreSystemPrompt: string): string {
+    return [
+      coreSystemPrompt,
+      '',
+      '== AGENT INSTRUCTIONS ==',
+      '',
+      'You are running as an autonomous code generation agent inside a game bundle workspace.',
+      'Write each JavaScript file directly to the `scripts/` subdirectory using the file write tool.',
+      'Use filenames with only alphanumeric characters, dashes, and underscores (e.g., scene-setup.js, game-logic.js).',
+      'Do NOT use Node.js built-ins (fs, path, process, child_process).',
+      'Do NOT use eval, new Function, require, or dynamic imports.',
+      'Write only browser-safe Three.js/GSAP ES module code.',
+      'Write all files to the `scripts/` directory only.',
+      '',
+      'If you receive validation error feedback, read the existing files with the read tool and fix them using the edit tool.',
+    ].join('\n');
+  }
+
+  private buildUserPrompt(input: GenerateThreejsCodeInput): string {
+    const sections: string[] = [
+      `Generate Three.js game code for the "${input.template_id}" template.`,
+      '',
+      '## Game Configuration',
+      '```json',
+      JSON.stringify(input.game_config, null, 2),
+      '```',
     ];
 
-    return skillSuccess(output, artifacts, {
-      timings_ms: { total: totalTime, ...timings },
-    });
+    if (input.asset_mappings && input.asset_mappings.length > 0) {
+      sections.push('', '## Asset Mappings', '```json', JSON.stringify(input.asset_mappings, null, 2), '```');
+    }
+
+    if (input.scene_overrides) {
+      sections.push('', '## Scene Overrides', '```json', JSON.stringify(input.scene_overrides, null, 2), '```');
+    }
+
+    if (input.sealed_outcome_token) {
+      sections.push(
+        '',
+        '## Sealed Outcome',
+        'The game config will contain a `sealed_outcome_token` field.',
+        'Use `window.GAME_CONFIG.sealed_outcome_token` to access the pre-determined outcome.',
+      );
+    }
+
+    sections.push('', '## Template Scene Config', '```json', JSON.stringify(input.template_manifest.scene_config, null, 2), '```');
+    sections.push('', '## Asset Slots', '```json', JSON.stringify(input.template_manifest.asset_slots, null, 2), '```');
+
+    return sections.join('\n');
   }
 
-  private writeThreeJsRuntime(bundlePath: string): void {
-    const libDir = path.join(bundlePath, 'lib');
-    this.ensureDirectoryExists(libDir);
-    const placeholder =
-      '// Three.js r170+ runtime will be injected at deploy time\n// This placeholder enables the bundle to reference the Three.js import map\nwindow.__THREE_LOADED = true;\n';
-    fs.writeFileSync(path.join(libDir, 'three.min.js'), placeholder);
+  private loadPromptFile(filename: string): string {
+    const resolvedPromptsDir = path.resolve(this.promptsDir);
+    const filePath = path.resolve(this.promptsDir, filename);
+    if (!filePath.startsWith(resolvedPromptsDir + path.sep)) {
+      throw new Error('Prompt file path escapes prompts directory');
+    }
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Prompt file not found for template: ${filename.replace('.prompt.txt', '')}`);
+    }
+    return fs.readFileSync(filePath, 'utf-8');
   }
 
-  private writeGsapRuntime(bundlePath: string): void {
-    const libDir = path.join(bundlePath, 'lib');
-    this.ensureDirectoryExists(libDir);
-    const placeholder = '// GSAP runtime will be injected at deploy time\n// This placeholder enables the bundle to reference GSAP globals\nwindow.__GSAP_LOADED = true;\n';
-    fs.writeFileSync(path.join(libDir, 'gsap.min.js'), placeholder);
+  private getScriptFilenames(scriptsDir: string): string[] {
+    if (!fs.existsSync(scriptsDir)) return [];
+    return fs
+      .readdirSync(scriptsDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.js'))
+      .map((e) => e.name);
   }
 
   private escapeHtml(s: string): string {
@@ -306,82 +388,19 @@ ${scriptTags}
     fs.writeFileSync(path.join(bundlePath, 'index.html'), html);
   }
 
-  private async copyTemplateFiles(templatePath: string, bundlePath: string): Promise<BundledFileInfo[]> {
-    const files: BundledFileInfo[] = [];
-    if (!fs.existsSync(templatePath)) {
-      this.logger.warn(`Template path not found: ${templatePath}, creating placeholder structure`);
-      return this.createPlaceholderTemplate(bundlePath, files);
-    }
-    await this.copyDirRecursive(templatePath, bundlePath, files, bundlePath);
-    return files;
+  private writeThreeJsRuntime(bundlePath: string): void {
+    const libDir = path.join(bundlePath, 'lib');
+    this.ensureDirectoryExists(libDir);
+    const placeholder =
+      '// Three.js r170+ runtime will be injected at deploy time\n// This placeholder enables the bundle to reference the Three.js import map\nwindow.__THREE_LOADED = true;\n';
+    fs.writeFileSync(path.join(libDir, 'three.min.js'), placeholder);
   }
 
-  private createPlaceholderTemplate(bundlePath: string, files: BundledFileInfo[]): BundledFileInfo[] {
-    const indexPath = path.join(bundlePath, 'index.html');
-    const indexContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Game</title>
-  <link rel="stylesheet" href="styles/main.css">
-</head>
-<body>
-  <div id="game-container"></div>
-  <script src="scripts/game.js" type="module"></script>
-</body>
-</html>`;
-    fs.writeFileSync(indexPath, indexContent);
-    this.createPlaceholderDirectories(bundlePath);
-    this.createPlaceholderStylesheet(bundlePath);
-    this.createPlaceholderScript(bundlePath);
-
-    const indexStats = fs.statSync(indexPath);
-    files.push({
-      path: 'index.html',
-      size_bytes: indexStats.size,
-      content_type: 'text/html',
-      checksum: this.computeChecksum(indexPath),
-    });
-
-    return files;
-  }
-
-  private createPlaceholderDirectories(bundlePath: string): void {
-    fs.mkdirSync(path.join(bundlePath, 'styles'), { recursive: true });
-    fs.mkdirSync(path.join(bundlePath, 'scripts'), { recursive: true });
-    fs.mkdirSync(path.join(bundlePath, 'assets'), { recursive: true });
-  }
-
-  private createPlaceholderStylesheet(bundlePath: string): void {
-    fs.writeFileSync(path.join(bundlePath, 'styles', 'main.css'), '#game-container { width: 100%; height: 100vh; }');
-  }
-
-  private createPlaceholderScript(bundlePath: string): void {
-    fs.writeFileSync(path.join(bundlePath, 'scripts', 'game.js'), 'import config from "../game_config.json" assert { type: "json" };\nconsole.log("Game loaded", config);');
-  }
-
-  private async copyDirRecursive(src: string, dest: string, files: BundledFileInfo[], basePath: string): Promise<void> {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
-      if (entry.isDirectory()) {
-        await this.copyDirRecursive(srcPath, destPath, files, basePath);
-      } else {
-        fs.copyFileSync(srcPath, destPath);
-        const stats = fs.statSync(destPath);
-        files.push({
-          path: path.relative(basePath, destPath),
-          size_bytes: stats.size,
-          content_type: this.getContentType(entry.name),
-          checksum: this.computeChecksum(destPath),
-        });
-      }
-    }
+  private writeGsapRuntime(bundlePath: string): void {
+    const libDir = path.join(bundlePath, 'lib');
+    this.ensureDirectoryExists(libDir);
+    const placeholder = '// GSAP runtime will be injected at deploy time\n// This placeholder enables the bundle to reference GSAP globals\nwindow.__GSAP_LOADED = true;\n';
+    fs.writeFileSync(path.join(libDir, 'gsap.min.js'), placeholder);
   }
 
   private async copyAssets(
@@ -391,37 +410,10 @@ ${scriptTags}
   ): Promise<{ images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] }> {
     const assetFiles = { images: [] as string[], audio: [] as string[], video: [] as string[], models: [] as string[], configs: [] as string[] };
     const assetsDir = path.join(bundlePath, 'assets');
-    if (!fs.existsSync(assetsDir)) {
-      fs.mkdirSync(assetsDir, { recursive: true });
-    }
+    this.ensureDirectoryExists(assetsDir);
 
     if (audioUri) {
-      const audioDir = path.join(assetsDir, 'audio');
-      if (!fs.existsSync(audioDir)) {
-        fs.mkdirSync(audioDir, { recursive: true });
-      }
-      if (fs.existsSync(audioUri)) {
-        if (!this.isAllowedLocalPath(audioUri)) {
-          this.logger.warn(`Audio URI path traversal blocked: ${audioUri}`);
-        } else if (fs.statSync(audioUri).isDirectory()) {
-          const audioEntries = fs.readdirSync(audioUri, { withFileTypes: true });
-          for (const entry of audioEntries) {
-            if (entry.isFile()) {
-              const srcFile = path.join(audioUri, entry.name);
-              const destFile = path.join(audioDir, entry.name);
-              fs.copyFileSync(srcFile, destFile);
-              assetFiles.audio.push(path.join('assets', 'audio', entry.name));
-            }
-          }
-        } else {
-          const filename = path.basename(audioUri);
-          const destPath = path.join(audioDir, filename);
-          fs.copyFileSync(audioUri, destPath);
-          assetFiles.audio.push(path.join('assets', 'audio', filename));
-        }
-      } else {
-        this.logger.warn(`Audio URI not found: ${audioUri}`);
-      }
+      await this.copyAudioAssets(audioUri, assetsDir, assetFiles);
     }
 
     if (!assets || !Array.isArray(assets)) {
@@ -430,9 +422,7 @@ ${scriptTags}
 
     for (const asset of assets) {
       const destDir = path.join(assetsDir, asset.type);
-      if (!fs.existsSync(destDir)) {
-        fs.mkdirSync(destDir, { recursive: true });
-      }
+      this.ensureDirectoryExists(destDir);
       const filename = asset.slot || path.basename(asset.uri);
       const destPath = path.join(destDir, filename);
       const relativePath = path.join('assets', asset.type, filename);
@@ -467,7 +457,47 @@ ${scriptTags}
     return assetFiles;
   }
 
-  private categorizeAsset(assetType: string, relativePath: string, assetFiles: { images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] }): void {
+  private async copyAudioAssets(
+    audioUri: string,
+    assetsDir: string,
+    assetFiles: { audio: string[] },
+  ): Promise<void> {
+    const audioDir = path.join(assetsDir, 'audio');
+    this.ensureDirectoryExists(audioDir);
+
+    if (!fs.existsSync(audioUri)) {
+      this.logger.warn(`Audio URI not found: ${audioUri}`);
+      return;
+    }
+
+    if (!this.isAllowedLocalPath(audioUri)) {
+      this.logger.warn(`Audio URI path traversal blocked: ${audioUri}`);
+      return;
+    }
+
+    if (fs.statSync(audioUri).isDirectory()) {
+      const audioEntries = fs.readdirSync(audioUri, { withFileTypes: true });
+      for (const entry of audioEntries) {
+        if (entry.isFile()) {
+          const srcFile = path.join(audioUri, entry.name);
+          const destFile = path.join(audioDir, entry.name);
+          fs.copyFileSync(srcFile, destFile);
+          assetFiles.audio.push(path.join('assets', 'audio', entry.name));
+        }
+      }
+    } else {
+      const filename = path.basename(audioUri);
+      const destPath = path.join(audioDir, filename);
+      fs.copyFileSync(audioUri, destPath);
+      assetFiles.audio.push(path.join('assets', 'audio', filename));
+    }
+  }
+
+  private categorizeAsset(
+    assetType: string,
+    relativePath: string,
+    assetFiles: { images: string[]; audio: string[]; video: string[]; models: string[]; configs: string[] },
+  ): void {
     switch (assetType) {
       case 'image':
         assetFiles.images.push(relativePath);
@@ -585,7 +615,6 @@ ${scriptTags}
 
   private writeJsonFile(filePath: string, data: unknown): void {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-    fs.statSync(filePath);
   }
 
   private applyOptimizations(optimization: BundleGameTemplateInput['optimization'], timings: Record<string, number>): string[] {

@@ -130,6 +130,8 @@ services:
       - SUNO_API_KEY=${SUNO_API_KEY}
       - MESHY_API_KEY=${MESHY_API_KEY}
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - OPENCODE_MODEL=${OPENCODE_MODEL:-anthropic/claude-opus-4-6}
+      - BUNDLE_HEALING_MAX_ITERATIONS=${BUNDLE_HEALING_MAX_ITERATIONS:-3}
     volumes:
       - ./agent-platform:/app/agent-platform
       - ./dao:/app/dao

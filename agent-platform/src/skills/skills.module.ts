@@ -4,9 +4,10 @@ import { ProvidersModule } from '@agentic-template/common/src/providers/provider
 import { TemplateSystemModule } from '../template-system/template-system.module';
 import { SkillCatalogService } from './services/skill-catalog.service';
 import { SkillRunnerModule } from './skill-runner/skill-runner.module';
+import { OpenCodeModule } from './opencode/opencode.module';
 
 @Module({
-  imports: [ConfigModule, ProvidersModule, TemplateSystemModule, forwardRef(() => SkillRunnerModule)],
+  imports: [ConfigModule, ProvidersModule, TemplateSystemModule, OpenCodeModule, forwardRef(() => SkillRunnerModule)],
   providers: [SkillCatalogService],
   exports: [SkillCatalogService, SkillRunnerModule],
 })
