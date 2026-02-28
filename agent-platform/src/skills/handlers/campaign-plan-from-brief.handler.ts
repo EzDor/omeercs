@@ -6,7 +6,7 @@ import { CampaignPlanFromBriefInput, CampaignPlanOutput } from '@agentic-templat
 import { SkillResult, skillSuccess, skillFailure } from '@agentic-template/dto/src/skills/skill-result.interface';
 import { SkillHandler, SkillExecutionContext } from '../interfaces/skill-handler.interface';
 
-const CAMPAIGN_PLAN_SYSTEM_PROMPT = `You are a campaign planning expert. Your task is to create comprehensive campaign plans for interactive marketing campaigns that include gamified experiences.
+const CAMPAIGN_PLAN_SYSTEM_PROMPT = `You are a campaign planning expert specializing in mobile-first interactive marketing games. Your task is to create comprehensive campaign plans for marketing campaigns built around mobile game experiences (Spin Wheel, Quiz, Scratch Card, Memory Match) that users play on their phones via touch interaction.
 
 Given a marketing brief, brand assets, and constraints, generate a structured campaign plan that includes:
 1. Theme and tone that aligns with the brand
@@ -17,8 +17,9 @@ Given a marketing brief, brand assets, and constraints, generate a structured ca
 6. Video prompts for intro and outcome videos
 7. Audio specifications (background music style, sound effects)
 8. Copy/text content for all campaign touchpoints
+9. Mobile experience considerations (touch-friendly interactions, short session length, small-screen readability)
 
-Be creative but stay true to the brand voice and campaign objectives. Ensure all recommendations are actionable and specific.`;
+Be creative but stay true to the brand voice and campaign objectives. Ensure all recommendations are actionable and specific. Remember that players will interact with these games on mobile devices using touch gestures on small screens, so favor bold visuals, concise copy, and immediate engagement hooks.`;
 
 const CAMPAIGN_PLAN_OUTPUT_SCHEMA = {
   name: 'campaign_plan',
@@ -320,7 +321,7 @@ export class CampaignPlanFromBriefHandler implements SkillHandler<CampaignPlanFr
     }
 
     parts.push('## Available Game Templates');
-    parts.push('- spin_wheel: Classic spinning wheel game with configurable segments and prizes. Best for prize giveaways, promotional events, and engagement campaigns.');
+    parts.push('- spin_wheel: Mobile-optimized 3D spinning wheel game with touch-to-spin interaction, configurable segments, and prizes. Best for prize giveaways, promotional events, and engagement campaigns on mobile devices.');
     parts.push('');
     parts.push('IMPORTANT: You MUST select "spin_wheel" as the template_id. It is currently the only fully implemented template.');
 

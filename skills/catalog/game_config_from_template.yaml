@@ -5,8 +5,8 @@ skill_id: game_config_from_template
 version: "1.0.0"
 title: Game Config from Template
 description: |
-  Generates a schema-validated game_config.json from a chosen game template.
-  Uses Claude for intelligent config generation based on theme, difficulty, and assets.
+  Generates a schema-validated game_config.json from a chosen mobile game template.
+  Uses Claude for intelligent config generation optimized for mobile play (touch interaction, small screens).
   Does NOT generate arbitrary code - only structured configuration.
 
 tags:
@@ -14,6 +14,7 @@ tags:
   - ai
   - game
   - planning
+  - mobile
 
 template_type: LLM_JSON_GENERATION
 template_config:

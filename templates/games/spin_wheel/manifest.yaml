@@ -1,7 +1,7 @@
 template_id: spin_wheel
 version: "1.0.0"
 title: "Spin Wheel"
-description: "3D spin wheel game with physics-based deceleration, PBR materials, cinematic camera, and server-side outcome determination"
+description: "Mobile-optimized 3D spin wheel game with touch-to-spin interaction, physics-based deceleration, PBR materials, responsive camera, and server-side outcome determination"
 
 config_schema:
   type: object

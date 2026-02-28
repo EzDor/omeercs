@@ -5,10 +5,10 @@ skill_id: generate_threejs_code
 version: "1.0.0"
 title: Generate Three.js Code
 description: |
-  Generates Three.js game code using Claude Agent SDK based on a template manifest,
+  Generates mobile-optimized Three.js game code using Claude Agent SDK based on a template manifest,
   game configuration, and asset mappings. Produces multiple code files (scene-setup.js,
   game-logic.js, asset-loader.js, interaction.js, animation.js, main.js) that
-  compose the interactive 3D game experience.
+  compose the interactive 3D mobile game experience with touch input and responsive viewport.
 
 tags:
   - game
@@ -17,6 +17,7 @@ tags:
   - threejs
   - code
   - 3d
+  - mobile
 
 input_schema:
   type: object

@@ -88,7 +88,7 @@ export default {
     actionDelete: 'Delete',
     dialogTitle: 'New Campaign',
     labelName: 'Name:',
-    labelTemplate: 'Template:',
+    labelTemplate: 'Mobile Game Template:',
     placeholderName: 'My Campaign',
     validationNameRequired: 'Please enter a campaign name',
     successCreated: 'Campaign created',
@@ -116,7 +116,7 @@ export default {
   },
   menu: {
     chat: 'Chat',
-    gameCreation: 'Game Creation',
+    gameCreation: 'Mobile Game Creation',
     campaigns: 'Campaigns',
     intelligence: 'Intelligence',
   },
@@ -136,7 +136,7 @@ export default {
       regenerate: 'Regenerate',
     },
     copy: {
-      templateType: 'Template Type',
+      templateType: 'Mobile Game Template',
       tone: 'Tone',
       copyTypes: 'Copy Types',
       variations: 'Variations: {count}',

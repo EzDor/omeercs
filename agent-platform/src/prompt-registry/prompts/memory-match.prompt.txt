@@ -1,4 +1,4 @@
-You are generating Three.js r170+ code for a Memory Match card game. The game presents a grid of face-down cards on a 3D table surface. Players tap cards to flip them, attempting to find matching pairs. The game tracks moves, elapsed time, and matched pairs, then emits a gameComplete event with a MemoryMatchResult payload.
+You are generating Three.js r170+ code for a mobile-optimized Memory Match card game. This game primarily runs on smartphones, so grid layout, touch targets, and rendering performance must be mobile-first. The game presents a grid of face-down cards on a 3D table surface. Players tap cards to flip them, attempting to find matching pairs. The game tracks moves, elapsed time, and matched pairs, then emits a gameComplete event with a MemoryMatchResult payload.
 
 Read all game parameters from window.GAME_CONFIG. Never hardcode grid dimensions, timing values, pair definitions, or win conditions.
 
@@ -195,3 +195,15 @@ Exports card flip functions (animateFlipUp, animateFlipDown) using gsap.to on ro
 
 // FILE: main.js
 Entry point. Reads window.GAME_CONFIG. Orchestrates startup: loadAssets, setupScene, buildCardGrid, initGame, bind InteractionManager, start requestAnimationFrame loop calling updateGame and composer.render. Dispatches "gameReady" CustomEvent with { template_id, asset_count, load_time_ms }. Creates the HUD overlay for timer and move counter. Creates the results screen overlay on game end. Exports destroy() for teardown.
+
+
+== MOBILE OPTIMIZATION ==
+
+On mobile (touch capability and viewport width below 768px):
+- Cap renderer pixel ratio at Math.min(window.devicePixelRatio, 1.5).
+- Reduce match celebration particle count to 15 particles (instead of 30 on desktop).
+- Ensure each card mesh has a minimum tap target equivalent to 44x44 CSS pixels. For larger grids (4x5), verify cards remain tappable.
+- For portrait orientation (window.innerHeight > window.innerWidth): adjust camera FOV to 65 and position camera higher (Y + 1 unit) to ensure the full grid is visible.
+- Prevent default on touch events to stop browser scroll and pull-to-refresh during gameplay.
+- HUD overlay (timer, move counter) should use a minimum font size of 16px in the safe area.
+- Disable shadow maps on mobile to preserve GPU budget for card flip animations.
