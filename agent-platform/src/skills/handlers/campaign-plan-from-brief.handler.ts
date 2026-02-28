@@ -321,7 +321,9 @@ export class CampaignPlanFromBriefHandler implements SkillHandler<CampaignPlanFr
     }
 
     parts.push('## Available Game Templates');
-    parts.push('- spin_wheel: Mobile-optimized 3D spinning wheel game with touch-to-spin interaction, configurable segments, and prizes. Best for prize giveaways, promotional events, and engagement campaigns on mobile devices.');
+    parts.push(
+      '- spin_wheel: Mobile-optimized 3D spinning wheel game with touch-to-spin interaction, configurable segments, and prizes. Best for prize giveaways, promotional events, and engagement campaigns on mobile devices.',
+    );
     parts.push('');
     parts.push('IMPORTANT: You MUST select "spin_wheel" as the template_id. It is currently the only fully implemented template.');
 
